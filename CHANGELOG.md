@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.2.1
+
+### Migliorato
+
+- Categorizzazione automatica dei movimenti
+- Aggiunte nuove regole di riconoscimento
+- Corretto il riconoscimento di Trenitalia
+- Possibilità di modificare la categoria dei movimenti
+
 ## v0.2.0
 
 ### Aggiunto

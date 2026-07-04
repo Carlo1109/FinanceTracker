@@ -1,11 +1,5 @@
 # TODO
 
-## v0.2.1
-
-- [ ] Gestione intelligente della data dei movimenti
-- [ ] Migliorare le categorie automatiche
-
----
 
 ## v0.3.0
 
