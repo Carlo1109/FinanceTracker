@@ -1,25 +1,30 @@
 # 💰 FinanceTracker
 
 ## Versione corrente
-**v0.1.0**
 
-## Stato
-🟢 Conclusa
+v0.2.0
 
 ---
 
-## Completato
+## Stato
+
+🟢 In sviluppo
+
+---
+
+## Funzionalità completate
 
 - ✅ Setup progetto
-- ✅ Ambiente virtuale Python
-- ✅ Configurazione Git
-- ✅ Streamlit configurato
-- ✅ Struttura del progetto
-- ✅ Dashboard iniziale
-- ✅ Sidebar
+- ✅ Ambiente virtuale
+- ✅ Git e GitHub
+- ✅ Streamlit
 - ✅ Tema grafico personalizzato
-- ✅ Pagina Movimenti (placeholder)
-- ✅ Pagina Inserimento manuale (placeholder)
+- ✅ Sidebar
+- ✅ Dashboard
+- ✅ Importazione file Fineco
+- ✅ Analisi mensile
+- ✅ Grafici dinamici
+- ✅ Visualizzazione movimenti
 
 ---
 
@@ -29,9 +34,22 @@ Nessuna attività.
 
 ---
 
-## Prossimo obiettivo (v0.2.0)
+## Prossima versione
 
-- Import file Fineco
+v0.2.1
+
+### Obiettivi
+
+- Unificare la gestione della data dei movimenti
+- Gestire automaticamente la nota Fineco relativa alle carte di debito
+- Migliorare la categorizzazione automatica
+
+---
+
+## Versione successiva
+
+v0.3.0
+
 - Database SQLite
-- Salvataggio movimenti
-- Visualizzazione movimenti reali
+- Salvataggio permanente dei movimenti
+- Inserimento manuale funzionante

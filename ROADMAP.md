@@ -1,22 +1,69 @@
 # Roadmap
 
 ## v0.1.0
+
 ✅ Fondamenta del progetto
 
+- Setup
+- Streamlit
+- Dashboard
+- Tema
+
+---
+
 ## v0.2.0
-📥 Importazione movimenti Fineco
+
+✅ Import Fineco
+
+- Import Excel
+- Dashboard con dati reali
+- Grafici
+- Movimenti
+
+---
+
+## v0.2.1
+
+🚧 Miglioramenti
+
+- Data intelligente dei movimenti
+- Migliore categorizzazione
+
+---
 
 ## v0.3.0
-✍️ Gestione manuale dei movimenti
+
+🗄 Database
+
+- SQLite
+- Persistenza dati
+- Inserimento manuale
+
+---
 
 ## v0.4.0
-📊 Dashboard e analisi
+
+📊 Dashboard avanzata
+
+- KPI
+- Grafici
+- Filtri
+- Ricerca
+
+---
 
 ## v0.5.0
-🎯 Budget e obiettivi
 
-## v0.6.0
-📈 Report e statistiche avanzate
+🎯 Budget
+
+- Budget mensile
+- Obiettivi
+- Fondo emergenza
+
+---
 
 ## v1.0.0
-🚀 Prima release stabile
+
+🚀 Prima release
+
+Applicazione completa e utilizzabile nella gestione quotidiana delle finanze personali.

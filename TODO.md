@@ -1,27 +1,42 @@
 # TODO
 
-## Versione 0.2.0
+## v0.2.1
 
-- [ ] Creare database SQLite
-- [ ] Definire modello Movement
-- [ ] Importare file Fineco
-- [ ] Salvare i movimenti
-- [ ] Visualizzare i movimenti nella tabella
+- [ ] Gestione intelligente della data dei movimenti
+- [ ] Migliorare le categorie automatiche
 
-## Versione 0.3.0
+---
 
-- [ ] Inserimento manuale movimenti
+## v0.3.0
+
+- [ ] Database SQLite
+- [ ] Salvataggio movimenti
+- [ ] Inserimento manuale
 - [ ] Modifica movimenti
 - [ ] Eliminazione movimenti
 - [ ] Gestione contanti
 
-## Versione 0.4.0
+---
+
+## v0.4.0
 
 - [ ] Dashboard completa
-- [ ] Grafici dinamici
 - [ ] KPI mensili
-- [ ] Filtri per mese
+- [ ] Grafici avanzati
+- [ ] Filtri
+- [ ] Ricerca movimenti
 
-## Versione 1.0.0
+---
 
-- [ ] Applicazione completa
+## v0.5.0
+
+- [ ] Budget
+- [ ] Obiettivi
+- [ ] Fondo emergenza
+- [ ] Spese annuali
+
+---
+
+## v1.0.0
+
+- [ ] Prima release stabile

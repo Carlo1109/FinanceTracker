@@ -1,18 +1,26 @@
 # Changelog
 
-## v0.1.0 - Foundation
+## v0.2.0
 
 ### Aggiunto
 
-- Configurazione iniziale del progetto
-- Ambiente virtuale Python
-- Integrazione Streamlit
+- Importazione file Excel Fineco
+- Dashboard con dati reali
+- Grafici dinamici
+- Analisi per mese
+- Tabella movimenti
+- Categorie automatiche iniziali
+
+---
+
+## v0.1.0
+
+### Aggiunto
+
+- Struttura del progetto
+- Configurazione Streamlit
 - Dashboard iniziale
-- Sidebar di navigazione
-- Tema grafico personalizzato
+- Sidebar
+- Tema grafico
 - Pagina Movimenti
 - Pagina Inserimento manuale
-
-### Note
-
-Questa versione rappresenta la base dell'applicazione. Le pagine sono ancora dimostrative e non sono collegate a un database.
