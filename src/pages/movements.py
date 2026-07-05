@@ -1,5 +1,10 @@
 import streamlit as st
-
+from src.services.movement_service import (
+    load_movements,
+    update_movement_category,
+    delete_movement,
+)
+import pandas as pd
 
 CATEGORIES = [
     "Alimentari",
@@ -22,11 +27,19 @@ def clean_description(value: str) -> str:
     value = str(value).replace("\n", " ").strip()
     return " ".join(value.split())
 
+def format_date(value) -> str:
+    if pd.isna(value):
+        return "Data non disponibile"
+
+    if hasattr(value, "strftime"):
+        return value.strftime("%d/%m/%Y")
+
+    return str(value)
 
 def show_movements() -> None:
     st.title("Movimenti")
 
-    df = st.session_state.get("movements")
+    df = load_movements()
 
     if df is None:
         st.info("Importa prima un file Fineco dalla Dashboard.")
@@ -63,11 +76,10 @@ def show_movements() -> None:
 
         description = clean_description(row["descrizione"])
         full_description = clean_description(row["descrizione_completa"])
-        date = row["data"].strftime("%d/%m/%Y") if hasattr(row["data"], "strftime") else row["data"]
+        date = format_date(row["data"])
 
         with st.container():
-            col1, col2, col3 = st.columns([5, 2, 2])
-
+            col1, col2, col3, col4 = st.columns([5, 2, 2, 1])
             with col1:
                 st.markdown(
                     f"""
@@ -93,8 +105,8 @@ def show_movements() -> None:
                 )
 
                 if new_category != row["categoria"]:
-                    df.loc[index, "categoria"] = new_category
-                    st.session_state["movements"] = df
+                    update_movement_category(int(row["id"]), new_category)
+                    st.success("Categoria aggiornata.")
                     st.rerun()
 
             with col3:
@@ -108,6 +120,14 @@ def show_movements() -> None:
                     """,
                     unsafe_allow_html=True,
                 )
+
+            with col4:
+                st.markdown("<div style='margin-top: 18px;'></div>", unsafe_allow_html=True)
+
+                if st.button("🗑️", key=f"delete_{row['id']}"):
+                    delete_movement(int(row["id"]))
+                    st.success("Movimento eliminato.")
+                    st.rerun()
 
     with st.expander("Vista avanzata"):
         st.dataframe(

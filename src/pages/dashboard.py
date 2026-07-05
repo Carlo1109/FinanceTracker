@@ -2,6 +2,7 @@ import plotly.express as px
 import streamlit as st
 
 from src.services.importer import import_fineco_excel
+from src.services.movement_service import load_movements, save_movements
 from src.theme.style import metric_card
 
 
@@ -18,14 +19,18 @@ def show_dashboard() -> None:
     )
 
     if uploaded_file:
-        df = import_fineco_excel(uploaded_file)
-        st.session_state["movements"] = df
+        imported_df = import_fineco_excel(uploaded_file)
+        inserted, skipped = save_movements(imported_df, source="Fineco")
 
-    df = st.session_state.get("movements")
+        st.success(f"Import completato: {inserted} nuovi movimenti, {skipped} già presenti.")
 
-    if df is None:
+    df = load_movements()
+
+    if df.empty:
         st.info("Carica un file Fineco per visualizzare la dashboard.")
         return
+
+    st.session_state["movements"] = df
 
     months = sorted(df["mese"].unique(), reverse=True)
     selected_month = st.selectbox("Mese", months)
@@ -39,13 +44,6 @@ def show_dashboard() -> None:
     investimenti = abs(
         month_df[
             month_df["categoria"].isin(["Investimenti"])
-        ]["importo"].sum()
-    )
-
-    spese_ordinarie = abs(
-        month_df[
-            (month_df["importo"] < 0)
-            & (~month_df["categoria"].isin(["Investimenti"]))
         ]["importo"].sum()
     )
 

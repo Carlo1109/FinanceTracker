@@ -21,4 +21,4 @@ L'obiettivo è offrire un'alternativa moderna ai fogli Excel, permettendo di:
 
 ## Stato del progetto
 
-🚧 In sviluppo (v0.2.1)
+🚧 In sviluppo (v0.3.0)

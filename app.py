@@ -4,6 +4,7 @@ from src.pages.dashboard import show_dashboard
 from src.pages.movements import show_movements
 from src.pages.manual_entry import show_manual_entry
 from src.theme.style import apply_theme
+from src.database.db import init_db
 
 st.set_page_config(
     page_title="FinanceTracker",
@@ -13,6 +14,7 @@ st.set_page_config(
 )
 
 apply_theme()
+init_db()
 
 st.sidebar.markdown("# 💰 FinanceTracker")
 st.sidebar.caption("Personal finance dashboard")

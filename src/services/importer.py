@@ -33,6 +33,8 @@ CATEGORY_RULES = {
     "ASPIT": "Auto",
     "PARKING": "Auto",
     "PARCHEGGIO": "Auto",
+    "CASELLO": "Auto",
+    "MISER": "Auto",
 
     # Svago
     "PIZZA": "Svago",

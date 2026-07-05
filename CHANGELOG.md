@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.3.0
+
+### Aggiunto
+
+- Database SQLite
+- Persistenza dei movimenti
+- Import Fineco persistente
+- Inserimento manuale dei movimenti
+- Eliminazione movimenti
+- Modifica categoria persistente
+
 ## v0.2.1
 
 ### Migliorato
