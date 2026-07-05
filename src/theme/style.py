@@ -1,87 +1,256 @@
 import streamlit as st
 
 
-def apply_theme() -> None:
+def apply_theme():
     st.markdown(
         """
-        <style>
-        .main {
-            background: #0f172a;
-        }
+<style>
 
-        [data-testid="stAppViewContainer"] {
-            background:
-                radial-gradient(circle at top left, rgba(56, 189, 248, 0.18), transparent 30%),
-                linear-gradient(135deg, #020617 0%, #0f172a 45%, #111827 100%);
-        }
+/* =========================================================
+   STREAMLIT UI
+========================================================= */
 
-        [data-testid="stSidebar"] {
-            background: rgba(15, 23, 42, 0.95);
-            border-right: 1px solid rgba(148, 163, 184, 0.2);
-        }
+#MainMenu {
+    visibility: hidden;
+}
 
-        h1, h2, h3 {
-            color: #f8fafc;
-        }
+footer {
+    visibility: hidden;
+}
 
-        p, label, span, div {
-            color: #e5e7eb;
-        }
+header[data-testid="stHeader"]{
+    display:none;
+}
 
-        .metric-card {
-            padding: 22px;
-            border-radius: 22px;
-            background: rgba(15, 23, 42, 0.82);
-            border: 1px solid rgba(148, 163, 184, 0.22);
-            box-shadow: 0 20px 45px rgba(0, 0, 0, 0.25);
-        }
+[data-testid="stToolbar"]{
+    display:none;
+}
 
-        .metric-label {
-            font-size: 14px;
-            color: #94a3b8;
-            margin-bottom: 8px;
-        }
+/* =========================================================
+   APP BACKGROUND
+========================================================= */
 
-        .metric-value {
-            font-size: 30px;
-            font-weight: 800;
-            color: #f8fafc;
-        }
+[data-testid="stAppViewContainer"]{
+    background:
+        radial-gradient(circle at top left,
+            rgba(34,197,94,.12),
+            transparent 26%),
+        radial-gradient(circle at top right,
+            rgba(59,130,246,.10),
+            transparent 28%),
+        linear-gradient(
+            135deg,
+            #020617 0%,
+            #0f172a 45%,
+            #111827 100%);
+}
 
-        .metric-positive {
-            color: #22c55e;
-        }
+/* =========================================================
+   SIDEBAR
+========================================================= */
 
-        .metric-negative {
-            color: #ef4444;
-        }
+[data-testid="stSidebar"]{
 
-        .section-card {
-            padding: 24px;
-            border-radius: 24px;
-            background: rgba(15, 23, 42, 0.72);
-            border: 1px solid rgba(148, 163, 184, 0.18);
-            margin-top: 18px;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    background:
+        radial-gradient(circle at top left,
+            rgba(34,197,94,.14),
+            transparent 28%),
+        linear-gradient(
+            180deg,
+            #020617 0%,
+            #07111f 50%,
+            #020617 100%);
 
+    border-right:1px solid rgba(148,163,184,.12);
+}
 
-def metric_card(label: str, value: str, tone: str = "neutral") -> None:
-    tone_class = ""
-    if tone == "positive":
-        tone_class = "metric-positive"
-    elif tone == "negative":
-        tone_class = "metric-negative"
+[data-testid="stSidebarContent"]{
+    background:transparent !important;
+}
 
-    st.markdown(
-        f"""
-        <div class="metric-card">
-            <div class="metric-label">{label}</div>
-            <div class="metric-value {tone_class}">{value}</div>
-        </div>
-        """,
+/* =========================================================
+   HEADINGS
+========================================================= */
+
+h1{
+
+    color:#f8fafc;
+
+    font-weight:900;
+
+    letter-spacing:-.04em;
+}
+
+h2,h3{
+
+    color:#f8fafc;
+
+    font-weight:800;
+
+}
+
+p,
+label,
+span,
+div{
+
+    color:#e5e7eb;
+
+}
+
+/* =========================================================
+   METRICS
+========================================================= */
+
+[data-testid="stMetric"]{
+
+    padding:18px;
+
+    border-radius:22px;
+
+    background:rgba(15,23,42,.72);
+
+    border:1px solid rgba(148,163,184,.14);
+
+    box-shadow:0 18px 40px rgba(0,0,0,.18);
+
+}
+
+[data-testid="stMetricLabel"]{
+
+    color:#94a3b8;
+
+    font-weight:700;
+
+}
+
+[data-testid="stMetricValue"]{
+
+    color:#f8fafc;
+
+    font-weight:900;
+
+}
+
+/* =========================================================
+   CONTAINERS
+========================================================= */
+
+[data-testid="stVerticalBlockBorderWrapper"]{
+
+    background:rgba(15,23,42,.55);
+
+    border:1px solid rgba(148,163,184,.14);
+
+    border-radius:22px;
+
+}
+
+/* =========================================================
+   BUTTONS
+========================================================= */
+
+.stButton button{
+
+    border-radius:14px;
+
+    font-weight:700;
+
+}
+
+.stButton button[kind="primary"]{
+
+    background:linear-gradient(
+        135deg,
+        #22c55e,
+        #16a34a);
+
+    border:none;
+
+    color:white;
+
+}
+
+.stButton button[kind="secondary"]{
+
+    background:transparent;
+
+    border:1px solid rgba(148,163,184,.16);
+
+    color:#e5e7eb;
+
+}
+
+/* =========================================================
+   INPUTS
+========================================================= */
+
+.stTextInput input,
+.stNumberInput input,
+.stDateInput input,
+.stTextArea textarea{
+
+    border-radius:12px;
+
+}
+
+div[data-baseweb="select"]{
+
+    border-radius:12px;
+
+}
+
+/* =========================================================
+   FILE UPLOADER
+========================================================= */
+
+div[data-testid="stFileUploader"] section{
+
+    border-radius:18px;
+
+    border:1px dashed rgba(148,163,184,.35);
+
+    background:rgba(15,23,42,.55);
+
+}
+
+/* =========================================================
+   EXPANDER
+========================================================= */
+
+div[data-testid="stExpander"]{
+
+    border-radius:18px;
+
+    background:rgba(15,23,42,.35);
+
+}
+
+/* =========================================================
+   SCROLLBAR
+========================================================= */
+
+::-webkit-scrollbar{
+
+    width:8px;
+
+}
+
+::-webkit-scrollbar-thumb{
+
+    background:#334155;
+
+    border-radius:999px;
+
+}
+
+::-webkit-scrollbar-thumb:hover{
+
+    background:#475569;
+
+}
+
+</style>
+""",
         unsafe_allow_html=True,
     )

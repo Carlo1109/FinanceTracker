@@ -24,7 +24,7 @@
 
 ## v0.2.1
 
-🚧 Miglioramenti
+✅ Miglioramenti
 
 - Data intelligente dei movimenti
 - Migliore categorizzazione
@@ -33,7 +33,7 @@
 
 ## v0.3.0
 
-🗄 Database
+✅ Database
 
 - SQLite
 - Persistenza dati
@@ -43,22 +43,12 @@
 
 ## v0.4.0
 
-📊 Dashboard avanzata
+✅ Dashboard avanzata
 
 - KPI
 - Grafici
 - Filtri
 - Ricerca
-
----
-
-## v0.5.0
-
-🎯 Budget
-
-- Budget mensile
-- Obiettivi
-- Fondo emergenza
 
 ---
 

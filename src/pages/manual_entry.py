@@ -1,34 +1,58 @@
 import streamlit as st
 
+from src.services.importer import load_category_rules
 from src.services.movement_service import add_manual_movement
 
 
-CATEGORIES = [
-    "Alimentari",
-    "Auto",
-    "Casa",
-    "Svago",
-    "Trasporti",
-    "Salute",
-    "Investimenti",
-    "Stipendio",
-    "Altro",
-]
+def get_categories() -> list[str]:
+    categories = list(load_category_rules().keys())
+
+    if "Altro" not in categories:
+        categories.append("Altro")
+
+    return categories
 
 
 def show_manual_entry() -> None:
-    st.title("Aggiungi movimento")
+    st.title("➕ Nuovo movimento")
+    st.caption("Aggiungi manualmente una spesa o un'entrata non presente negli import.")
 
-    with st.form("manual_entry"):
-        movement_date = st.date_input("Data")
-        description = st.text_input("Descrizione")
-        amount = st.number_input("Importo", min_value=0.01, step=0.01)
-        movement_type = st.selectbox("Tipo", ["Uscita", "Entrata"])
-        category = st.selectbox("Categoria", CATEGORIES)
-        account = st.selectbox("Conto", ["Fineco", "Contanti", "PayPal", "Altro"])
-        notes = st.text_area("Note")
+    categories = get_categories()
 
-        submitted = st.form_submit_button("Salva movimento")
+    with st.container(border=True):
+        st.markdown("### Dettagli movimento")
+
+        movement_type = st.radio(
+            "Tipo movimento",
+            ["Uscita", "Entrata"],
+            horizontal=True,
+        )
+
+        col1, col2 = st.columns([1, 1])
+
+        with col1:
+            movement_date = st.date_input("Data")
+            amount = st.number_input("Importo", min_value=0.01, step=0.01)
+
+        with col2:
+            account = st.selectbox("Conto", ["Fineco", "Contanti", "PayPal", "Altro"])
+            category = st.selectbox("Categoria", categories)
+
+        description = st.text_input(
+            "Descrizione",
+            placeholder="Es. Gelato, rimborso, spesa contanti...",
+        )
+
+        notes = st.text_area(
+            "Note",
+            placeholder="Opzionale",
+        )
+
+        submitted = st.button(
+            "Salva movimento",
+            use_container_width=True,
+            type="primary",
+        )
 
     if submitted:
         if not description.strip():
@@ -46,3 +70,4 @@ def show_manual_entry() -> None:
         )
 
         st.success("Movimento salvato correttamente.")
+        st.toast("Movimento aggiunto")

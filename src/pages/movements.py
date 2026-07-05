@@ -5,7 +5,6 @@ from src.services.importer import load_category_rules
 from src.services.movement_service import (
     delete_movement,
     load_movements,
-    recalculate_automatic_categories,
     update_movement_category,
 )
 
@@ -22,15 +21,19 @@ def clean_description(value: str) -> str:
 def format_date(value) -> str:
     if pd.isna(value):
         return "Data non disponibile"
+
     if hasattr(value, "strftime"):
         return value.strftime("%d/%m/%Y")
+
     return str(value)
 
 
 def get_categories() -> list[str]:
     categories = list(load_category_rules().keys())
+
     if "Altro" not in categories:
         categories.append("Altro")
+
     return categories
 
 
@@ -50,72 +53,83 @@ def category_icon(category: str) -> str:
 
 def show_movements() -> None:
     st.title("💳 Movimenti")
+    st.caption("Cerca, filtra e modifica i movimenti salvati.")
 
     df = load_movements()
 
     if df.empty:
-        st.info("Non ci sono ancora movimenti. Importa un file Fineco o aggiungi un movimento manuale.")
+        st.info("Non ci sono ancora movimenti. Importa un file o aggiungi un movimento manuale.")
         return
 
     categories = get_categories()
-
-    with st.container(border=True):
-        col1, col2 = st.columns([3, 1])
-
-        with col1:
-            st.markdown("Gestisci i movimenti salvati, correggi le categorie e controlla le spese.")
-
-        with col2:
-            if st.button("🔄 Ricalcola categorie", use_container_width=True):
-                updated = recalculate_automatic_categories()
-                st.toast(f"Movimenti aggiornati: {updated}")
-                st.rerun()
-
     months = sorted(df["mese"].dropna().unique(), reverse=True)
+    accounts = sorted(df["account"].dropna().unique().tolist())
 
-    filter_col_1, filter_col_2, filter_col_3 = st.columns([1.4, 1.4, 3])
+    filter_col_1, filter_col_2, filter_col_3, filter_col_4 = st.columns([1.2, 1.4, 1.4, 2.4])
 
     with filter_col_1:
         selected_month = st.selectbox("Mese", months)
 
     with filter_col_2:
-        selected_category = st.selectbox("Categoria", ["Tutte"] + categories)
+        selected_account = st.selectbox("Conto", ["Tutti"] + accounts)
 
     with filter_col_3:
+        selected_category = st.selectbox("Categoria", ["Tutte"] + categories)
+
+    with filter_col_4:
         search = st.text_input("Cerca", placeholder="Lidl, PayPal, Trenitalia...")
 
-    month_df = df[df["mese"] == selected_month].copy()
+    filtered_df = df[df["mese"] == selected_month].copy()
+
+    if selected_account != "Tutti":
+        filtered_df = filtered_df[filtered_df["account"] == selected_account]
 
     if selected_category != "Tutte":
-        month_df = month_df[month_df["categoria"] == selected_category]
+        filtered_df = filtered_df[filtered_df["categoria"] == selected_category]
 
     if search:
         mask = (
-            month_df["descrizione"].fillna("").str.contains(search, case=False, na=False)
-            | month_df["descrizione_completa"].fillna("").str.contains(search, case=False, na=False)
-            | month_df["categoria"].fillna("").str.contains(search, case=False, na=False)
+            filtered_df["descrizione"].fillna("").str.contains(search, case=False, na=False)
+            | filtered_df["descrizione_completa"].fillna("").str.contains(search, case=False, na=False)
+            | filtered_df["categoria"].fillna("").str.contains(search, case=False, na=False)
+            | filtered_df["account"].fillna("").str.contains(search, case=False, na=False)
+            | filtered_df["notes"].fillna("").str.contains(search, case=False, na=False)
+            | filtered_df["importo"].astype(str).str.contains(search, case=False, na=False)
         )
-        month_df = month_df[mask]
+        filtered_df = filtered_df[mask]
 
-    total_income = month_df[month_df["importo"] > 0]["importo"].sum()
-    total_expense = abs(month_df[month_df["importo"] < 0]["importo"].sum())
+    total_income = filtered_df[filtered_df["importo"] > 0]["importo"].sum()
+    total_expense = abs(filtered_df[filtered_df["importo"] < 0]["importo"].sum())
     balance = total_income - total_expense
 
-    k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Movimenti", len(month_df))
-    k2.metric("Entrate", euro(total_income))
-    k3.metric("Uscite", euro(total_expense))
-    k4.metric("Bilancio", euro(balance))
+    summary_col_1, summary_col_2, summary_col_3, summary_col_4 = st.columns(4)
+
+    with summary_col_1:
+        st.metric("Movimenti", len(filtered_df))
+
+    with summary_col_2:
+        st.metric("Entrate", euro(total_income))
+
+    with summary_col_3:
+        st.metric("Uscite", euro(total_expense))
+
+    with summary_col_4:
+        st.metric("Bilancio", euro(balance))
 
     st.divider()
 
-    for _, row in month_df.iterrows():
+    if filtered_df.empty:
+        st.warning("Nessun movimento trovato con i filtri selezionati.")
+        return
+
+    for _, row in filtered_df.sort_values("data", ascending=False).iterrows():
         amount = float(row["importo"])
         amount_color = "#22c55e" if amount > 0 else "#ef4444"
         sign = "+" if amount > 0 else ""
 
         category = row["categoria"] if row["categoria"] in categories else "Altro"
         icon = category_icon(category)
+
         date = format_date(row["data"])
 
         description = clean_description(row["descrizione"])
@@ -128,10 +142,10 @@ def show_movements() -> None:
             with top_left:
                 st.markdown(
                     f"""
-                    <div style="font-size: 18px; font-weight: 800; color: #f8fafc;">
+                    <div style="font-size: 18px; font-weight: 850; color: #f8fafc;">
                         {icon} {title}
                     </div>
-                   <div style="font-size: 13px; color: #94a3b8; margin-top: 8px;">
+                    <div style="font-size: 13px; color: #94a3b8; margin-top: 8px;">
                         <span style="
                             background: rgba(148, 163, 184, 0.16);
                             color: #e5e7eb;
@@ -140,7 +154,8 @@ def show_movements() -> None:
                             font-size: 12px;
                             font-weight: 700;
                         ">{category}</span>
-                        <span style="margin-left: 8px; color: #94a3b8;">{date}</span>
+                        <span style="margin-left: 8px;">{date}</span>
+                        <span style="margin-left: 8px;">{row["account"]}</span>
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -152,7 +167,7 @@ def show_movements() -> None:
                     <div style="
                         text-align: right;
                         font-size: 24px;
-                        font-weight: 900;
+                        font-weight: 950;
                         color: {amount_color};
                         padding-top: 4px;
                     ">
@@ -162,7 +177,7 @@ def show_movements() -> None:
                     unsafe_allow_html=True,
                 )
 
-            with st.expander("Modifica movimento"):
+            with st.expander("Dettagli"):
                 edit_col_1, edit_col_2 = st.columns([2, 1])
 
                 with edit_col_1:
@@ -177,6 +192,11 @@ def show_movements() -> None:
                         update_movement_category(int(row["id"]), new_category)
                         st.toast("Categoria aggiornata")
                         st.rerun()
+
+                    if row.get("notes"):
+                        st.caption(f"Note: {row['notes']}")
+
+                    st.caption(description)
 
                 with edit_col_2:
                     st.markdown("<br>", unsafe_allow_html=True)
@@ -204,11 +224,9 @@ def show_movements() -> None:
                             st.session_state[confirm_key] = True
                             st.rerun()
 
-                st.caption(description)
-
     with st.expander("Vista avanzata"):
         st.dataframe(
-            month_df[
+            filtered_df[
                 [
                     "id",
                     "data",
