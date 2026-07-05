@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.3.1
+
+### Aggiunto
+- Configurazione categorie tramite `categories.json`
+- Ricalcolo delle categorie automatiche
+
+### Migliorato
+- Nuova interfaccia della pagina Movimenti
+- Filtri e ricerca migliorati
+- Gestione categorie manuali
+- Migliorata l'esperienza di modifica dei movimenti
+
+### Fixed
+- Migliorata la logica di categorizzazione
+- Corretto il riconoscimento di diversi esercenti
+
 ## v0.3.0
 
 ### Aggiunto

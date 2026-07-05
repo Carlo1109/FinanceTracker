@@ -1,87 +1,28 @@
+import json
+from pathlib import Path
+
 import pandas as pd
 
 
-CATEGORY_RULES = {
-    # Alimentari
-    "ESSELUNGA": "Alimentari",
-    "LIDL": "Alimentari",
-    "ALDI": "Alimentari",
-    "COOP": "Alimentari",
-    "CONAD": "Alimentari",
-    "EUROSPIN": "Alimentari",
+CATEGORY_CONFIG_PATH = Path("config/categories.json")
 
-    # Trasporti
-    "TRENITALIA": "Trasporti",
-    "ATM": "Trasporti",
-    "ITALO": "Trasporti",
-    "BUS": "Trasporti",
-    "METRO": "Trasporti",
-    "LISCIO": "Trasporti",
-    "SETA": "Trasporti",
 
-    # Auto
-    "ENI": "Auto",
-    "Q8": "Auto",
-    "IP ": "Auto",
-    "PETROLOUTLET": "Auto",
-    "AUTOSTRADE": "Auto",
-    "TELEPASS": "Auto",
-    "PEDAGGIO": "Auto",
-    "CASELL": "Auto",
-    "TANGENZIALE": "Auto",
-    "BOLLO": "Auto",
-    "ASPIT": "Auto",
-    "PARKING": "Auto",
-    "PARCHEGGIO": "Auto",
-    "CASELLO": "Auto",
-    "MISER": "Auto",
+def load_category_rules() -> dict[str, list[str]]:
+    if not CATEGORY_CONFIG_PATH.exists():
+        return {}
 
-    # Svago
-    "PIZZA": "Svago",
-    "PIZZERIA": "Svago",
-    "RISTOR": "Svago",
-    "PUB": "Svago",
-    "BAR ": "Svago",
-    "CAFFE": "Svago",
-    "CAFFÈ": "Svago",
-    "CINEMA": "Svago",
-    "AMAZON": "Svago",
-    "PAYPAL": "Svago",
-    "ZARA": "Svago",
-    "H&M": "Svago",
-    "DECATHLON": "Svago",
-    "MEDIAWORLD": "Svago",
-    "UNIEURO": "Svago",
-
-    # Casa
-    "ENEL": "Casa",
-    "GAS": "Casa",
-    "LUCE": "Casa",
-    "ACQUA": "Casa",
-    "AFFITTO": "Casa",
-    "IKEA": "Casa",
-
-    # Salute
-    "FARMACIA": "Salute",
-    "PARAFARMACIA": "Salute",
-    "MEDICO": "Salute",
-
-    # Investimenti
-    "COMPRAVENDITA TITOLI": "Investimenti",
-    "PAC": "Investimenti",
-    "ETF": "Investimenti",
-
-    # Entrate
-    "STIPENDIO": "Stipendio",
-}
+    with CATEGORY_CONFIG_PATH.open("r", encoding="utf-8") as file:
+        return json.load(file)
 
 
 def categorize(text: str) -> str:
     text = str(text).upper()
+    rules = load_category_rules()
 
-    for key, category in CATEGORY_RULES.items():
-        if key in text:
-            return category
+    for category, keywords in rules.items():
+        for keyword in keywords:
+            if keyword.upper() in text:
+                return category
 
     return "Altro"
 
@@ -137,6 +78,7 @@ def import_fineco_excel(uploaded_file) -> pd.DataFrame:
 
     df["categoria"] = df["testo"].apply(categorize)
     df["tipo"] = df["importo"].apply(lambda x: "Entrata" if x > 0 else "Uscita")
+    df["category_source"] = "automatic"
 
     return df[
         [
@@ -147,6 +89,7 @@ def import_fineco_excel(uploaded_file) -> pd.DataFrame:
             "descrizione",
             "descrizione_completa",
             "categoria",
+            "category_source",
             "tipo",
             "importo",
             "stato",

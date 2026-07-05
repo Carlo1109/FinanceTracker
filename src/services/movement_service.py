@@ -1,9 +1,12 @@
 import hashlib
 import sqlite3
-import pandas as pd
-from src.database.db import get_connection
-from datetime import date
 import uuid
+from datetime import date
+
+import pandas as pd
+
+from src.database.db import get_connection
+from src.services.importer import categorize
 
 
 def generate_movement_hash(row) -> str:
@@ -39,6 +42,7 @@ def save_movements(df: pd.DataFrame, source: str = "Fineco") -> tuple[int, int]:
                         description,
                         full_description,
                         category,
+                        category_source,
                         movement_type,
                         amount,
                         status,
@@ -46,7 +50,7 @@ def save_movements(df: pd.DataFrame, source: str = "Fineco") -> tuple[int, int]:
                         account,
                         notes
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         movement_hash,
@@ -57,6 +61,7 @@ def save_movements(df: pd.DataFrame, source: str = "Fineco") -> tuple[int, int]:
                         str(row.get("descrizione", "")),
                         str(row.get("descrizione_completa", "")),
                         str(row.get("categoria", "Altro")),
+                        str(row.get("category_source", "automatic")),
                         str(row.get("tipo", "")),
                         float(row.get("importo", 0)),
                         str(row.get("stato", "")),
@@ -87,6 +92,7 @@ def load_movements() -> pd.DataFrame:
                 description AS descrizione,
                 full_description AS descrizione_completa,
                 category AS categoria,
+                category_source,
                 movement_type AS tipo,
                 amount AS importo,
                 status AS stato,
@@ -107,6 +113,7 @@ def load_movements() -> pd.DataFrame:
     df["data_valuta"] = pd.to_datetime(df["data_valuta"], errors="coerce")
 
     return df
+
 
 def add_manual_movement(
     movement_date: date,
@@ -133,6 +140,7 @@ def add_manual_movement(
                 description,
                 full_description,
                 category,
+                category_source,
                 movement_type,
                 amount,
                 status,
@@ -140,7 +148,7 @@ def add_manual_movement(
                 account,
                 notes
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 movement_hash,
@@ -151,6 +159,7 @@ def add_manual_movement(
                 description,
                 description,
                 category,
+                "manual",
                 movement_type,
                 signed_amount,
                 "Manuale",
@@ -161,17 +170,19 @@ def add_manual_movement(
         )
         conn.commit()
 
+
 def update_movement_category(movement_id: int, category: str) -> None:
     with get_connection() as conn:
         conn.execute(
             """
             UPDATE movements
-            SET category = ?
+            SET category = ?, category_source = 'manual'
             WHERE id = ?
             """,
             (category, movement_id),
         )
         conn.commit()
+
 
 def delete_movement(movement_id: int) -> None:
     with get_connection() as conn:
@@ -183,3 +194,34 @@ def delete_movement(movement_id: int) -> None:
             (movement_id,),
         )
         conn.commit()
+
+
+def recalculate_automatic_categories() -> int:
+    updated = 0
+    df = load_movements()
+
+    if df.empty:
+        return 0
+
+    with get_connection() as conn:
+        for _, row in df.iterrows():
+            if row.get("category_source") == "manual":
+                continue
+
+            text = f"{row.get('descrizione', '')} {row.get('descrizione_completa', '')}"
+            new_category = categorize(text)
+
+            if new_category != row.get("categoria"):
+                conn.execute(
+                    """
+                    UPDATE movements
+                    SET category = ?
+                    WHERE id = ?
+                    """,
+                    (new_category, int(row["id"])),
+                )
+                updated += 1
+
+        conn.commit()
+
+    return updated

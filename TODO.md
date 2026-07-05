@@ -1,31 +1,29 @@
 # TODO
 
-## v0.3.1
+# TODO
 
-- [ ] Migliorare la lista movimenti
-- [ ] Rendere le card dei movimenti più compatte e leggibili
-- [ ] Aggiungere icone per categoria
-- [ ] Migliorare ricerca e filtri nei movimenti
-- [ ] Aggiungere distinzione categoria automatica/manuale
-- [ ] Aggiungere ricalcolo categorie automatiche
-- [ ] Evitare che il ricalcolo sovrascriva categorie modificate manualmente
-- [ ] Spostare le regole categorie in `config/categories.json`
-- [ ] Migliorare messaggio di import Fineco
-- [ ] Rivalutare gestione date Fineco
+## v0.4.0 - First Usable Release
 
-## v0.4.0
+### Dashboard
+- [ ] Nuovo layout dashboard
+- [ ] KPI più moderni
+- [ ] Migliorare i grafici
+- [ ] Confronto con il mese precedente
+- [ ] Top categorie
+- [ ] Spesa media giornaliera
 
-- [ ] Migliorare dashboard
-- [ ] Aggiungere confronto con mese precedente
-- [ ] Aggiungere KPI mensili
-- [ ] Aggiungere media spesa giornaliera
-- [ ] Migliorare grafici
-- [ ] Aggiungere top categorie del mese
+### Movimenti
+- [ ] Migliorare ulteriormente la grafica
+- [ ] Timeline dei movimenti
+- [ ] Badge categoria
+- [ ] Ordinamenti avanzati
+- [ ] Sistemare il flickering durante il cambio pagina
 
-## Futuro
+### Nuovo movimento
+- [ ] Migliorare il form
+- [ ] Feedback dopo il salvataggio
 
-- [ ] Budget mensile
-- [ ] Obiettivi
-- [ ] Fondo emergenza
-- [ ] Spese annuali
-- [ ] Report PDF
+### Tema
+- [ ] Logo FinanceTracker
+- [ ] Sidebar moderna
+- [ ] Rifinitura grafica generale

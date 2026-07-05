@@ -23,6 +23,7 @@ def init_db() -> None:
                 description TEXT,
                 full_description TEXT,
                 category TEXT NOT NULL,
+                category_source TEXT NOT NULL DEFAULT 'automatic',
                 movement_type TEXT NOT NULL,
                 amount REAL NOT NULL,
                 status TEXT,
@@ -33,4 +34,13 @@ def init_db() -> None:
             )
             """
         )
+
+        columns = conn.execute("PRAGMA table_info(movements)").fetchall()
+        column_names = [column[1] for column in columns]
+
+        if "category_source" not in column_names:
+            conn.execute(
+                "ALTER TABLE movements ADD COLUMN category_source TEXT NOT NULL DEFAULT 'automatic'"
+            )
+
         conn.commit()

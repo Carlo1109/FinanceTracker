@@ -24,9 +24,12 @@ page = st.sidebar.radio(
     ["Dashboard", "Movimenti", "Aggiungi movimento"],
 )
 
-if page == "Dashboard":
-    show_dashboard()
-elif page == "Movimenti":
-    show_movements()
-elif page == "Aggiungi movimento":
-    show_manual_entry()
+page_container = st.empty()
+
+with page_container.container():
+    if page == "Dashboard":
+        show_dashboard()
+    elif page == "Movimenti":
+        show_movements()
+    elif page == "Aggiungi movimento":
+        show_manual_entry()

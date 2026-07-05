@@ -1,0 +1,75 @@
+{
+  "Alimentari": [
+    "ESSELUNGA",
+    "LIDL",
+    "ALDI",
+    "COOP",
+    "CONAD",
+    "EUROSPIN"
+  ],
+  "Trasporti": [
+    "TRENITALIA",
+    "ATM",
+    "ITALO",
+    "BUS",
+    "METRO",
+    "LISCIO",
+    "SETA"
+  ],
+  "Auto": [
+    "ENI",
+    "Q8",
+    "IP ",
+    "PETROLOUTLET",
+    "AUTOSTRADE",
+    "TELEPASS",
+    "PEDAGGIO",
+    "CASELL",
+    "TANGENZIALE",
+    "BOLLO",
+    "ASPIT",
+    "PARKING",
+    "PARCHEGGIO",
+    "CASELLO",
+    "MISER",
+    "AREA DI SERVIZIO"
+  ],
+  "Svago": [
+    "PIZZA",
+    "PIZZERIA",
+    "RISTOR",
+    "PUB",
+    "BAR ",
+    "CAFFE",
+    "CAFFÈ",
+    "CINEMA",
+    "AMAZON",
+    "PAYPAL",
+    "ZARA",
+    "H&M",
+    "DECATHLON",
+    "MEDIAWORLD",
+    "UNIEURO"
+  ],
+  "Casa": [
+    "ENEL",
+    "GAS",
+    "LUCE",
+    "ACQUA",
+    "AFFITTO",
+    "IKEA"
+  ],
+  "Salute": [
+    "FARMACIA",
+    "PARAFARMACIA",
+    "MEDICO"
+  ],
+  "Investimenti": [
+    "COMPRAVENDITA TITOLI",
+    "PAC",
+    "ETF"
+  ],
+  "Stipendio": [
+    "STIPENDIO"
+  ]
+}
