@@ -250,6 +250,15 @@ div[data-testid="stExpander"]{
 
 }
 
+/* Sidebar sempre aperta */
+[data-testid="stSidebarCollapseButton"] {
+    display: none !important;
+}
+
+[data-testid="collapsedControl"] {
+    display: none !important;
+}
+
 </style>
 """,
         unsafe_allow_html=True,

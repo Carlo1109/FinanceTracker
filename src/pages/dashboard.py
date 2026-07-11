@@ -24,29 +24,41 @@ def category_icon(category: str) -> str:
     }.get(category, "❓")
 
 
-def get_period_df(df: pd.DataFrame, period: str, selected_month: str | None = None) -> pd.DataFrame:
+def get_period_df(
+    df: pd.DataFrame,
+    period: str,
+    selected_month: str | None = None,
+) -> pd.DataFrame:
     today = pd.Timestamp.today()
-    current_month = today.to_period("M")
+
+    current_month = today.strftime("%Y-%m")
+    previous_month = (today - pd.DateOffset(months=1)).strftime("%Y-%m")
 
     if period == "Mese specifico" and selected_month:
-        return df[df["mese"] == selected_month]
+        return df[df["mese"] == selected_month].copy()
 
     if period == "Questo mese":
-        return df[df["data"].dt.to_period("M") == current_month]
+        return df[df["mese"] == current_month].copy()
 
     if period == "Mese scorso":
-        return df[df["data"].dt.to_period("M") == current_month - 1]
+        return df[df["mese"] == previous_month].copy()
 
     if period == "Ultimi 3 mesi":
-        return df[df["data"] >= today - pd.DateOffset(months=3)]
+        start_month = (today - pd.DateOffset(months=2)).to_period("M")
+        movement_months = pd.PeriodIndex(df["mese"], freq="M")
+
+        return df[movement_months >= start_month].copy()
 
     if period == "Ultimi 6 mesi":
-        return df[df["data"] >= today - pd.DateOffset(months=6)]
+        start_month = (today - pd.DateOffset(months=5)).to_period("M")
+        movement_months = pd.PeriodIndex(df["mese"], freq="M")
+
+        return df[movement_months >= start_month].copy()
 
     if period == "Quest'anno":
-        return df[df["data"].dt.year == today.year]
+        return df[df["mese"].str.startswith(str(today.year), na=False)].copy()
 
-    return df
+    return df.copy()
 
 
 def show_dashboard() -> None:

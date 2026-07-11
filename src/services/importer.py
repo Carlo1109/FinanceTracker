@@ -13,6 +13,83 @@ def load_category_rules() -> dict[str, list[str]]:
 
     with CATEGORY_CONFIG_PATH.open("r", encoding="utf-8") as file:
         return json.load(file)
+    
+def save_category_rules(rules: dict[str, list[str]]) -> None:
+    CATEGORY_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    with CATEGORY_CONFIG_PATH.open("w", encoding="utf-8") as file:
+        json.dump(
+            rules,
+            file,
+            indent=2,
+            ensure_ascii=False,
+        )
+
+
+def add_category(category_name: str) -> bool:
+    category_name = category_name.strip()
+
+    if not category_name:
+        return False
+
+    rules = load_category_rules()
+
+    existing_names = {name.casefold() for name in rules}
+
+    if category_name.casefold() in existing_names:
+        return False
+
+    rules[category_name] = []
+    save_category_rules(rules)
+
+    return True
+
+
+def add_keyword_to_category(category: str, keyword: str) -> bool:
+    keyword = keyword.strip().upper()
+
+    if not keyword:
+        return False
+
+    rules = load_category_rules()
+
+    if category not in rules:
+        return False
+
+    existing_keywords = {
+        current_keyword.strip().upper()
+        for current_keyword in rules[category]
+    }
+
+    if keyword in existing_keywords:
+        return False
+
+    rules[category].append(keyword)
+    save_category_rules(rules)
+
+    return True
+
+def remove_keyword_from_category(category: str, keyword: str) -> bool:
+    rules = load_category_rules()
+
+    if category not in rules:
+        return False
+
+    normalized_keyword = keyword.strip().upper()
+
+    updated_keywords = [
+        current_keyword
+        for current_keyword in rules[category]
+        if current_keyword.strip().upper() != normalized_keyword
+    ]
+
+    if len(updated_keywords) == len(rules[category]):
+        return False
+
+    rules[category] = updated_keywords
+    save_category_rules(rules)
+
+    return True
 
 
 def categorize(text: str) -> str:
