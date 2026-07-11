@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import streamlit as st
 
 from src.database.db import init_db
@@ -8,98 +10,195 @@ from src.pages.movements import show_movements
 from src.pages.settings import show_settings
 from src.theme.style import apply_theme
 
-APP_VERSION = "v0.4.0"
+
+APP_VERSION = "v1.0.0"
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+LOGO_PATH = PROJECT_ROOT / "assets" / "icons" / "logo.png"
 
 
 st.set_page_config(
     page_title="FinanceTracker",
-    page_icon="assets/icons/ft_logo.png",
+    page_icon=str(LOGO_PATH) if LOGO_PATH.exists() else "📊",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 apply_theme()
 init_db()
 
 
-st.sidebar.image(
-    "assets/icons/ft_logo.png",
-    width=145,
-)
+PAGES = {
+    "Dashboard": {
+        "label": "🏠 Dashboard",
+        "render": show_dashboard,
+    },
+    "Movimenti": {
+        "label": "💳 Movimenti",
+        "render": show_movements,
+    },
+    "Nuovo movimento": {
+        "label": "➕ Nuovo movimento",
+        "render": show_manual_entry,
+    },
+    "Importa dati": {
+        "label": "📥 Importa dati",
+        "render": show_import_data,
+    },
+    "Impostazioni": {
+        "label": "⚙️ Impostazioni",
+        "render": show_settings,
+    },
+}
 
-st.sidebar.markdown(
-    f"""
-    <div style="margin-bottom: 22px;">
-        <div style="font-size: 30px; font-weight: 950; color: #f8fafc;">
-            Finance<span style="color:#22c55e;">Tracker</span>
-        </div>
-        <div style="font-size: 13px; color: #94a3b8; margin-top: 4px;">
-            Personal finance
-        </div>
-        <div style="
-            display: inline-block;
-            margin-top: 12px;
-            padding: 4px 10px;
-            border-radius: 999px;
-            background: rgba(34, 197, 94, 0.14);
-            color: #22c55e;
-            font-size: 12px;
-            font-weight: 800;
-        ">
-            {APP_VERSION}
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-st.sidebar.divider()
 
 if "page" not in st.session_state:
     st.session_state["page"] = "Dashboard"
 
-
-def sidebar_button(label: str, page_name: str) -> None:
-    selected = st.session_state["page"] == page_name
-
-    if st.sidebar.button(
-        label,
-        key=f"nav_{page_name}",
-        use_container_width=True,
-        type="primary" if selected else "secondary",
-    ):
-        st.session_state["page"] = page_name
-        st.rerun()
+if "navigation_open" not in st.session_state:
+    st.session_state["navigation_open"] = True
 
 
-sidebar_button("🏠 Dashboard", "Dashboard")
-sidebar_button("💳 Movimenti", "Movimenti")
-sidebar_button("➕ Nuovo movimento", "Nuovo movimento")
-sidebar_button("📥 Importa dati", "Importa dati")
-sidebar_button("⚙️ Impostazioni", "Impostazioni")
+def open_navigation() -> None:
+    st.session_state["navigation_open"] = True
 
-st.sidebar.markdown(
-    """
-    <div style="
-        position: fixed;
-        bottom: 24px;
-        font-size: 12px;
-        color: #64748b;
-    ">
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
 
-page = st.session_state["page"]
+def close_navigation() -> None:
+    st.session_state["navigation_open"] = False
 
-if page == "Dashboard":
-    show_dashboard()
-elif page == "Movimenti":
-    show_movements()
-elif page == "Nuovo movimento":
-    show_manual_entry()
-elif page == "Importa dati":
-    show_import_data()
-elif page == "Impostazioni":
-    show_settings()
+
+def change_page(page_name: str) -> None:
+    st.session_state["page"] = page_name
+
+
+def render_brand() -> None:
+    top_left, top_right = st.columns([5, 1])
+
+    with top_right:
+        st.button(
+            "☰",
+            key="close_navigation",
+            help="Nascondi menu",
+            on_click=close_navigation,
+        )
+
+    if LOGO_PATH.exists():
+        logo_left, logo_center, logo_right = st.columns([1, 8, 1])
+
+        with logo_center:
+            st.image(
+                str(LOGO_PATH),
+                width=450,
+            )
+    else:
+        st.markdown("## FT")
+
+    st.markdown(
+        """
+        <h1 style="
+            text-align:center;
+            margin-top:-8px;
+            margin-bottom:0;
+            font-size:34px;
+            font-weight:900;
+            letter-spacing:-1px;
+        ">
+            <span style="color:#f8fafc;">Finance</span><span style="color:#22c55e;">Tracker</span>
+        </h1>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        """
+        <div style="
+            text-align:center;
+            color:#94a3b8;
+            margin-top:4px;
+            margin-bottom:10px;
+            font-size:14px;
+        ">
+            Personal finance
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        f"""
+        <div style="text-align:center;">
+            <span style="
+                display:inline-block;
+                padding:4px 12px;
+                border-radius:999px;
+                background:rgba(34,197,94,.15);
+                color:#22c55e;
+                font-weight:700;
+                font-size:12px;
+            ">
+                {APP_VERSION}
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_navigation() -> None:
+    st.markdown(
+        '<div class="ft-navigation-anchor"></div>',
+        unsafe_allow_html=True,
+    )
+
+    render_brand()
+
+    st.divider()
+
+    for page_name, page_config in PAGES.items():
+        is_selected = st.session_state["page"] == page_name
+
+        st.button(
+            page_config["label"],
+            key=f"navigation_{page_name}",
+            use_container_width=True,
+            type="primary" if is_selected else "secondary",
+            on_click=change_page,
+            args=(page_name,),
+        )
+
+def render_current_page() -> None:
+    current_page = st.session_state["page"]
+
+    if current_page not in PAGES:
+        current_page = "Dashboard"
+        st.session_state["page"] = current_page
+
+    PAGES[current_page]["render"]()
+
+
+if st.session_state["navigation_open"]:
+    navigation_column, content_column = st.columns(
+    [1.15, 4.85],
+    gap="small",
+    )
+
+    with navigation_column:
+        with st.container(border=True):
+            render_navigation()
+
+    with content_column:
+        render_current_page()
+
+else:
+    menu_column, spacer_column = st.columns([1, 8])
+
+    with menu_column:
+        st.button(
+            "☰ Menu",
+            key="open_navigation",
+            use_container_width=True,
+            type="primary",
+            on_click=open_navigation,
+        )
+
+    render_current_page()

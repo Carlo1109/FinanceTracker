@@ -1,23 +1,65 @@
 import json
+import shutil
+import sys
 from pathlib import Path
 
 import pandas as pd
 
+from src.database.db import DATA_DIR
 
-CATEGORY_CONFIG_PATH = Path("config/categories.json")
+
+USER_CATEGORY_CONFIG_PATH = DATA_DIR / "categories.json"
+
+
+def get_bundled_category_config_path() -> Path:
+    """Restituisce il percorso del file categorie predefinito incluso nell'app."""
+    if getattr(sys, "frozen", False):
+        bundle_dir = Path(sys._MEIPASS)
+    else:
+        bundle_dir = Path(__file__).resolve().parents[2]
+
+    return bundle_dir / "config" / "categories.json"
+
+
+def ensure_category_config() -> Path:
+    """Crea il file categorie personale dell'utente al primo avvio."""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    if USER_CATEGORY_CONFIG_PATH.exists():
+        return USER_CATEGORY_CONFIG_PATH
+
+    default_path = get_bundled_category_config_path()
+
+    if default_path.exists():
+        shutil.copy2(default_path, USER_CATEGORY_CONFIG_PATH)
+    else:
+        USER_CATEGORY_CONFIG_PATH.write_text(
+            "{}",
+            encoding="utf-8",
+        )
+
+    return USER_CATEGORY_CONFIG_PATH
 
 
 def load_category_rules() -> dict[str, list[str]]:
-    if not CATEGORY_CONFIG_PATH.exists():
+    config_path = ensure_category_config()
+
+    try:
+        with config_path.open("r", encoding="utf-8") as file:
+            rules = json.load(file)
+    except (json.JSONDecodeError, OSError):
         return {}
 
-    with CATEGORY_CONFIG_PATH.open("r", encoding="utf-8") as file:
-        return json.load(file)
-    
-def save_category_rules(rules: dict[str, list[str]]) -> None:
-    CATEGORY_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if not isinstance(rules, dict):
+        return {}
 
-    with CATEGORY_CONFIG_PATH.open("w", encoding="utf-8") as file:
+    return rules
+
+
+def save_category_rules(rules: dict[str, list[str]]) -> None:
+    config_path = ensure_category_config()
+
+    with config_path.open("w", encoding="utf-8") as file:
         json.dump(
             rules,
             file,
@@ -33,7 +75,6 @@ def add_category(category_name: str) -> bool:
         return False
 
     rules = load_category_rules()
-
     existing_names = {name.casefold() for name in rules}
 
     if category_name.casefold() in existing_names:
@@ -69,6 +110,7 @@ def add_keyword_to_category(category: str, keyword: str) -> bool:
 
     return True
 
+
 def remove_keyword_from_category(category: str, keyword: str) -> bool:
     rules = load_category_rules()
 
@@ -93,12 +135,12 @@ def remove_keyword_from_category(category: str, keyword: str) -> bool:
 
 
 def categorize(text: str) -> str:
-    text = str(text).upper()
+    normalized_text = str(text).upper()
     rules = load_category_rules()
 
     for category, keywords in rules.items():
         for keyword in keywords:
-            if keyword.upper() in text:
+            if keyword.upper() in normalized_text:
                 return category
 
     return "Altro"
@@ -154,7 +196,9 @@ def import_fineco_excel(uploaded_file) -> pd.DataFrame:
     df["mese"] = df["data"].dt.to_period("M").astype(str)
 
     df["categoria"] = df["testo"].apply(categorize)
-    df["tipo"] = df["importo"].apply(lambda x: "Entrata" if x > 0 else "Uscita")
+    df["tipo"] = df["importo"].apply(
+        lambda value: "Entrata" if value > 0 else "Uscita"
+    )
     df["category_source"] = "automatic"
 
     return df[

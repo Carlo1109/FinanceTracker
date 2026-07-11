@@ -2,9 +2,8 @@ from datetime import datetime
 from pathlib import Path
 import zipfile
 
-
-DATA_DIR = Path("data")
-CONFIG_DIR = Path("config")
+from src.database.db import DATA_DIR, DB_PATH
+from src.services.importer import ensure_category_config
 
 
 def create_backup() -> Path:
@@ -14,14 +13,23 @@ def create_backup() -> Path:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_path = backup_dir / f"FinanceTracker_Backup_{timestamp}.zip"
 
-    with zipfile.ZipFile(backup_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-        db_path = DATA_DIR / "finance_tracker.db"
-        categories_path = CONFIG_DIR / "categories.json"
+    categories_path = ensure_category_config()
 
-        if db_path.exists():
-            zipf.write(db_path, arcname="finance_tracker.db")
+    with zipfile.ZipFile(
+        backup_path,
+        "w",
+        zipfile.ZIP_DEFLATED,
+    ) as zip_file:
+        if DB_PATH.exists():
+            zip_file.write(
+                DB_PATH,
+                arcname="finance_tracker.db",
+            )
 
         if categories_path.exists():
-            zipf.write(categories_path, arcname="categories.json")
+            zip_file.write(
+                categories_path,
+                arcname="categories.json",
+            )
 
     return backup_path
