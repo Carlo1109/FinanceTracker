@@ -3,6 +3,7 @@ import plotly.express as px
 import streamlit as st
 import plotly.graph_objects as go
 
+from src.services.importer import get_category_icon
 from src.services.movement_service import load_movements
 
 
@@ -10,21 +11,6 @@ def euro(value: float) -> str:
     return f"{value:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-def category_icon(category: str) -> str:
-    return {
-        "Alimentari": "🛒",
-        "Auto": "🚗",
-        "Casa": "🏠",
-        "Trasporti": "🚆",
-        "Salute": "❤️",
-        "Investimenti": "📈",
-        "Stipendio": "💼",
-        "Altro": "❓",
-        "Viaggi & Vacanze": "🌴",
-        "Ristoranti & Bar": "️🎉",
-        "Utenze": "💡",
-        "Shopping": "🛍️"
-    }.get(category, "❓")
 
 
 def get_period_df(
@@ -173,7 +159,7 @@ def show_dashboard() -> None:
     k1, k2, k3 = st.columns(3)
 
     with k1:
-        st.metric("Categoria principale", f"{category_icon(top_category)} {top_category}", euro(top_category_amount))
+        st.metric("Categoria principale", f"{get_category_icon(top_category)} {top_category}", euro(top_category_amount))
 
     with k2:
         st.metric("Spesa media giornaliera", euro(avg_daily_expense))
@@ -197,7 +183,7 @@ def show_dashboard() -> None:
             st.info("Nessuna uscita da mostrare per questo periodo.")
         else:
             category_df["label"] = category_df["categoria"].apply(
-                lambda c: f"{category_icon(c)} {c}"
+                lambda c: f"{get_category_icon(c)} {c}"
             )
 
             total_expenses = category_df["importo"].sum()
@@ -266,7 +252,7 @@ def show_dashboard() -> None:
                         border-bottom:1px solid rgba(148,163,184,0.10);
                     ">
                         <div style="font-weight:700;">
-                            {category_icon(item["categoria"])} {item["categoria"]}
+                            {get_category_icon(item["categoria"])} {item["categoria"]}
                         </div>
                         <div style="color:#94a3b8;">
                             {euro(item["importo"])} · {percentage:.1f}%
@@ -287,7 +273,7 @@ def show_dashboard() -> None:
             sign = "+" if amount > 0 else ""
 
             category = row["categoria"]
-            icon = category_icon(category)
+            icon = get_category_icon(category)
 
             title = row["descrizione_completa"] or row["descrizione"]
             date = row["data"].strftime("%d/%m/%Y") if pd.notna(row["data"]) else ""

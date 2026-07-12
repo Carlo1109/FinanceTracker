@@ -1,101 +1,163 @@
 {
-  "Alimentari": [
-    "ESSELUNGA",
-    "LIDL",
-    "ALDI",
-    "COOP",
-    "CONAD",
-    "EUROSPIN"
-  ],
-  "Trasporti": [
-    "TRENITALIA",
-    "ATM",
-    "ITALO",
-    "BUS",
-    "METRO",
-    "LISCIO",
-    "SETA"
-  ],
-  "Auto": [
-    "ENI",
-    "Q8",
-    "IP ",
-    "PETROLOUTLET",
-    "AUTOSTRADE",
-    "TELEPASS",
-    "PEDAGGIO",
-    "CASELL",
-    "TANGENZIALE",
-    "BOLLO",
-    "ASPIT",
-    "PARKING",
-    "PARCHEGGIO",
-    "CASELLO",
-    "MISER",
-    "AREA DI SERVIZIO",
-    "CARROZZERIA",
-    "MECCANICO"
-  ],
-  "Ristoranti & Bar": [
-    "PIZZA",
-    "PIZZERIA",
-    "RISTOR",
-    "PUB",
-    "BAR ",
-    "CAFFE",
-    "CAFFÈ",
-    "CINEMA",
-    "BIRRERIA"
-  ],
-  "Shopping": [
-    "ZARA",
-    "H&M",
-    "DECATHLON",
-    "MEDIAWORLD",
-    "UNIEURO",
-    "AMAZON"
-  ],
-  "Casa": [
-    "AFFITTO",
-    "MUTUO",
-    "IKEA"
-  ],
-  "Utenze": [
-    "LUCE",
-    "GAS",
-    "ACQUA",
-    "TELEFONO",
-    "INTERNET",
-    "LYCAMOBILE",
-    "TIM",
-    "WINDTRE",
-    "FASTWEB"
-  ],
-  "Salute": [
-    "FARMACIA",
-    "PARAFARMACIA",
-    "MEDICO",
-    "DENTISTA",
-    "OCULISTA", 
-    "LABORATORIO ANALISI"
-  ],
-  "Investimenti": [
-    "COMPRAVENDITA TITOLI",
-    "PAC",
-    "ETF"
-  ],
-  "Stipendio": [
-    "STIPENDIO"
-  ],
-  "Viaggi & Vacanze": [
-    "VOLI",
-    "AEROPORTO",
-    "AEREO",
-    "ALBERGO",
-    "HOTEL",
-    "B&B",
-    "OSTELLO",
-    "AIRBNB",
-    "BOOKING.COM"
-  ]
+  "Alimentari": {
+    "icon": "🛒",
+    "keywords": [
+      "ESSELUNGA",
+      "LIDL",
+      "ALDI",
+      "COOP",
+      "CONAD",
+      "EUROSPIN"
+    ]
+  },
+  "Trasporti": {
+    "icon": "🚆",
+    "keywords": [
+      "TRENITALIA",
+      "ATM",
+      "ITALO",
+      "BUS",
+      "METRO",
+      "LISCIO",
+      "SETA"
+    ]
+  },
+  "Auto": {
+    "icon": "🚗",
+    "keywords": [
+      "ENI",
+      "Q8",
+      "IP",
+      "PETROLOUTLET",
+      "AUTOSTRADE",
+      "TELEPASS",
+      "PEDAGGIO",
+      "CASELL",
+      "TANGENZIALE",
+      "BOLLO",
+      "ASPIT",
+      "PARKING",
+      "PARCHEGGIO",
+      "CASELLO",
+      "MISER",
+      "AREA DI SERVIZIO",
+      "CARROZZERIA",
+      "MECCANICO"
+    ]
+  },
+  "Bar & Ristoranti": {
+    "icon": "🍺",
+    "keywords": [
+      "PIZZA",
+      "PIZZERIA",
+      "RISTOR",
+      "PUB",
+      "BAR",
+      "CAFFE",
+      "CAFFÈ",
+      "BIRRERIA"
+    ]
+  },
+  "Shopping": {
+    "icon": "🛍️",
+    "keywords": [
+      "ZARA",
+      "H&M",
+      "DECATHLON",
+      "MEDIAWORLD",
+      "UNIEURO",
+      "AMAZON"
+    ]
+  },
+  "Casa": {
+    "icon": "🏠",
+    "keywords": [
+      "AFFITTO",
+      "MUTUO",
+      "IKEA"
+    ]
+  },
+  "Utenze": {
+    "icon": "💡",
+    "keywords": [
+      "LUCE",
+      "GAS",
+      "ACQUA",
+      "TELEFONO",
+      "INTERNET",
+      "LYCAMOBILE",
+      "TIM",
+      "WINDTRE",
+      "FASTWEB"
+    ]
+  },
+  "Salute & Benessere": {
+    "icon": "❤️",
+    "keywords": [
+      "FARMACIA",
+      "PARAFARMACIA",
+      "MEDICO",
+      "DENTISTA",
+      "OCULISTA",
+      "LABORATORIO ANALISI"
+    ]
+  },
+  "Investimenti": {
+    "icon": "📈",
+    "keywords": [
+      "COMPRAVENDITA TITOLI",
+      "PAC",
+      "ETF"
+    ]
+  },
+  "Stipendio": {
+    "icon": "💼",
+    "keywords": [
+      "STIPENDIO"
+    ]
+  },
+  "Viaggi & Vacanze": {
+    "icon": "🏖️",
+    "keywords": [
+      "VOLI",
+      "AEROPORTO",
+      "AEREO",
+      "ALBERGO",
+      "HOTEL",
+      "B&B",
+      "OSTELLO",
+      "AIRBNB",
+      "BOOKING.COM"
+    ]
+  },
+  "Svago & Tempo libero": {
+    "icon": "🎮",
+    "keywords": [
+      "BOULDER",
+      "PALESTRA",
+      "WEBFIT",
+      "CINEMA",
+      "CONCERTO",
+      "SPIAGGIA",
+      "MUSEO",
+      "TEATRO",
+      "ESCURSIONE",
+      "CINEMA"
+    ]
+  },
+  "Abbonamenti": {
+    "icon": "📺",
+    "keywords": [
+      "NETFLIX",
+      "DISNEY+",
+      "SPOTIFY",
+      "AMAZON PRIME",
+      "APPLE MUSIC",
+      "YOUTUBE PREMIUM"
+    ]
+  },
+  "Altro": {
+    "icon": "❓",
+    "keywords": []
+  }
 }

@@ -1,16 +1,11 @@
 import streamlit as st
 
-from src.services.importer import load_category_rules
+from src.services.importer import get_category_icon, get_category_names
 from src.services.movement_service import add_manual_movement
 
 
 def get_categories() -> list[str]:
-    categories = list(load_category_rules().keys())
-
-    if "Altro" not in categories:
-        categories.append("Altro")
-
-    return categories
+    return get_category_names()
 
 
 def show_manual_entry() -> None:
@@ -36,7 +31,11 @@ def show_manual_entry() -> None:
 
         with col2:
             account = st.selectbox("Conto", ["Fineco", "Contanti", "PayPal", "Altro"])
-            category = st.selectbox("Categoria", categories)
+            category = st.selectbox(
+                "Categoria",
+                categories,
+                format_func=lambda name: f"{get_category_icon(name)} {name}",
+            )
 
         description = st.text_input(
             "Descrizione",

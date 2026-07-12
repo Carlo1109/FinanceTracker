@@ -1,18 +1,38 @@
 import json
 import shutil
+import sqlite3
 import sys
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
-from src.database.db import DATA_DIR
+from src.database.db import DATA_DIR, DB_PATH
 
 
 USER_CATEGORY_CONFIG_PATH = DATA_DIR / "categories.json"
+DEFAULT_CATEGORY_ICON = "❓"
+
+DEFAULT_CATEGORY_ICONS = {
+    "Alimentari": "🛒",
+    "Trasporti": "🚆",
+    "Auto": "🚗",
+    "Bar & Ristoranti": "🍺",
+    "Shopping": "🛍️",
+    "Casa": "🏠",
+    "Utenze": "💡",
+    "Salute & Benessere": "❤️",
+    "Investimenti": "📈",
+    "Stipendio": "💼",
+    "Viaggi & Vacanze": "🏖️",
+    "Svago & Tempo libero": "🎮",
+    "Abbonamenti": "📺",
+    "Altro": "❓",
+}
 
 
 def get_bundled_category_config_path() -> Path:
-    """Restituisce il percorso del file categorie predefinito incluso nell'app."""
+    """Restituisce il file categorie predefinito incluso nell'app."""
     if getattr(sys, "frozen", False):
         bundle_dir = Path(sys._MEIPASS)
     else:
@@ -34,113 +54,382 @@ def ensure_category_config() -> Path:
         shutil.copy2(default_path, USER_CATEGORY_CONFIG_PATH)
     else:
         USER_CATEGORY_CONFIG_PATH.write_text(
-            "{}",
+            json.dumps(
+                {
+                    "Altro": {
+                        "icon": "❓",
+                        "keywords": [],
+                    }
+                },
+                indent=2,
+                ensure_ascii=False,
+            ),
             encoding="utf-8",
         )
 
     return USER_CATEGORY_CONFIG_PATH
 
 
-def load_category_rules() -> dict[str, list[str]]:
+def _normalize_category_definitions(
+    raw_data: Any,
+) -> tuple[dict[str, dict[str, Any]], bool]:
+    """
+    Migra automaticamente il vecchio formato:
+
+        "Categoria": ["KEYWORD"]
+
+    nel nuovo formato:
+
+        "Categoria": {
+            "icon": "🛒",
+            "keywords": ["KEYWORD"]
+        }
+    """
+    if not isinstance(raw_data, dict):
+        raw_data = {}
+
+    normalized: dict[str, dict[str, Any]] = {}
+    changed = False
+
+    for raw_name, raw_value in raw_data.items():
+        category_name = str(raw_name).strip()
+
+        if not category_name:
+            changed = True
+            continue
+
+        if isinstance(raw_value, list):
+            keywords = raw_value
+            icon = DEFAULT_CATEGORY_ICONS.get(
+                category_name,
+                DEFAULT_CATEGORY_ICON,
+            )
+            changed = True
+
+        elif isinstance(raw_value, dict):
+            keywords = raw_value.get("keywords", [])
+            icon = raw_value.get(
+                "icon",
+                DEFAULT_CATEGORY_ICONS.get(
+                    category_name,
+                    DEFAULT_CATEGORY_ICON,
+                ),
+            )
+
+            if "keywords" not in raw_value or "icon" not in raw_value:
+                changed = True
+        else:
+            keywords = []
+            icon = DEFAULT_CATEGORY_ICONS.get(
+                category_name,
+                DEFAULT_CATEGORY_ICON,
+            )
+            changed = True
+
+        if not isinstance(keywords, list):
+            keywords = []
+            changed = True
+
+        normalized_keywords: list[str] = []
+
+        for keyword in keywords:
+            normalized_keyword = str(keyword).strip().upper()
+
+            if (
+                normalized_keyword
+                and normalized_keyword not in normalized_keywords
+            ):
+                normalized_keywords.append(normalized_keyword)
+
+        normalized[category_name] = {
+            "icon": str(icon).strip() or DEFAULT_CATEGORY_ICON,
+            "keywords": normalized_keywords,
+        }
+
+    if "Altro" not in normalized:
+        normalized["Altro"] = {
+            "icon": "❓",
+            "keywords": [],
+        }
+        changed = True
+
+    return normalized, changed
+
+
+def load_category_definitions() -> dict[str, dict[str, Any]]:
+    """
+    Carica categorie, icone e keyword.
+
+    Se trova il vecchio formato JSON, lo migra automaticamente
+    senza perdere categorie o parole chiave.
+    """
     config_path = ensure_category_config()
 
     try:
         with config_path.open("r", encoding="utf-8") as file:
-            rules = json.load(file)
+            raw_data = json.load(file)
     except (json.JSONDecodeError, OSError):
-        return {}
+        raw_data = {}
 
-    if not isinstance(rules, dict):
-        return {}
+    definitions, changed = _normalize_category_definitions(raw_data)
 
-    return rules
+    if changed:
+        save_category_definitions(definitions)
+
+    return definitions
 
 
-def save_category_rules(rules: dict[str, list[str]]) -> None:
+def save_category_definitions(
+    definitions: dict[str, dict[str, Any]],
+) -> None:
+    """Salva il nuovo formato delle categorie."""
     config_path = ensure_category_config()
+    normalized, _ = _normalize_category_definitions(definitions)
 
     with config_path.open("w", encoding="utf-8") as file:
         json.dump(
-            rules,
+            normalized,
             file,
             indent=2,
             ensure_ascii=False,
         )
 
 
-def add_category(category_name: str) -> bool:
+def load_category_rules() -> dict[str, list[str]]:
+    """
+    Compatibilità con il codice esistente:
+    restituisce soltanto le keyword per categoria.
+    """
+    definitions = load_category_definitions()
+
+    return {
+        category: list(data["keywords"])
+        for category, data in definitions.items()
+    }
+
+
+def save_category_rules(rules: dict[str, list[str]]) -> None:
+    """
+    Compatibilità con il codice esistente:
+    aggiorna le keyword conservando le icone già assegnate.
+    """
+    definitions = load_category_definitions()
+
+    for category, keywords in rules.items():
+        if category not in definitions:
+            definitions[category] = {
+                "icon": DEFAULT_CATEGORY_ICONS.get(
+                    category,
+                    DEFAULT_CATEGORY_ICON,
+                ),
+                "keywords": [],
+            }
+
+        definitions[category]["keywords"] = keywords
+
+    save_category_definitions(definitions)
+
+
+def get_category_names() -> list[str]:
+    """Restituisce i nomi delle categorie nell'ordine del JSON."""
+    return list(load_category_definitions().keys())
+
+
+def get_category_icon(category: str) -> str:
+    """Restituisce l'icona associata a una categoria."""
+    definitions = load_category_definitions()
+
+    category_data = definitions.get(category)
+
+    if not category_data:
+        return DEFAULT_CATEGORY_ICON
+
+    return str(category_data.get("icon", DEFAULT_CATEGORY_ICON))
+
+
+def add_category(
+    category_name: str,
+    icon: str = DEFAULT_CATEGORY_ICON,
+) -> bool:
+    """Crea una categoria con icona e nessuna keyword iniziale."""
     category_name = category_name.strip()
+    icon = icon.strip() or DEFAULT_CATEGORY_ICON
 
     if not category_name:
         return False
 
-    rules = load_category_rules()
-    existing_names = {name.casefold() for name in rules}
+    definitions = load_category_definitions()
+
+    existing_names = {
+        current_name.casefold()
+        for current_name in definitions
+    }
 
     if category_name.casefold() in existing_names:
         return False
 
-    rules[category_name] = []
-    save_category_rules(rules)
+    definitions[category_name] = {
+        "icon": icon,
+        "keywords": [],
+    }
+
+    save_category_definitions(definitions)
+    return True
+
+
+def update_category_icon(category: str, icon: str) -> bool:
+    """Aggiorna l'icona di una categoria esistente."""
+    definitions = load_category_definitions()
+
+    if category not in definitions:
+        return False
+
+    normalized_icon = icon.strip() or DEFAULT_CATEGORY_ICON
+
+    if definitions[category]["icon"] == normalized_icon:
+        return False
+
+    definitions[category]["icon"] = normalized_icon
+    save_category_definitions(definitions)
 
     return True
 
 
 def add_keyword_to_category(category: str, keyword: str) -> bool:
+    """Aggiunge una parola chiave a una categoria."""
     keyword = keyword.strip().upper()
 
     if not keyword:
         return False
 
-    rules = load_category_rules()
+    definitions = load_category_definitions()
 
-    if category not in rules:
+    if category not in definitions:
         return False
 
+    keywords = definitions[category]["keywords"]
+
     existing_keywords = {
-        current_keyword.strip().upper()
-        for current_keyword in rules[category]
+        str(current_keyword).strip().upper()
+        for current_keyword in keywords
     }
 
     if keyword in existing_keywords:
         return False
 
-    rules[category].append(keyword)
-    save_category_rules(rules)
+    keywords.append(keyword)
+    save_category_definitions(definitions)
 
     return True
 
 
 def remove_keyword_from_category(category: str, keyword: str) -> bool:
-    rules = load_category_rules()
+    """Rimuove una parola chiave da una categoria."""
+    definitions = load_category_definitions()
 
-    if category not in rules:
+    if category not in definitions:
         return False
 
     normalized_keyword = keyword.strip().upper()
+    keywords = definitions[category]["keywords"]
 
     updated_keywords = [
         current_keyword
-        for current_keyword in rules[category]
-        if current_keyword.strip().upper() != normalized_keyword
+        for current_keyword in keywords
+        if str(current_keyword).strip().upper() != normalized_keyword
     ]
 
-    if len(updated_keywords) == len(rules[category]):
+    if len(updated_keywords) == len(keywords):
         return False
 
-    rules[category] = updated_keywords
-    save_category_rules(rules)
+    definitions[category]["keywords"] = updated_keywords
+    save_category_definitions(definitions)
 
     return True
 
 
-def categorize(text: str) -> str:
-    normalized_text = str(text).upper()
-    rules = load_category_rules()
+def delete_category(category: str) -> tuple[bool, int]:
+    """
+    Elimina una categoria.
 
-    for category, keywords in rules.items():
-        for keyword in keywords:
-            if keyword.upper() in normalized_text:
+    I movimenti che la utilizzavano vengono spostati automaticamente
+    nella categoria "Altro".
+
+    Compatibile sia con database che usano nomi italiani
+    sia con database che usano nomi inglesi.
+    """
+    if category == "Altro":
+        return False, 0
+
+    definitions = load_category_definitions()
+
+    if category not in definitions:
+        return False, 0
+
+    reassigned_movements = 0
+
+    if DB_PATH.exists():
+        with sqlite3.connect(DB_PATH) as connection:
+            columns = connection.execute(
+                "PRAGMA table_info(movements)"
+            ).fetchall()
+
+            column_names = {
+                column[1]
+                for column in columns
+            }
+
+            if "categoria" in column_names:
+                category_column = "categoria"
+            elif "category" in column_names:
+                category_column = "category"
+            else:
+                raise RuntimeError(
+                    "Nel database non è stata trovata una colonna "
+                    "per la categoria dei movimenti."
+                )
+
+            if "category_source" in column_names:
+                cursor = connection.execute(
+                    f"""
+                    UPDATE movements
+                    SET {category_column} = ?,
+                        category_source = ?
+                    WHERE {category_column} = ?
+                    """,
+                    ("Altro", "manual", category),
+                )
+            else:
+                cursor = connection.execute(
+                    f"""
+                    UPDATE movements
+                    SET {category_column} = ?
+                    WHERE {category_column} = ?
+                    """,
+                    ("Altro", category),
+                )
+
+            reassigned_movements = max(
+                cursor.rowcount,
+                0,
+            )
+
+            connection.commit()
+
+    del definitions[category]
+    save_category_definitions(definitions)
+
+    return True, reassigned_movements
+
+
+def categorize(text: str) -> str:
+    """Determina automaticamente la categoria di un movimento."""
+    normalized_text = str(text).upper()
+    definitions = load_category_definitions()
+
+    for category, data in definitions.items():
+        for keyword in data["keywords"]:
+            if str(keyword).upper() in normalized_text:
                 return category
 
     return "Altro"
@@ -148,7 +437,10 @@ def categorize(text: str) -> str:
 
 def get_transaction_date(row) -> pd.Timestamp:
     description = str(row.get("descrizione", "")).upper()
-    full_description = str(row.get("descrizione_completa", "")).upper()
+    full_description = str(
+        row.get("descrizione_completa", "")
+    ).upper()
+
     text = f"{description} {full_description}"
 
     is_debit_card = (
@@ -168,7 +460,11 @@ def get_transaction_date(row) -> pd.Timestamp:
 
 
 def import_fineco_excel(uploaded_file) -> pd.DataFrame:
-    df = pd.read_excel(uploaded_file, sheet_name="Movimenti", header=12)
+    df = pd.read_excel(
+        uploaded_file,
+        sheet_name="Movimenti",
+        header=12,
+    )
 
     df = df.rename(
         columns={
@@ -196,9 +492,11 @@ def import_fineco_excel(uploaded_file) -> pd.DataFrame:
     df["mese"] = df["data"].dt.to_period("M").astype(str)
 
     df["categoria"] = df["testo"].apply(categorize)
+
     df["tipo"] = df["importo"].apply(
         lambda value: "Entrata" if value > 0 else "Uscita"
     )
+
     df["category_source"] = "automatic"
 
     return df[

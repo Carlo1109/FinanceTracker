@@ -35,6 +35,54 @@ def apply_theme() -> None:
            PAGE
         ===================================================== */
 
+        /* Link delle pagine nella navigazione custom */
+        [data-testid="stColumn"]:has(.ft-navigation-anchor)
+        [data-testid="stPageLink"] a {
+            min-height: 48px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+
+            margin: 5px 0;
+            padding: 0 16px;
+
+            border-radius: 15px;
+            border: 1px solid transparent;
+
+            color: #cbd5e1 !important;
+            font-size: 15px;
+            font-weight: 800;
+            text-decoration: none !important;
+
+            transition:
+                transform 140ms ease,
+                background 140ms ease,
+                border-color 140ms ease;
+        }
+
+        [data-testid="stColumn"]:has(.ft-navigation-anchor)
+        [data-testid="stPageLink"] a:hover {
+            transform: translateX(3px);
+            background: rgba(148, 163, 184, 0.08);
+            border-color: rgba(148, 163, 184, 0.12);
+        }
+
+        /* Pagina attiva */
+        [data-testid="stColumn"]:has(.ft-navigation-anchor)
+        [data-testid="stPageLink"] a[aria-current="page"] {
+            background:
+                linear-gradient(
+                    135deg,
+                    rgba(34, 197, 94, 0.30),
+                    rgba(59, 130, 246, 0.18)
+                );
+
+            border-color: rgba(34, 197, 94, 0.46);
+            color: #ffffff !important;
+            box-shadow: 0 12px 28px rgba(34, 197, 94, 0.10);
+        }
+
+
         .block-container {
             max-width: 100%;
             padding-top: 0.75rem;
@@ -91,13 +139,22 @@ def apply_theme() -> None:
             top: 0.75rem;
             align-self: flex-start;
 
-            /*
-            Nessun max-height e nessun overflow:
-            la sidebar non avrà una scrollbar interna.
-            */
-            overflow: visible;
+            height: calc(100vh - 1.5rem);
+            max-height: calc(100vh - 1.5rem);
 
-            animation: ft-navigation-enter 120ms ease-out;
+            overflow-y: auto;
+            overflow-x: hidden;
+            overscroll-behavior: contain;
+
+            animation: ft-navigation-enter 180ms ease-out;
+
+            /* Nasconde visivamente la scrollbar */
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+
+        [data-testid="stColumn"]:has(.ft-navigation-anchor)::-webkit-scrollbar {
+            display: none;
         }
 
         @keyframes ft-navigation-enter {
@@ -114,7 +171,7 @@ def apply_theme() -> None:
 
         [data-testid="stColumn"]:has(.ft-navigation-anchor)
         [data-testid="stVerticalBlockBorderWrapper"] {
-            min-height: calc(100vh - 1.5rem);
+            min-height: 100%;
             padding: 0.75rem;
 
             border-radius: 24px;

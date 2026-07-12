@@ -28,32 +28,54 @@ apply_theme()
 init_db()
 
 
-PAGES = {
-    "Dashboard": {
-        "label": "🏠 Dashboard",
-        "render": show_dashboard,
-    },
-    "Movimenti": {
-        "label": "💳 Movimenti",
-        "render": show_movements,
-    },
-    "Nuovo movimento": {
-        "label": "➕ Nuovo movimento",
-        "render": show_manual_entry,
-    },
-    "Importa dati": {
-        "label": "📥 Importa dati",
-        "render": show_import_data,
-    },
-    "Impostazioni": {
-        "label": "⚙️ Impostazioni",
-        "render": show_settings,
-    },
-}
+dashboard_page = st.Page(
+    show_dashboard,
+    title="Dashboard",
+    icon="🏠",
+    url_path="dashboard",
+    default=True,
+)
+
+movements_page = st.Page(
+    show_movements,
+    title="Movimenti",
+    icon="💳",
+    url_path="movimenti",
+)
+
+manual_entry_page = st.Page(
+    show_manual_entry,
+    title="Nuovo movimento",
+    icon="➕",
+    url_path="nuovo-movimento",
+)
+
+import_page = st.Page(
+    show_import_data,
+    title="Importa dati",
+    icon="📥",
+    url_path="importa-dati",
+)
+
+settings_page = st.Page(
+    show_settings,
+    title="Impostazioni",
+    icon="⚙️",
+    url_path="impostazioni",
+)
 
 
-if "page" not in st.session_state:
-    st.session_state["page"] = "Dashboard"
+navigation = st.navigation(
+    [
+        dashboard_page,
+        movements_page,
+        manual_entry_page,
+        import_page,
+        settings_page,
+    ],
+    position="hidden",
+)
+
 
 if "navigation_open" not in st.session_state:
     st.session_state["navigation_open"] = True
@@ -65,10 +87,6 @@ def open_navigation() -> None:
 
 def close_navigation() -> None:
     st.session_state["navigation_open"] = False
-
-
-def change_page(page_name: str) -> None:
-    st.session_state["page"] = page_name
 
 
 def render_brand() -> None:
@@ -86,12 +104,8 @@ def render_brand() -> None:
         logo_left, logo_center, logo_right = st.columns([1, 8, 1])
 
         with logo_center:
-            st.image(
-                str(LOGO_PATH),
-                width=450,
-            )
-    else:
-        st.markdown("## FT")
+            st.image(str(LOGO_PATH), width=450)
+
 
     st.markdown(
         """
@@ -118,7 +132,7 @@ def render_brand() -> None:
             margin-bottom:10px;
             font-size:14px;
         ">
-            Personal finance manager
+            Personal Finance Manager
         </div>
         """,
         unsafe_allow_html=True,
@@ -151,29 +165,17 @@ def render_navigation() -> None:
     )
 
     render_brand()
-
     st.divider()
 
-    for page_name, page_config in PAGES.items():
-        is_selected = st.session_state["page"] == page_name
-
-        st.button(
-            page_config["label"],
-            key=f"navigation_{page_name}",
-            use_container_width=True,
-            type="primary" if is_selected else "secondary",
-            on_click=change_page,
-            args=(page_name,),
-        )
-
-def render_current_page() -> None:
-    current_page = st.session_state["page"]
-
-    if current_page not in PAGES:
-        current_page = "Dashboard"
-        st.session_state["page"] = current_page
-
-    PAGES[current_page]["render"]()
+    st.page_link(dashboard_page, label="Dashboard", icon="🏠")
+    st.page_link(movements_page, label="Movimenti", icon="💳")
+    st.page_link(
+        manual_entry_page,
+        label="Nuovo movimento",
+        icon="➕",
+    )
+    st.page_link(import_page, label="Importa dati", icon="📥")
+    st.page_link(settings_page, label="Impostazioni", icon="⚙️")
 
 
 if st.session_state["navigation_open"]:
@@ -187,7 +189,7 @@ if st.session_state["navigation_open"]:
             render_navigation()
 
     with content_column:
-        render_current_page()
+        navigation.run()
 
 else:
     menu_column, content_column = st.columns(
@@ -206,4 +208,4 @@ else:
         )
 
     with content_column:
-        render_current_page()
+        navigation.run()

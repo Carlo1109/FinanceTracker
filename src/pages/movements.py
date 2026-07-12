@@ -1,7 +1,10 @@
 import pandas as pd
 import streamlit as st
 
-from src.services.importer import load_category_rules
+from src.services.importer import (
+    get_category_icon,
+    get_category_names,
+)
 from src.services.movement_service import (
     delete_movement,
     load_movements,
@@ -29,29 +32,9 @@ def format_date(value) -> str:
 
 
 def get_categories() -> list[str]:
-    categories = list(load_category_rules().keys())
-
-    if "Altro" not in categories:
-        categories.append("Altro")
-
-    return categories
+    return get_category_names()
 
 
-def category_icon(category: str) -> str:
-    return {
-        "Alimentari": "🛒",
-        "Auto": "🚗",
-        "Casa": "🏠",
-        "Trasporti": "🚆",
-        "Salute": "❤️",
-        "Investimenti": "📈",
-        "Stipendio": "💼",
-        "Altro": "❓",
-        "Viaggi & Vacanze": "🌴",
-        "Ristoranti & Bar": "️🎉",
-        "Utenze": "💡",
-        "Shopping": "🛍️"
-    }.get(category, "❓")
 
 
 def show_movements() -> None:
@@ -77,7 +60,14 @@ def show_movements() -> None:
         selected_account = st.selectbox("Conto", ["Tutti"] + accounts)
 
     with filter_col_3:
-        selected_category = st.selectbox("Categoria", ["Tutte"] + categories)
+        selected_category = st.selectbox(
+            "Categoria",
+            ["Tutte"] + categories,
+            format_func=lambda name: (
+                name if name == "Tutte"
+                else f"{get_category_icon(name)} {name}"
+            ),
+        )
 
     with filter_col_4:
         search = st.text_input("Cerca", placeholder="Lidl, PayPal, Trenitalia...")
@@ -131,7 +121,7 @@ def show_movements() -> None:
         sign = "+" if amount > 0 else ""
 
         category = row["categoria"] if row["categoria"] in categories else "Altro"
-        icon = category_icon(category)
+        icon = get_category_icon(category)
 
         date = format_date(row["data"])
 
@@ -188,6 +178,9 @@ def show_movements() -> None:
                         "Categoria",
                         categories,
                         index=categories.index(category),
+                        format_func=lambda name: (
+                            f"{get_category_icon(name)} {name}"
+                        ),
                         key=f"category_{row['id']}",
                     )
 
