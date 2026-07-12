@@ -9,26 +9,58 @@ from src.database.db import get_connection
 from src.services.importer import categorize
 
 
-def generate_movement_hash(row) -> str:
+def generate_movement_hash(
+    row,
+    occurrence: int = 1,
+    source: str = "Fineco",
+) -> str:
     raw = "|".join(
         [
             str(row.get("data", "")),
+            str(row.get("data_operazione", "")),
+            str(row.get("data_valuta", "")),
             str(row.get("descrizione", "")),
             str(row.get("descrizione_completa", "")),
             str(row.get("importo", "")),
-            str(row.get("source", "Fineco")),
+            str(row.get("stato", "")),
+            source,
+            str(occurrence),
         ]
     )
+
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def save_movements(df: pd.DataFrame, source: str = "Fineco") -> tuple[int, int]:
+def save_movements(
+    df: pd.DataFrame,
+    source: str = "Fineco",
+) -> tuple[int, int]:
     inserted = 0
     skipped = 0
+    occurrences: dict[str, int] = {}
 
     with get_connection() as conn:
         for _, row in df.iterrows():
-            movement_hash = generate_movement_hash(row)
+            base_key = "|".join(
+                [
+                    str(row.get("data", "")),
+                    str(row.get("data_operazione", "")),
+                    str(row.get("data_valuta", "")),
+                    str(row.get("descrizione", "")),
+                    str(row.get("descrizione_completa", "")),
+                    str(row.get("importo", "")),
+                    str(row.get("stato", "")),
+                    source,
+                ]
+            )
+
+            occurrences[base_key] = occurrences.get(base_key, 0) + 1
+
+            movement_hash = generate_movement_hash(
+                row,
+                occurrence=occurrences[base_key],
+                source=source,
+            )
 
             try:
                 conn.execute(
