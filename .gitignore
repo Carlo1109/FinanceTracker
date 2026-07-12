@@ -1,40 +1,47 @@
+# ==========================================
 # Python
+# ==========================================
 __pycache__/
-*.pyc
+*.py[cod]
 
-# Virtual env
+# Virtual environments
 .venv/
 venv/
 
-# Build
+# ==========================================
+# Build & Packaging
+# ==========================================
 build/
 dist/
-*.spec.bak
-
-# Installer
 installer_output/
 
 # PyInstaller
+*.spec.bak
+
+# Generated installers
 *.exe
 *.msi
 
+# ==========================================
+# Local application data
+# ==========================================
+data/
+finance_tracker.db
+
+# ==========================================
 # IDE
+# ==========================================
 .vscode/
 .idea/
 
-# Database locale
-finance_tracker.db
-
-# AppData di test
-data/
-
+# ==========================================
 # Logs
+# ==========================================
 *.log
 
-# Mac
+# ==========================================
+# Operating System
+# ==========================================
 .DS_Store
-
-# Windows
 Thumbs.db
 desktop.ini
-
