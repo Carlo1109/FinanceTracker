@@ -11,7 +11,7 @@ from src.services.importer import (
 )
 
 
-APP_VERSION = "v0.4.0"
+APP_VERSION = "v1.0.0"
 
 
 def show_settings() -> None:
@@ -246,12 +246,23 @@ def show_settings() -> None:
                 st.info("Per fare un backup, copia la cartella `data/` e la cartella `config/`.")
 
     with tab_info:
-        st.markdown("### FinanceTracker")
+        st.markdown("## 💰 FinanceTracker")
 
         with st.container(border=True):
             st.markdown(f"**Versione:** {APP_VERSION}")
             st.markdown("**Database:** SQLite")
-            st.markdown("**Framework:** Streamlit")  
+            st.markdown("**Framework:** Streamlit")
             st.markdown("**Sviluppatore:** Carlo La Sala")
 
-        st.caption("Creato per avere una visione chiara e semplice delle proprie finanze personali.")
+        st.divider()
+
+        st.markdown(
+            """
+            <div style="text-align:center; color:#94a3b8; line-height:1.7;">
+                <strong>FinanceTracker</strong><br>
+                Personal Finance Manager<br><br>
+                © 2026 Carlo La Sala
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )

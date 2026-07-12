@@ -1,36 +1,49 @@
-# 💸 FinanceTracker
+# 💰 FinanceTracker
 
-Personal Finance Manager moderno sviluppato in Python e Streamlit.
+FinanceTracker è un'app desktop sviluppata in Python per gestire le proprie finanze personali in modo semplice, moderno e completamente offline.
 
-## Screenshot
+## ✨ Funzionalità
 
-(immagine dashboard)
+- 📊 Dashboard con KPI
+- 🥧 Grafico a torta delle spese
+- 💳 Import estratti conto Fineco
+- ✍️ Inserimento movimenti manuali
+- 🏷️ Gestione categorie e parole chiave
+- 💾 Backup del database
+- 🔒 Tutti i dati rimangono sul proprio PC
 
-## Funzionalità
-
-- Dashboard finanziaria
-- Import CSV Fineco
-- Gestione movimenti
-- Categorie automatiche
-- Inserimento manuale
-- Backup dati
-- Dashboard filtrabile
-- Database SQLite
-
-## Tecnologie
+## 🖥️ Tecnologie
 
 - Python
 - Streamlit
 - SQLite
-- Pandas
 - Plotly
+- PyWebView
 
-## Installazione
+## 📷 Screenshot
+## 📷 Screenshot
 
-...
+### Dashboard
 
-## Roadmap
+![Dashboard](screenshots/dashboard.png)
 
-...
+### Movimenti
 
-## Licenza
+![Movimenti](screenshots/movements.png)
+
+### Gestione categorie
+
+![Categorie](screenshots/categories.png)
+
+### Impostazioni
+
+![Impostazioni](screenshots/import.png)
+
+
+## 🚀 Download
+
+Scarica l'ultima versione dalla sezione **Releases**.
+
+## 📄 Licenza
+
+Questo progetto è distribuito sotto licenza MIT.

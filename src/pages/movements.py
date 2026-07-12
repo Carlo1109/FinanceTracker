@@ -42,12 +42,15 @@ def category_icon(category: str) -> str:
         "Alimentari": "🛒",
         "Auto": "🚗",
         "Casa": "🏠",
-        "Svago": "🎉",
         "Trasporti": "🚆",
-        "Salute": "🏥",
+        "Salute": "❤️",
         "Investimenti": "📈",
         "Stipendio": "💼",
         "Altro": "❓",
+        "Viaggi & Vacanze": "🌴",
+        "Ristoranti & Bar": "️🎉",
+        "Utenze": "💡",
+        "Shopping": "🛍️"
     }.get(category, "❓")
 
 

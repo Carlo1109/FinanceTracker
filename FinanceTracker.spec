@@ -69,7 +69,7 @@ exe = EXE(
     analysis.datas,
     [],
     name="FinanceTracker",
-    icon="assets/icons/logo.ico",
+    icon="assets/icons/ft_logo.ico",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

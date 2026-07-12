@@ -15,12 +15,15 @@ def category_icon(category: str) -> str:
         "Alimentari": "🛒",
         "Auto": "🚗",
         "Casa": "🏠",
-        "Svago": "🎉",
         "Trasporti": "🚆",
-        "Salute": "🏥",
+        "Salute": "❤️",
         "Investimenti": "📈",
         "Stipendio": "💼",
         "Altro": "❓",
+        "Viaggi & Vacanze": "🌴",
+        "Ristoranti & Bar": "️🎉",
+        "Utenze": "💡",
+        "Shopping": "🛍️"
     }.get(category, "❓")
 
 
@@ -80,6 +83,7 @@ def show_dashboard() -> None:
         period = st.selectbox(
             "Periodo",
             ["Questo mese", "Mese scorso", "Mese specifico", "Ultimi 3 mesi", "Ultimi 6 mesi", "Quest'anno", "Tutto"],
+            index=6,
         )
 
     selected_month = None

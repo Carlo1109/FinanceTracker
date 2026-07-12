@@ -32,9 +32,11 @@
     "PARCHEGGIO",
     "CASELLO",
     "MISER",
-    "AREA DI SERVIZIO"
+    "AREA DI SERVIZIO",
+    "CARROZZERIA",
+    "MECCANICO"
   ],
-  "Svago": [
+  "Ristoranti & Bar": [
     "PIZZA",
     "PIZZERIA",
     "RISTOR",
@@ -43,27 +45,39 @@
     "CAFFE",
     "CAFFÈ",
     "CINEMA",
-    "AMAZON",
-    "PAYPAL",
+    "BIRRERIA"
+  ],
+  "Shopping": [
     "ZARA",
     "H&M",
     "DECATHLON",
     "MEDIAWORLD",
     "UNIEURO",
-    "BIRRERIA"
+    "AMAZON"
   ],
   "Casa": [
-    "ENEL",
-    "GAS",
-    "LUCE",
-    "ACQUA",
     "AFFITTO",
+    "MUTUO",
     "IKEA"
+  ],
+  "Utenze": [
+    "LUCE",
+    "GAS",
+    "ACQUA",
+    "TELEFONO",
+    "INTERNET",
+    "LYCAMOBILE",
+    "TIM",
+    "WINDTRE",
+    "FASTWEB"
   ],
   "Salute": [
     "FARMACIA",
     "PARAFARMACIA",
-    "MEDICO"
+    "MEDICO",
+    "DENTISTA",
+    "OCULISTA", 
+    "LABORATORIO ANALISI"
   ],
   "Investimenti": [
     "COMPRAVENDITA TITOLI",
@@ -72,5 +86,16 @@
   ],
   "Stipendio": [
     "STIPENDIO"
+  ],
+  "Viaggi & Vacanze": [
+    "VOLI",
+    "AEROPORTO",
+    "AEREO",
+    "ALBERGO",
+    "HOTEL",
+    "B&B",
+    "OSTELLO",
+    "AIRBNB",
+    "BOOKING.COM"
   ]
 }

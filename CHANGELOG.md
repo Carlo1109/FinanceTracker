@@ -1,28 +1,24 @@
 # Changelog
 
-## v0.4.0
+## v1.0.0
 
-### Added
+Prima release pubblica.
 
-- Dashboard completamente ridisegnata
-- Import separato
+### Dashboard
+- KPI
+- Grafico a torta
+
+### Movimenti
+- Import Fineco
 - Inserimento manuale
+- Modifica categorie
+
+### Impostazioni
+- Backup
 - Gestione categorie
-- Gestione conti
-- Backup ZIP
-- Pagina Impostazioni
-- Logo FinanceTracker
+- Gestione keyword
 
-### Improved
-
-- UI completamente ridisegnata
-- Sidebar moderna
-- Database SQLite
-- Grafici
-- Esperienza utente
-
-### Fixed
-
-- Persistenza dati
-- Gestione categorie
-- Eliminazione movimenti
+### Desktop
+- Applicazione Windows
+- Database locale
+- Nessun cloud

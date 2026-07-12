@@ -1,11 +1,40 @@
-.venv/
+# Python
 __pycache__/
 *.pyc
-*.db
-*.sqlite3
-.streamlit/
-.vscode/
-.DS_Store
-*.log
+
+# Virtual env
+.venv/
+venv/
+
+# Build
 build/
 dist/
+*.spec.bak
+
+# Installer
+installer_output/
+
+# PyInstaller
+*.exe
+*.msi
+
+# IDE
+.vscode/
+.idea/
+
+# Database locale
+finance_tracker.db
+
+# AppData di test
+data/
+
+# Logs
+*.log
+
+# Mac
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
+

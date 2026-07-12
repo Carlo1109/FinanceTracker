@@ -14,7 +14,7 @@ from src.theme.style import apply_theme
 APP_VERSION = "v1.0.0"
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-LOGO_PATH = PROJECT_ROOT / "assets" / "icons" / "logo.png"
+LOGO_PATH = PROJECT_ROOT / "assets" / "icons" / "ft_logo.png"
 
 
 st.set_page_config(
@@ -118,7 +118,7 @@ def render_brand() -> None:
             margin-bottom:10px;
             font-size:14px;
         ">
-            Personal finance
+            Personal finance manager
         </div>
         """,
         unsafe_allow_html=True,
