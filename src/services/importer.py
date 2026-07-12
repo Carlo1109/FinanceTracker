@@ -7,6 +7,8 @@ from typing import Any
 
 import pandas as pd
 
+import re
+
 from src.database.db import DATA_DIR, DB_PATH
 
 
@@ -423,14 +425,25 @@ def delete_category(category: str) -> tuple[bool, int]:
 
 
 def categorize(text: str) -> str:
-    """Determina automaticamente la categoria di un movimento."""
     normalized_text = str(text).upper()
     definitions = load_category_definitions()
 
     for category, data in definitions.items():
         for keyword in data["keywords"]:
-            if str(keyword).upper() in normalized_text:
-                return category
+            normalized_keyword = str(keyword).strip().upper()
+
+            if not normalized_keyword:
+                continue
+
+            # Le keyword corte devono corrispondere a una parola intera.
+            if len(normalized_keyword) <= 3:
+                pattern = rf"(?<!\w){re.escape(normalized_keyword)}(?!\w)"
+
+                if re.search(pattern, normalized_text):
+                    return category
+            else:
+                if normalized_keyword in normalized_text:
+                    return category
 
     return "Altro"
 
