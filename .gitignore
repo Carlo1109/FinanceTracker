@@ -7,5 +7,5 @@ __pycache__/
 .vscode/
 .DS_Store
 *.log
-/build/
-/dist/
+build/
+dist/

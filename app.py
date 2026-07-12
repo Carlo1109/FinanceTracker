@@ -178,8 +178,8 @@ def render_current_page() -> None:
 
 if st.session_state["navigation_open"]:
     navigation_column, content_column = st.columns(
-    [1.15, 4.85],
-    gap="small",
+        [1.15, 4.85],
+        gap="small",
     )
 
     with navigation_column:
@@ -190,15 +190,20 @@ if st.session_state["navigation_open"]:
         render_current_page()
 
 else:
-    menu_column, spacer_column = st.columns([1, 8])
+    menu_column, content_column = st.columns(
+        [0.42, 5.58],
+        gap="small",
+    )
 
     with menu_column:
         st.button(
-            "☰ Menu",
+            "☰",
             key="open_navigation",
+            help="Mostra menu",
             use_container_width=True,
             type="primary",
             on_click=open_navigation,
         )
 
-    render_current_page()
+    with content_column:
+        render_current_page()

@@ -97,7 +97,7 @@ def apply_theme() -> None:
             */
             overflow: visible;
 
-            animation: ft-navigation-enter 180ms ease-out;
+            animation: ft-navigation-enter 120ms ease-out;
         }
 
         @keyframes ft-navigation-enter {
