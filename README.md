@@ -35,7 +35,7 @@ FinanceTracker è un'app desktop sviluppata in Python per gestire le proprie fin
 
 ![Categorie](screenshots/categories.png)
 
-### Impostazioni
+### Importa dati
 
 ![Impostazioni](screenshots/import.png)
 
