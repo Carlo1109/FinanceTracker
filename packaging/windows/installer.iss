@@ -15,11 +15,13 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 
+; SourceDir vale solo per [Files] Source.
+; SetupIconFile / OutputDir restano relativi alla cartella dello .iss.
 SourceDir={#ProjectRoot}
 OutputDir={#ProjectRoot}\installer_output
-OutputBaseFilename=FinanceTracker_Setup_v1.0.1
+OutputBaseFilename=FinanceTracker_Setup_v{#MyAppVersion}
 
-SetupIconFile=assets\icons\ft_logo.ico
+SetupIconFile={#ProjectRoot}\assets\icons\ft_logo.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 Compression=lzma2

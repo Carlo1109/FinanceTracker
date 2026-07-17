@@ -38,14 +38,31 @@ jobs:
             --distpath dist `
             --workpath build `
             packaging\FinanceTracker.spec
+          if (-not (Test-Path "dist\FinanceTracker.exe")) {
+            throw "PyInstaller non ha prodotto dist\FinanceTracker.exe"
+          }
 
       - name: Inno Setup
         shell: pwsh
         run: |
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" packaging\windows\installer.iss
+          $candidates = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
+          )
+          $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) {
+            throw "ISCC.exe non trovato. Inno Setup non installato correttamente."
+          }
+          New-Item -ItemType Directory -Force -Path installer_output | Out-Null
+          Write-Host "Usando ISCC: $iscc"
+          & $iscc packaging\windows\installer.iss
+          if ($LASTEXITCODE -ne 0) {
+            throw "Inno Setup fallito con exit code $LASTEXITCODE"
+          }
+          Get-ChildItem installer_output -ErrorAction SilentlyContinue | Format-Table Name, Length
 
       - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: windows-installer
           path: installer_output/*.exe
@@ -82,7 +99,7 @@ jobs:
         run: ./packaging/linux/build_deb.sh
 
       - name: Upload Linux artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: linux-deb
           path: installer_output/*.deb
@@ -108,7 +125,7 @@ jobs:
         run: ./packaging/macos/build_app.sh
 
       - name: Upload macOS artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: macos-app
           path: installer_output/*.zip
@@ -121,7 +138,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: release-assets
           merge-multiple: true
