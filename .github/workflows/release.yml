@@ -1,8 +1,5 @@
 name: Release builds
 
-# Windows: build locale (PyInstaller + Inno Setup).
-# Questa pipeline genera solo Linux (.deb) e macOS (.app.zip).
-
 on:
   push:
     tags:
@@ -13,9 +10,86 @@ permissions:
   contents: write
 
 jobs:
+  build-windows:
+  name: Windows installer
+  runs-on: windows-latest
+
+  steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+        cache: pip
+
+    - name: Install Python dependencies
+      shell: pwsh
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install -r requirements.txt
+
+    - name: Build Windows executable
+      shell: pwsh
+      run: |
+        python -m PyInstaller --clean --noconfirm packaging/FinanceTracker.spec
+
+        if (-not (Test-Path "dist\FinanceTracker.exe")) {
+          Write-Host "Contenuto della cartella dist:"
+          Get-ChildItem -Recurse dist -ErrorAction SilentlyContinue
+          throw "dist\FinanceTracker.exe non è stato generato"
+        }
+
+        Get-Item "dist\FinanceTracker.exe"
+
+    - name: Install Inno Setup
+      shell: pwsh
+      run: |
+        choco install innosetup --yes --no-progress
+
+    - name: Build Windows installer
+      shell: pwsh
+      run: |
+        $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+
+        if (-not (Test-Path $iscc)) {
+          $iscc = "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
+        }
+
+        if (-not (Test-Path $iscc)) {
+          throw "ISCC.exe non trovato"
+        }
+
+        & $iscc "packaging\windows\installer.iss"
+
+        if ($LASTEXITCODE -ne 0) {
+          throw "Compilazione Inno Setup fallita con codice $LASTEXITCODE"
+        }
+
+    - name: Verify Windows installer
+      shell: pwsh
+      run: |
+        $installer = Get-ChildItem "installer_output\*.exe" `
+          -ErrorAction SilentlyContinue
+
+        if (-not $installer) {
+          Write-Host "Contenuto del repository:"
+          Get-ChildItem -Recurse -Depth 3
+          throw "Installer Windows non generato"
+        }
+
+        $installer | Format-Table Name, Length, LastWriteTime
+
+    - name: Upload Windows artifact
+      uses: actions/upload-artifact@v6
+      with:
+        name: windows-installer
+        path: installer_output/*.exe
+        if-no-files-found: error
+
   build-linux:
     name: Linux .deb
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -33,12 +107,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
 
       - name: Install Python dependencies
         run: |
           python3 -m venv .venv
           .venv/bin/python -m pip install --upgrade pip
           .venv/bin/pip install -r requirements.txt
+
+      - name: Make build script executable
+        run: chmod +x packaging/linux/build_deb.sh
 
       - name: Build .deb
         run: ./packaging/linux/build_deb.sh
@@ -53,18 +131,23 @@ jobs:
   build-macos:
     name: macOS app
     runs-on: macos-latest
+
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
 
       - name: Install Python dependencies
         run: |
           python3 -m venv .venv
           .venv/bin/python -m pip install --upgrade pip
           .venv/bin/pip install -r requirements.txt
+
+      - name: Make build script executable
+        run: chmod +x packaging/macos/build_app.sh
 
       - name: Build macOS .app
         run: ./packaging/macos/build_app.sh
@@ -78,15 +161,23 @@ jobs:
 
   publish-release:
     name: Publish GitHub Release
-    needs: [build-linux, build-macos]
+    needs:
+      - build-windows
+      - build-linux
+      - build-macos
+
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v7
         with:
           path: release-assets
           merge-multiple: true
+
+      - name: Show release assets
+        run: find release-assets -maxdepth 2 -type f -print
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -95,6 +186,10 @@ jobs:
           generate_release_notes: true
           body: |
             ## Download
-            - **Windows:** build locale → `FinanceTracker_Setup_*.exe` (caricalo a mano sulla Release se serve)
-            - **Linux:** `financetracker_*.deb` → `sudo apt install ./financetracker_*.deb`
-            - **macOS:** `FinanceTracker_*_macos_*.zip` → scompatta → doppio click su `FinanceTracker.app` (non notarizzato: click destro → Apri al primo avvio)
+
+            - **Windows:** scarica `FinanceTracker_Setup_*.exe`
+            - **Linux:** scarica `financetracker_*.deb` e installa con:
+              `sudo apt install ./financetracker_*.deb`
+            - **macOS:** scarica `FinanceTracker_*_macos_*.zip`, estrai il file e apri `FinanceTracker.app`
+
+            > La versione macOS non è firmata o notarizzata. Al primo avvio potrebbe essere necessario usare click destro → Apri.
