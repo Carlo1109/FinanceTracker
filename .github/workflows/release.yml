@@ -59,30 +59,40 @@ jobs:
             throw "ISCC.exe non trovato"
           }
 
-          & $iscc "packaging\windows\installer.iss"
+          $projectRoot = $env:GITHUB_WORKSPACE
+
+          Write-Host "Project root: $projectRoot"
+          Write-Host "Icon exists: $(Test-Path "$projectRoot\assets\icons\ft_logo.ico")"
+          Write-Host "Exe exists: $(Test-Path "$projectRoot\dist\FinanceTracker.exe")"
+
+          Get-Item "$projectRoot\assets\icons\ft_logo.ico"
+          Get-Item "$projectRoot\dist\FinanceTracker.exe"
+
+          & $iscc `
+            "/DProjectRoot=$projectRoot" `
+            "packaging\windows\installer.iss"
 
           if ($LASTEXITCODE -ne 0) {
             throw "Compilazione Inno Setup fallita con codice $LASTEXITCODE"
           }
+          - name: Verify Windows installer
+            shell: pwsh
+            run: |
+              $installer = Get-ChildItem "installer_output\*.exe" -ErrorAction SilentlyContinue
 
-      - name: Verify Windows installer
-        shell: pwsh
-        run: |
-          $installer = Get-ChildItem "installer_output\*.exe" -ErrorAction SilentlyContinue
+              if (-not $installer) {
+                Get-ChildItem -Recurse installer_output -ErrorAction SilentlyContinue
+                throw "Installer Windows non generato"
+              }
 
-          if (-not $installer) {
-            Get-ChildItem -Recurse installer_output -ErrorAction SilentlyContinue
-            throw "Installer Windows non generato"
-          }
+              $installer | Format-Table Name, Length, LastWriteTime
 
-          $installer | Format-Table Name, Length, LastWriteTime
-
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: windows-installer
-          path: installer_output/*.exe
-          if-no-files-found: error
+          - name: Upload Windows artifact
+            uses: actions/upload-artifact@v6
+            with:
+              name: windows-installer
+              path: installer_output/*.exe
+              if-no-files-found: error
 
   build-linux:
     name: Linux .deb

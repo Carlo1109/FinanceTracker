@@ -1,12 +1,11 @@
-; packaging\windows\installer.iss
-
 #define MyAppName "FinanceTracker"
 #define MyAppVersion "1.0.1"
 #define MyAppPublisher "Carlo La Sala"
 #define MyAppExeName "FinanceTracker.exe"
 
-; __DIR__ = ...\packaging\windows
-#define ProjectRoot AddBackslash(__DIR__) + "..\.."
+#ifndef ProjectRoot
+  #define ProjectRoot "..\.."
+#endif
 
 [Setup]
 AppId={{86EC67C4-9446-4AA9-B2DD-894C37EEA735}
