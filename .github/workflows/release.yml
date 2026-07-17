@@ -1,5 +1,8 @@
 name: Release builds
 
+# Windows: build locale (PyInstaller + Inno Setup).
+# Questa pipeline genera solo Linux (.deb) e macOS (.app.zip).
+
 on:
   push:
     tags:
@@ -10,64 +13,6 @@ permissions:
   contents: write
 
 jobs:
-  build-windows:
-    name: Windows installer
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install Python dependencies
-        shell: pwsh
-        run: |
-          python -m venv .venv
-          .\.venv\Scripts\python.exe -m pip install --upgrade pip
-          .\.venv\Scripts\pip.exe install -r requirements.txt
-
-      - name: Install Inno Setup
-        run: choco install innosetup --no-progress -y
-
-      - name: PyInstaller
-        shell: pwsh
-        run: |
-          .\.venv\Scripts\pyinstaller.exe `
-            --noconfirm `
-            --distpath dist `
-            --workpath build `
-            packaging\FinanceTracker.spec
-          if (-not (Test-Path "dist\FinanceTracker.exe")) {
-            throw "PyInstaller non ha prodotto dist\FinanceTracker.exe"
-          }
-
-      - name: Inno Setup
-        shell: pwsh
-        run: |
-          $candidates = @(
-            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-            "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
-          )
-          $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $iscc) {
-            throw "ISCC.exe non trovato. Inno Setup non installato correttamente."
-          }
-          New-Item -ItemType Directory -Force -Path installer_output | Out-Null
-          Write-Host "Usando ISCC: $iscc"
-          & $iscc packaging\windows\installer.iss
-          if ($LASTEXITCODE -ne 0) {
-            throw "Inno Setup fallito con exit code $LASTEXITCODE"
-          }
-          Get-ChildItem installer_output -ErrorAction SilentlyContinue | Format-Table Name, Length
-
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: windows-installer
-          path: installer_output/*.exe
-          if-no-files-found: error
-
   build-linux:
     name: Linux .deb
     runs-on: ubuntu-latest
@@ -133,7 +78,7 @@ jobs:
 
   publish-release:
     name: Publish GitHub Release
-    needs: [build-windows, build-linux, build-macos]
+    needs: [build-linux, build-macos]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
@@ -150,6 +95,6 @@ jobs:
           generate_release_notes: true
           body: |
             ## Download
-            - **Windows:** `FinanceTracker_Setup_*.exe`
+            - **Windows:** build locale → `FinanceTracker_Setup_*.exe` (caricalo a mano sulla Release se serve)
             - **Linux:** `financetracker_*.deb` → `sudo apt install ./financetracker_*.deb`
             - **macOS:** `FinanceTracker_*_macos_*.zip` → scompatta → doppio click su `FinanceTracker.app` (non notarizzato: click destro → Apri al primo avvio)

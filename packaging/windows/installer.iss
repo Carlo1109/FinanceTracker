@@ -1,4 +1,5 @@
-#define ProjectRoot "..\.."
+; Build locale Windows — apri questo file con Inno Setup.
+; I path puntano alla root del progetto (due livelli sopra).
 #define MyAppName "FinanceTracker"
 #define MyAppVersion "1.0.1"
 #define MyAppPublisher "Carlo La Sala"
@@ -15,13 +16,11 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 
-; SourceDir vale solo per [Files] Source.
-; SetupIconFile / OutputDir restano relativi alla cartella dello .iss.
-SourceDir={#ProjectRoot}
-OutputDir={#ProjectRoot}\installer_output
-OutputBaseFilename=FinanceTracker_Setup_v{#MyAppVersion}
+SourceDir=..\..
+OutputDir=..\..\installer_output
+OutputBaseFilename=FinanceTracker_Setup_v1.0.1
 
-SetupIconFile={#ProjectRoot}\assets\icons\ft_logo.ico
+SetupIconFile=..\..\assets\icons\ft_logo.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 Compression=lzma2

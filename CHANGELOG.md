@@ -5,9 +5,9 @@
 Stesse funzionalità di v1.0.0.
 
 ### Packaging
-- Installer Linux (`.deb`)
-- App macOS (`.app` nello zip, non notarizzata)
-- Build multi-OS via GitHub Actions
+- Installer Linux (`.deb`) via GitHub Actions
+- App macOS (`.app` nello zip) via GitHub Actions
+- Installer Windows ancora buildato in locale (Inno Setup)
 
 ## v1.0.0
 
