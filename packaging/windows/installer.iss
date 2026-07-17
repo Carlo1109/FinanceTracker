@@ -16,11 +16,12 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 
-SourceDir=..\..
-OutputDir=..\..\installer_output
+SourceDir=.
+OutputDir=installer_output
 OutputBaseFilename=FinanceTracker_Setup_v1.0.1
 
-SetupIconFile=..\..\assets\icons\ft_logo.ico
+SetupIconFile=assets\icons\ft_logo.ico
+
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 Compression=lzma2
