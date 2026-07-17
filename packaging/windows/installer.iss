@@ -1,5 +1,6 @@
+#define ProjectRoot "..\.."
 #define MyAppName "FinanceTracker"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.1"
 #define MyAppPublisher "Carlo La Sala"
 #define MyAppExeName "FinanceTracker.exe"
 
@@ -14,8 +15,9 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 
-OutputDir=installer_output
-OutputBaseFilename=FinanceTracker_Setup_v1.0.0
+SourceDir={#ProjectRoot}
+OutputDir={#ProjectRoot}\installer_output
+OutputBaseFilename=FinanceTracker_Setup_v1.0.1
 
 SetupIconFile=assets\icons\ft_logo.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
@@ -31,7 +33,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=yes
 RestartApplications=no
 
-VersionInfoVersion=1.0.0.0
+VersionInfoVersion=1.0.1.0
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription=FinanceTracker Personal Finance Manager
 VersionInfoProductName={#MyAppName}

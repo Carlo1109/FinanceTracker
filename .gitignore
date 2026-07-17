@@ -21,6 +21,18 @@ installer_output/
 # Generated installers
 *.exe
 *.msi
+*.deb
+packaging/linux/deb_root/
+packaging/macos/app_root/
+packaging/macos/dmg_root/
+packaging/macos/*.iconset/
+assets/icons/*.icns
+packaging/windows/installer_staging/
+
+# Secrets / tokens (never commit)
+*ghp*
+token*.txt
+*token*
 
 # ==========================================
 # Local application data

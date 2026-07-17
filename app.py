@@ -11,7 +11,7 @@ from src.pages.settings import show_settings
 from src.theme.style import apply_theme
 
 
-APP_VERSION = "v1.0.0"
+APP_VERSION = "v1.0.1"
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 LOGO_PATH = PROJECT_ROOT / "assets" / "icons" / "ft_logo.png"

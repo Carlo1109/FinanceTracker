@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import sys
 from pathlib import Path
 
 
@@ -7,7 +8,7 @@ APP_NAME = "FinanceTracker"
 
 
 def get_app_data_dir() -> Path:
-    if os.name == "nt":
+    if sys.platform == "win32":
         local_app_data = os.getenv("LOCALAPPDATA")
 
         if local_app_data:
@@ -15,22 +16,20 @@ def get_app_data_dir() -> Path:
 
         return Path.home() / "AppData" / "Local" / APP_NAME
 
-    if os.name == "posix":
-        # macOS
-        mac_data_dir = Path.home() / "Library" / "Application Support"
+    if sys.platform == "darwin":
+        return (
+            Path.home()
+            / "Library"
+            / "Application Support"
+            / APP_NAME
+        )
 
-        if mac_data_dir.exists():
-            return mac_data_dir / APP_NAME
+    xdg_data_home = os.getenv("XDG_DATA_HOME")
 
-        # Linux
-        xdg_data_home = os.getenv("XDG_DATA_HOME")
+    if xdg_data_home:
+        return Path(xdg_data_home) / APP_NAME
 
-        if xdg_data_home:
-            return Path(xdg_data_home) / APP_NAME
-
-        return Path.home() / ".local" / "share" / APP_NAME
-
-    return Path.home() / APP_NAME
+    return Path.home() / ".local" / "share" / APP_NAME
 
 
 DATA_DIR = get_app_data_dir()

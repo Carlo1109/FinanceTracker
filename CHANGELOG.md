@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.0.1
+
+Stesse funzionalità di v1.0.0.
+
+### Packaging
+- Installer Linux (`.deb`)
+- App macOS (`.app` nello zip, non notarizzata)
+- Build multi-OS via GitHub Actions
+
 ## v1.0.0
 
 Prima release pubblica.

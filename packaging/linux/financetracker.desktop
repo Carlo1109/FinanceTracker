@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=FinanceTracker
+GenericName=Personal Finance
+Comment=Gestione finanze personali offline
+Exec=financetracker
+Icon=financetracker
+Terminal=false
+Categories=Office;Finance;
+StartupWMClass=FinanceTracker
+Keywords=finance;money;budget;spese;

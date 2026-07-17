@@ -10,6 +10,8 @@ from typing import IO
 
 import webview
 
+from src.database.db import get_app_data_dir
+
 
 APP_NAME = "FinanceTracker"
 APP_HOST = "127.0.0.1"
@@ -29,14 +31,19 @@ def get_bundle_dir() -> Path:
 
 
 def get_log_path() -> Path:
-    local_app_data = Path(
-        os.getenv("LOCALAPPDATA", str(Path.home()))
-    )
-
-    log_dir = local_app_data / APP_NAME / "logs"
+    log_dir = get_app_data_dir() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
     return log_dir / "launcher.log"
+
+
+def get_webview_gui() -> str | None:
+    """Backend nativo della finestra desktop per piattaforma."""
+    if sys.platform == "win32":
+        return "edgechromium"
+
+    # Linux → GTK/WebKit, macOS → Cocoa (scelta automatica).
+    return None
 
 
 def find_free_port() -> int:
@@ -228,7 +235,7 @@ def main() -> None:
 
         # pywebview carica il server locale in una finestra desktop.
         webview.start(
-            gui="edgechromium",
+            gui=get_webview_gui(),
             debug=False,
         )
 

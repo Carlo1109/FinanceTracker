@@ -1,0 +1,11 @@
+Package: financetracker
+Version: __VERSION__
+Section: utils
+Priority: optional
+Architecture: amd64
+Depends: libc6, libgtk-3-0, gir1.2-gtk-3.0, gir1.2-webkit2-4.1 | gir1.2-webkit2-4.0, libwebkit2gtk-4.1-0 | libwebkit2gtk-4.0-37
+Maintainer: Carlo La Sala <noreply@local>
+Description: Personal finance manager offline
+ FinanceTracker is a desktop app to track personal finances offline.
+ It supports Fineco statement import, categories, dashboards and backups.
+ All data stays on the local machine.

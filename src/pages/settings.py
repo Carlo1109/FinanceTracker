@@ -18,7 +18,7 @@ from src.services.movement_service import (
 )
 
 
-APP_VERSION = "v1.0.0"
+APP_VERSION = "v1.0.1"
 
 CATEGORY_ICONS = [
     "🛒", "🍽️", "🍺", "☕", "🍕", "🍔", "🍟", "🌭", "🥪", "🥗",
