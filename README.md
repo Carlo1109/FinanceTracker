@@ -21,7 +21,6 @@ FinanceTracker è un'app desktop sviluppata in Python per gestire le proprie fin
 - PyWebView
 
 ## 📷 Screenshot
-## 📷 Screenshot
 
 ### Dashboard
 
@@ -43,6 +42,24 @@ FinanceTracker è un'app desktop sviluppata in Python per gestire le proprie fin
 ## 🚀 Download
 
 Scarica l'ultima versione dalla sezione **Releases**.
+
+## 📂 Dove vengono salvati i dati
+
+Tutti i dati restano in locale sul PC. Nella cartella dell'app trovi:
+
+- `finance_tracker.db` — database
+- `categories.json` — categorie e parole chiave
+- `backups/` — backup
+- `logs/` — log dell'applicazione
+
+| Sistema | Percorso |
+|---|---|
+| **Windows** | `%LOCALAPPDATA%\FinanceTracker\` |
+| **Linux** | `~/.local/share/FinanceTracker/` |
+| **macOS** | `~/Library/Application Support/FinanceTracker/` |
+
+Su Windows il percorso completo tipico è:
+`C:\Users\<utente>\AppData\Local\FinanceTracker\`
 
 ## 📄 Licenza
 
