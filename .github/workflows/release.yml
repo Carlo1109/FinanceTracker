@@ -11,80 +11,78 @@ permissions:
 
 jobs:
   build-windows:
-  name: Windows installer
-  runs-on: windows-latest
+    name: Windows installer
+    runs-on: windows-latest
 
-  steps:
-    - uses: actions/checkout@v4
+    steps:
+      - uses: actions/checkout@v4
 
-    - uses: actions/setup-python@v5
-      with:
-        python-version: "3.12"
-        cache: pip
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
 
-    - name: Install Python dependencies
-      shell: pwsh
-      run: |
-        python -m pip install --upgrade pip
-        python -m pip install -r requirements.txt
+      - name: Install Python dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
 
-    - name: Build Windows executable
-      shell: pwsh
-      run: |
-        python -m PyInstaller --clean --noconfirm packaging/FinanceTracker.spec
+      - name: Build Windows executable
+        shell: pwsh
+        run: |
+          python -m PyInstaller --clean --noconfirm packaging/FinanceTracker.spec
 
-        if (-not (Test-Path "dist\FinanceTracker.exe")) {
-          Write-Host "Contenuto della cartella dist:"
-          Get-ChildItem -Recurse dist -ErrorAction SilentlyContinue
-          throw "dist\FinanceTracker.exe non è stato generato"
-        }
+          if (-not (Test-Path "dist\FinanceTracker.exe")) {
+            Write-Host "Contenuto della cartella dist:"
+            Get-ChildItem -Recurse dist -ErrorAction SilentlyContinue
+            throw "dist\FinanceTracker.exe non è stato generato"
+          }
 
-        Get-Item "dist\FinanceTracker.exe"
+          Get-Item "dist\FinanceTracker.exe"
 
-    - name: Install Inno Setup
-      shell: pwsh
-      run: |
-        choco install innosetup --yes --no-progress
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup --yes --no-progress
 
-    - name: Build Windows installer
-      shell: pwsh
-      run: |
-        $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
 
-        if (-not (Test-Path $iscc)) {
-          $iscc = "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
-        }
+          if (-not (Test-Path $iscc)) {
+            $iscc = "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
+          }
 
-        if (-not (Test-Path $iscc)) {
-          throw "ISCC.exe non trovato"
-        }
+          if (-not (Test-Path $iscc)) {
+            throw "ISCC.exe non trovato"
+          }
 
-        & $iscc "packaging\windows\installer.iss"
+          & $iscc "packaging\windows\installer.iss"
 
-        if ($LASTEXITCODE -ne 0) {
-          throw "Compilazione Inno Setup fallita con codice $LASTEXITCODE"
-        }
+          if ($LASTEXITCODE -ne 0) {
+            throw "Compilazione Inno Setup fallita con codice $LASTEXITCODE"
+          }
 
-    - name: Verify Windows installer
-      shell: pwsh
-      run: |
-        $installer = Get-ChildItem "installer_output\*.exe" `
-          -ErrorAction SilentlyContinue
+      - name: Verify Windows installer
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem "installer_output\*.exe" -ErrorAction SilentlyContinue
 
-        if (-not $installer) {
-          Write-Host "Contenuto del repository:"
-          Get-ChildItem -Recurse -Depth 3
-          throw "Installer Windows non generato"
-        }
+          if (-not $installer) {
+            Get-ChildItem -Recurse installer_output -ErrorAction SilentlyContinue
+            throw "Installer Windows non generato"
+          }
 
-        $installer | Format-Table Name, Length, LastWriteTime
+          $installer | Format-Table Name, Length, LastWriteTime
 
-    - name: Upload Windows artifact
-      uses: actions/upload-artifact@v6
-      with:
-        name: windows-installer
-        path: installer_output/*.exe
-        if-no-files-found: error
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-installer
+          path: installer_output/*.exe
+          if-no-files-found: error
 
   build-linux:
     name: Linux .deb
@@ -115,7 +113,7 @@ jobs:
           .venv/bin/python -m pip install --upgrade pip
           .venv/bin/pip install -r requirements.txt
 
-      - name: Make build script executable
+      - name: Make Linux script executable
         run: chmod +x packaging/linux/build_deb.sh
 
       - name: Build .deb
@@ -146,7 +144,7 @@ jobs:
           .venv/bin/python -m pip install --upgrade pip
           .venv/bin/pip install -r requirements.txt
 
-      - name: Make build script executable
+      - name: Make macOS script executable
         run: chmod +x packaging/macos/build_app.sh
 
       - name: Build macOS .app
@@ -165,7 +163,6 @@ jobs:
       - build-windows
       - build-linux
       - build-macos
-
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
 
@@ -176,9 +173,6 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: Show release assets
-        run: find release-assets -maxdepth 2 -type f -print
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -187,9 +181,8 @@ jobs:
           body: |
             ## Download
 
-            - **Windows:** scarica `FinanceTracker_Setup_*.exe`
-            - **Linux:** scarica `financetracker_*.deb` e installa con:
-              `sudo apt install ./financetracker_*.deb`
-            - **macOS:** scarica `FinanceTracker_*_macos_*.zip`, estrai il file e apri `FinanceTracker.app`
+            - **Windows:** `FinanceTracker_Setup_*.exe`
+            - **Linux:** `financetracker_*.deb`
+            - **macOS:** `FinanceTracker_*_macos_*.zip`
 
-            > La versione macOS non è firmata o notarizzata. Al primo avvio potrebbe essere necessario usare click destro → Apri.
+            La versione macOS non è firmata o notarizzata.
