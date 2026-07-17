@@ -1,9 +1,12 @@
-; Build locale Windows — apri questo file con Inno Setup.
-; I path puntano alla root del progetto (due livelli sopra).
+; packaging\windows\installer.iss
+
 #define MyAppName "FinanceTracker"
 #define MyAppVersion "1.0.1"
 #define MyAppPublisher "Carlo La Sala"
 #define MyAppExeName "FinanceTracker.exe"
+
+; __DIR__ = ...\packaging\windows
+#define ProjectRoot AddBackslash(__DIR__) + "..\.."
 
 [Setup]
 AppId={{86EC67C4-9446-4AA9-B2DD-894C37EEA735}
@@ -16,12 +19,11 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 
-SourceDir=.
-OutputDir=installer_output
+SourceDir={#ProjectRoot}
+OutputDir={#ProjectRoot}\installer_output
 OutputBaseFilename=FinanceTracker_Setup_v1.0.1
 
-SetupIconFile=assets\icons\ft_logo.ico
-
+SetupIconFile={#ProjectRoot}\assets\icons\ft_logo.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 Compression=lzma2
