@@ -19,16 +19,17 @@ DEFAULT_CATEGORY_ICONS = {
     "Alimentari": "🛒",
     "Trasporti": "🚆",
     "Auto": "🚗",
+    "Gestione Conti": "💳",
     "Bar & Ristoranti": "🍺",
     "Shopping": "🛍️",
-    "Casa": "🏠",
-    "Utenze": "💡",
+    "Casa & Utenze": "🏠",
     "Salute & Benessere": "❤️",
     "Investimenti": "📈",
     "Stipendio": "💼",
     "Viaggi & Vacanze": "🏖️",
     "Svago & Tempo libero": "🎮",
     "Abbonamenti": "📺",
+    "Regali & Donazioni": "🎁",
     "Altro": "❓",
 }
 
@@ -428,6 +429,9 @@ def categorize(text: str) -> str:
     normalized_text = str(text).upper()
     definitions = load_category_definitions()
 
+    best_category = "Altro"
+    best_keyword_length = -1
+
     for category, data in definitions.items():
         for keyword in data["keywords"]:
             normalized_keyword = str(keyword).strip().upper()
@@ -435,17 +439,19 @@ def categorize(text: str) -> str:
             if not normalized_keyword:
                 continue
 
-            # Le keyword corte devono corrispondere a una parola intera.
+            matched = False
+
             if len(normalized_keyword) <= 3:
                 pattern = rf"(?<!\w){re.escape(normalized_keyword)}(?!\w)"
-
-                if re.search(pattern, normalized_text):
-                    return category
+                matched = re.search(pattern, normalized_text) is not None
             else:
-                if normalized_keyword in normalized_text:
-                    return category
+                matched = normalized_keyword in normalized_text
 
-    return "Altro"
+            if matched and len(normalized_keyword) > best_keyword_length:
+                best_category = category
+                best_keyword_length = len(normalized_keyword)
+
+    return best_category
 
 
 def get_transaction_date(row) -> pd.Timestamp:

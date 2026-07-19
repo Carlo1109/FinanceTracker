@@ -293,105 +293,31 @@ def show_settings() -> None:
             with st.expander(
                 f"{icon} {category} · {len(keywords)} parole chiave"
             ):
-                icon_col, action_col = st.columns([2, 1])
+                st.markdown(f"### {icon} {category}")
 
-                with icon_col:
-                    st.markdown(
-                        f"### {icon} {category}"
-                    )
+                buttons_col_1, buttons_col_2 = st.columns(2)
 
-                    edit_icon_key = "editing_icon_category"
+                edit_icon_key = "editing_icon_category"
 
-                    if st.session_state.get(edit_icon_key) == category:
-                        selected_icon = render_icon_grid(
-                            f"category_icon_{category}",
-                            icon,
-                            columns_count=10,
-                        )
-
-                        st.caption(
-                            f"Anteprima nuova icona: "
-                            f"{selected_icon} {category}"
-                        )
-
-                        save_col, cancel_col = st.columns(2)
-
-                        with save_col:
-                            if st.button(
-                                "💾 Salva icona",
-                                key=f"save_icon_{category}",
-                                use_container_width=True,
-                                type="primary",
-                            ):
-                                updated = update_category_icon(
-                                    category,
-                                    selected_icon,
-                                )
-
-                                st.session_state.pop(
-                                    edit_icon_key,
-                                    None,
-                                )
-                                st.session_state.pop(
-                                    f"category_icon_{category}",
-                                    None,
-                                )
-
-                                if updated:
-                                    st.session_state["icon_feedback"] = (
-                                        "success",
-                                        f'Icona di "{category}" aggiornata '
-                                        f"a {selected_icon}.",
-                                    )
-                                else:
-                                    st.session_state["icon_feedback"] = (
-                                        "warning",
-                                        "Nessuna modifica da salvare.",
-                                    )
-
-                                st.rerun()
-
-                        with cancel_col:
-                            if st.button(
-                                "Annulla",
-                                key=f"cancel_icon_{category}",
-                                use_container_width=True,
-                            ):
-                                st.session_state.pop(
-                                    edit_icon_key,
-                                    None,
-                                )
-                                st.session_state.pop(
-                                    f"category_icon_{category}",
-                                    None,
-                                )
-                                st.rerun()
-                    else:
+                with buttons_col_1:
+                    if st.session_state.get(edit_icon_key) != category:
                         if st.button(
                             "🎨 Cambia icona",
                             key=f"edit_icon_{category}",
                             use_container_width=True,
                         ):
                             st.session_state[edit_icon_key] = category
-                            st.session_state[
-                                f"category_icon_{category}"
-                            ] = icon
+                            st.session_state[f"category_icon_{category}"] = icon
                             st.rerun()
 
-                with action_col:
-                    st.caption("Gestione categoria")
-
+                with buttons_col_2:
                     if category == "Altro":
-                        st.info(
-                            'La categoria "Altro" non può essere eliminata.'
-                        )
+                        st.info('La categoria "Altro" non può essere eliminata.')
                     else:
                         confirm_key = f"confirm_delete_category_{category}"
 
                         if st.session_state.get(confirm_key):
-                            st.warning(
-                                'I movimenti saranno spostati in "Altro".'
-                            )
+                            st.warning('I movimenti saranno spostati in "Altro".')
 
                             yes_col, no_col = st.columns(2)
 
@@ -402,27 +328,19 @@ def show_settings() -> None:
                                     use_container_width=True,
                                     type="primary",
                                 ):
-                                    deleted, reassigned = delete_category(
-                                        category
-                                    )
+                                    deleted, reassigned = delete_category(category)
                                     st.session_state[confirm_key] = False
 
                                     if deleted:
-                                        st.session_state[
-                                            "category_delete_feedback"
-                                        ] = (
+                                        st.session_state["category_delete_feedback"] = (
                                             "success",
                                             f'Categoria "{category}" eliminata. '
-                                            f"{reassigned} movimenti spostati "
-                                            'in "Altro".',
+                                            f"{reassigned} movimenti spostati in 'Altro'.",
                                         )
                                     else:
-                                        st.session_state[
-                                            "category_delete_feedback"
-                                        ] = (
+                                        st.session_state["category_delete_feedback"] = (
                                             "error",
-                                            "Non è stato possibile eliminare "
-                                            "la categoria.",
+                                            "Non è stato possibile eliminare la categoria.",
                                         )
 
                                     st.rerun()
@@ -443,6 +361,65 @@ def show_settings() -> None:
                             ):
                                 st.session_state[confirm_key] = True
                                 st.rerun()
+
+                if st.session_state.get(edit_icon_key) == category:
+                    st.divider()
+
+                    selected_icon = render_icon_grid(
+                        f"category_icon_{category}",
+                        icon,
+                        columns_count=10,
+                    )
+
+                    st.caption(
+                        f"Anteprima nuova icona: {selected_icon} {category}"
+                    )
+
+                    save_col, cancel_col = st.columns(2)
+
+                    with save_col:
+                        if st.button(
+                            "💾 Salva icona",
+                            key=f"save_icon_{category}",
+                            use_container_width=True,
+                            type="primary",
+                        ):
+                            updated = update_category_icon(
+                                category,
+                                selected_icon,
+                            )
+
+                            st.session_state.pop(edit_icon_key, None)
+                            st.session_state.pop(
+                                f"category_icon_{category}",
+                                None,
+                            )
+
+                            if updated:
+                                st.session_state["icon_feedback"] = (
+                                    "success",
+                                    f'Icona di "{category}" aggiornata a {selected_icon}.',
+                                )
+                            else:
+                                st.session_state["icon_feedback"] = (
+                                    "warning",
+                                    "Nessuna modifica da salvare.",
+                                )
+
+                            st.rerun()
+
+                    with cancel_col:
+                        if st.button(
+                            "Annulla",
+                            key=f"cancel_icon_{category}",
+                            use_container_width=True,
+                        ):
+                            st.session_state.pop(edit_icon_key, None)
+                            st.session_state.pop(
+                                f"category_icon_{category}",
+                                None,
+                            )
+                            st.rerun()
 
                 st.markdown("##### Parole chiave")
 

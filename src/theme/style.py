@@ -310,27 +310,6 @@ def apply_theme() -> None:
             background: transparent !important;
         }
 
-        /* =====================================================
-           METRICS
-        ===================================================== */
-
-        [data-testid="stMetric"] {
-            padding: 18px 20px;
-            border-radius: 22px;
-            background: rgba(15, 23, 42, 0.72);
-            border: 1px solid rgba(148, 163, 184, 0.16);
-            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18);
-        }
-
-        [data-testid="stMetricLabel"] {
-            color: #94a3b8;
-            font-weight: 700;
-        }
-
-        [data-testid="stMetricValue"] {
-            color: #f8fafc;
-            font-weight: 900;
-        }
 
         /* =====================================================
            CONTAINERS

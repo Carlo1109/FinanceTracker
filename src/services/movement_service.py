@@ -2,6 +2,7 @@ import hashlib
 import sqlite3
 import uuid
 from datetime import date
+from typing import Any
 
 import pandas as pd
 
@@ -9,20 +10,97 @@ from src.database.db import get_connection
 from src.services.importer import categorize
 
 
+def _clean_text_value(value: Any) -> str:
+    """Converte un valore in testo evitando None, NaN e NaT."""
+    if value is None or pd.isna(value):
+        return ""
+
+    return str(value).strip()
+
+
+def _parse_date_value(value: Any) -> pd.Timestamp:
+    """
+    Converte una data senza confondere giorno e mese.
+
+    Le date del database sono in formato ISO:
+    YYYY-MM-DD oppure YYYY-MM-DD HH:MM:SS.
+
+    Le eventuali date italiane vengono gestite solo come fallback.
+    """
+    if value is None or pd.isna(value):
+        return pd.NaT
+
+    if isinstance(value, pd.Timestamp):
+        return value
+
+    if isinstance(value, (date,)):
+        return pd.Timestamp(value)
+
+    text = str(value).strip()
+
+    if text in {
+        "",
+        "-",
+        "--",
+        "None",
+        "none",
+        "nan",
+        "NaN",
+        "NaT",
+    }:
+        return pd.NaT
+
+    # Prima prova sempre il formato ISO usato nel database.
+    parsed_value = pd.to_datetime(
+        text,
+        format="%Y-%m-%d %H:%M:%S",
+        errors="coerce",
+    )
+
+    if pd.isna(parsed_value):
+        parsed_value = pd.to_datetime(
+            text,
+            format="%Y-%m-%d",
+            errors="coerce",
+        )
+
+    # Solo come fallback prova un'eventuale data italiana.
+    if pd.isna(parsed_value):
+        parsed_value = pd.to_datetime(
+            text,
+            dayfirst=True,
+            errors="coerce",
+        )
+
+    return parsed_value
+
+
+def _serialize_date(value: Any) -> str:
+    """
+    Converte una data in formato ISO per SQLite.
+    """
+    parsed_value = _parse_date_value(value)
+
+    if pd.isna(parsed_value):
+        return ""
+
+    return parsed_value.strftime("%Y-%m-%d %H:%M:%S")
+
+
 def generate_movement_hash(
-    row,
+    row: pd.Series,
     occurrence: int = 1,
     source: str = "Fineco",
 ) -> str:
     raw = "|".join(
         [
-            str(row.get("data", "")),
-            str(row.get("data_operazione", "")),
-            str(row.get("data_valuta", "")),
-            str(row.get("descrizione", "")),
-            str(row.get("descrizione_completa", "")),
-            str(row.get("importo", "")),
-            str(row.get("stato", "")),
+            _serialize_date(row.get("data")),
+            _serialize_date(row.get("data_operazione")),
+            _serialize_date(row.get("data_valuta")),
+            _clean_text_value(row.get("descrizione")),
+            _clean_text_value(row.get("descrizione_completa")),
+            _clean_text_value(row.get("importo")),
+            _clean_text_value(row.get("stato")),
             source,
             str(occurrence),
         ]
@@ -41,15 +119,23 @@ def save_movements(
 
     with get_connection() as conn:
         for _, row in df.iterrows():
+            data = _serialize_date(row.get("data"))
+            data_operazione = _serialize_date(
+                row.get("data_operazione")
+            )
+            data_valuta = _serialize_date(row.get("data_valuta"))
+
             base_key = "|".join(
                 [
-                    str(row.get("data", "")),
-                    str(row.get("data_operazione", "")),
-                    str(row.get("data_valuta", "")),
-                    str(row.get("descrizione", "")),
-                    str(row.get("descrizione_completa", "")),
-                    str(row.get("importo", "")),
-                    str(row.get("stato", "")),
+                    data,
+                    data_operazione,
+                    data_valuta,
+                    _clean_text_value(row.get("descrizione")),
+                    _clean_text_value(
+                        row.get("descrizione_completa")
+                    ),
+                    _clean_text_value(row.get("importo")),
+                    _clean_text_value(row.get("stato")),
                     source,
                 ]
             )
@@ -86,17 +172,26 @@ def save_movements(
                     """,
                     (
                         movement_hash,
-                        str(row.get("data", "")),
-                        str(row.get("data_operazione", "")),
-                        str(row.get("data_valuta", "")),
-                        str(row.get("mese", "")),
-                        str(row.get("descrizione", "")),
-                        str(row.get("descrizione_completa", "")),
-                        str(row.get("categoria", "Altro")),
-                        str(row.get("category_source", "automatic")),
-                        str(row.get("tipo", "")),
+                        data,
+                        data_operazione,
+                        data_valuta,
+                        _clean_text_value(row.get("mese")),
+                        _clean_text_value(row.get("descrizione")),
+                        _clean_text_value(
+                            row.get("descrizione_completa")
+                        ),
+                        _clean_text_value(
+                            row.get("categoria", "Altro")
+                        ) or "Altro",
+                        _clean_text_value(
+                            row.get(
+                                "category_source",
+                                "automatic",
+                            )
+                        ) or "automatic",
+                        _clean_text_value(row.get("tipo")),
                         float(row.get("importo", 0)),
-                        str(row.get("stato", "")),
+                        _clean_text_value(row.get("stato")),
                         source,
                         "Fineco",
                         "",
@@ -140,9 +235,21 @@ def load_movements() -> pd.DataFrame:
     if df.empty:
         return df
 
-    df["data"] = pd.to_datetime(df["data"], errors="coerce")
-    df["data_operazione"] = pd.to_datetime(df["data_operazione"], errors="coerce")
-    df["data_valuta"] = pd.to_datetime(df["data_valuta"], errors="coerce")
+    date_columns = [
+        "data",
+        "data_operazione",
+        "data_valuta",
+    ]
+
+    for column in date_columns:
+        df[column] = df[column].apply(_parse_date_value)
+
+    df = df.sort_values(
+        by=["data", "id"],
+        ascending=[False, False],
+        na_position="last",
+        kind="stable",
+    ).reset_index(drop=True)
 
     return df
 
@@ -156,7 +263,13 @@ def add_manual_movement(
     account: str,
     notes: str = "",
 ) -> None:
-    signed_amount = abs(amount) if movement_type == "Entrata" else -abs(amount)
+    signed_amount = (
+        abs(amount)
+        if movement_type == "Entrata"
+        else -abs(amount)
+    )
+
+    movement_date_string = movement_date.isoformat()
     month = movement_date.strftime("%Y-%m")
     movement_hash = f"manual-{uuid.uuid4()}"
 
@@ -184,9 +297,9 @@ def add_manual_movement(
             """,
             (
                 movement_hash,
-                movement_date.isoformat(),
-                movement_date.isoformat(),
-                movement_date.isoformat(),
+                movement_date_string,
+                movement_date_string,
+                movement_date_string,
                 month,
                 description,
                 description,
@@ -203,7 +316,10 @@ def add_manual_movement(
         conn.commit()
 
 
-def update_movement_category(movement_id: int, category: str) -> None:
+def update_movement_category(
+    movement_id: int,
+    category: str,
+) -> None:
     with get_connection() as conn:
         conn.execute(
             """
@@ -240,7 +356,11 @@ def recalculate_automatic_categories() -> int:
             if row.get("category_source") == "manual":
                 continue
 
-            text = f"{row.get('descrizione', '')} {row.get('descrizione_completa', '')}"
+            text = (
+                f"{row.get('descrizione', '')} "
+                f"{row.get('descrizione_completa', '')}"
+            )
+
             new_category = categorize(text)
 
             if new_category != row.get("categoria"):

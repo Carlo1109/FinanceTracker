@@ -46,6 +46,14 @@
       "MECCANICO"
     ]
   },
+  "Gestione Conti": {
+    "icon": "💳",
+    "keywords": [
+      "BOLLO DOSSIER",
+      "GESTIONE CONTO",
+      "BOLLO DI CONTO CORRENTE"
+    ]
+  },
   "Bar & Ristoranti": {
     "icon": "🍺",
     "keywords": [
@@ -66,21 +74,15 @@
       "H&M",
       "DECATHLON",
       "MEDIAWORLD",
-      "UNIEURO",
-      "AMAZON"
+      "UNIEURO"
     ]
   },
-  "Casa": {
+  "Casa & Utenze": {
     "icon": "🏠",
     "keywords": [
       "AFFITTO",
       "MUTUO",
-      "IKEA"
-    ]
-  },
-  "Utenze": {
-    "icon": "💡",
-    "keywords": [
+      "IKEA",
       "LUCE",
       "GAS",
       "ACQUA",
@@ -100,7 +102,10 @@
       "MEDICO",
       "DENTISTA",
       "OCULISTA",
-      "LABORATORIO ANALISI"
+      "LABORATORIO ANALISI",
+      "PALESTRA",
+      "POLI SAN",
+      "WEBFIT"
     ]
   },
   "Investimenti": {
@@ -135,8 +140,6 @@
     "icon": "🎮",
     "keywords": [
       "BOULDER",
-      "PALESTRA",
-      "WEBFIT",
       "CINEMA",
       "CONCERTO",
       "SPIAGGIA",
@@ -155,6 +158,14 @@
       "AMAZON PRIME",
       "APPLE MUSIC",
       "YOUTUBE PREMIUM"
+    ]
+  },
+  "Regali & Donazioni": {
+    "icon": "🎁",
+    "keywords": [
+      "REGALO",
+      "DONAZIONE",
+      "CROWDFUNDING"
     ]
   },
   "Altro": {

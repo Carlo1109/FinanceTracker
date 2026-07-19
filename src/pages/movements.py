@@ -1,6 +1,15 @@
+import html
+
 import pandas as pd
 import streamlit as st
 
+from src.components.cards import (
+    EXPENSE_COLOR,
+    INCOME_COLOR,
+    INVESTMENT_COLOR,
+    render_html,
+    render_kpi_card,
+)
 from src.services.importer import (
     get_category_icon,
     get_category_names,
@@ -12,11 +21,22 @@ from src.services.movement_service import (
 )
 
 
+INVESTMENT_CATEGORY = "Investimenti"
+
+
 def euro(value: float) -> str:
     return f"{value:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def signed_euro(value: float) -> str:
+    sign = "+" if value >= 0 else ""
+    return f"{sign}{euro(value)}"
+
+
 def clean_description(value: str) -> str:
+    if pd.isna(value):
+        return ""
+
     value = str(value).replace("\n", " ").strip()
     return " ".join(value.split())
 
@@ -25,16 +45,20 @@ def format_date(value) -> str:
     if pd.isna(value):
         return "Data non disponibile"
 
-    if hasattr(value, "strftime"):
-        return value.strftime("%d/%m/%Y")
+    if not isinstance(value, pd.Timestamp):
+        value = pd.to_datetime(
+            value,
+            errors="coerce",
+        )
 
-    return str(value)
+    if pd.isna(value):
+        return "Data non disponibile"
+
+    return value.strftime("%d/%m/%y")
 
 
 def get_categories() -> list[str]:
     return get_category_names()
-
-
 
 
 def show_movements() -> None:
@@ -44,14 +68,19 @@ def show_movements() -> None:
     df = load_movements()
 
     if df.empty:
-        st.info("Non ci sono ancora movimenti. Importa un file o aggiungi un movimento manuale.")
+        st.info(
+            "Non ci sono ancora movimenti. "
+            "Importa un file o aggiungi un movimento manuale."
+        )
         return
 
     categories = get_categories()
     months = sorted(df["mese"].dropna().unique(), reverse=True)
     accounts = sorted(df["account"].dropna().unique().tolist())
 
-    filter_col_1, filter_col_2, filter_col_3, filter_col_4 = st.columns([1.2, 1.4, 1.4, 2.4])
+    filter_col_1, filter_col_2, filter_col_3, filter_col_4 = st.columns(
+        [1.2, 1.4, 1.4, 2.4]
+    )
 
     with filter_col_1:
         selected_month = st.selectbox("Mese", months)
@@ -64,110 +93,200 @@ def show_movements() -> None:
             "Categoria",
             ["Tutte"] + categories,
             format_func=lambda name: (
-                name if name == "Tutte"
+                name
+                if name == "Tutte"
                 else f"{get_category_icon(name)} {name}"
             ),
         )
 
     with filter_col_4:
-        search = st.text_input("Cerca", placeholder="Lidl, PayPal, Trenitalia...")
+        search = st.text_input(
+            "Cerca",
+            placeholder="Lidl, PayPal, Trenitalia...",
+        )
 
     filtered_df = df[df["mese"] == selected_month].copy()
 
     if selected_account != "Tutti":
-        filtered_df = filtered_df[filtered_df["account"] == selected_account]
+        filtered_df = filtered_df[
+            filtered_df["account"] == selected_account
+        ].copy()
 
     if selected_category != "Tutte":
-        filtered_df = filtered_df[filtered_df["categoria"] == selected_category]
+        filtered_df = filtered_df[
+            filtered_df["categoria"] == selected_category
+        ].copy()
 
     if search:
         mask = (
-            filtered_df["descrizione"].fillna("").str.contains(search, case=False, na=False)
-            | filtered_df["descrizione_completa"].fillna("").str.contains(search, case=False, na=False)
-            | filtered_df["categoria"].fillna("").str.contains(search, case=False, na=False)
-            | filtered_df["account"].fillna("").str.contains(search, case=False, na=False)
-            | filtered_df["notes"].fillna("").str.contains(search, case=False, na=False)
-            | filtered_df["importo"].astype(str).str.contains(search, case=False, na=False)
+            filtered_df["descrizione"]
+            .fillna("")
+            .str.contains(search, case=False, na=False)
+            | filtered_df["descrizione_completa"]
+            .fillna("")
+            .str.contains(search, case=False, na=False)
+            | filtered_df["categoria"]
+            .fillna("")
+            .str.contains(search, case=False, na=False)
+            | filtered_df["account"]
+            .fillna("")
+            .str.contains(search, case=False, na=False)
+            | filtered_df["notes"]
+            .fillna("")
+            .str.contains(search, case=False, na=False)
+            | filtered_df["importo"]
+            .astype(str)
+            .str.contains(search, case=False, na=False)
         )
-        filtered_df = filtered_df[mask]
+        filtered_df = filtered_df[mask].copy()
 
-    total_income = filtered_df[filtered_df["importo"] > 0]["importo"].sum()
-    total_expense = abs(filtered_df[filtered_df["importo"] < 0]["importo"].sum())
+    total_income = float(
+        filtered_df.loc[filtered_df["importo"] > 0, "importo"].sum()
+    )
+
+    total_expense = float(
+        abs(
+            filtered_df.loc[
+                (filtered_df["importo"] < 0)
+                & (filtered_df["categoria"] != INVESTMENT_CATEGORY),
+                "importo",
+            ].sum()
+        )
+    )
+
+    total_investments = float(
+        abs(
+            filtered_df.loc[
+                (filtered_df["importo"] < 0)
+                & (filtered_df["categoria"] == INVESTMENT_CATEGORY),
+                "importo",
+            ].sum()
+        )
+    )
+
     balance = total_income - total_expense
+    liquidity = balance - total_investments
 
-    summary_col_1, summary_col_2, summary_col_3, summary_col_4 = st.columns(4)
+    balance_color = INCOME_COLOR if balance >= 0 else EXPENSE_COLOR
+    liquidity_color = INCOME_COLOR if liquidity >= 0 else EXPENSE_COLOR
 
-    with summary_col_1:
-        st.metric("Movimenti", len(filtered_df))
+    c1, c2, c3, c4, c5 = st.columns(5)
 
-    with summary_col_2:
-        st.metric("Entrate", euro(total_income))
+    with c1:
+        render_kpi_card("Entrate", euro(total_income), "💰", INCOME_COLOR)
 
-    with summary_col_3:
-        st.metric("Uscite", euro(total_expense))
+    with c2:
+        render_kpi_card("Uscite", euro(total_expense), "💸", EXPENSE_COLOR)
 
-    with summary_col_4:
-        st.metric("Bilancio", euro(balance))
+    with c3:
+        render_kpi_card("Bilancio", signed_euro(balance), "📊", balance_color)
 
+    with c4:
+        render_kpi_card(
+            "Investimenti",
+            euro(total_investments),
+            "📈",
+            INVESTMENT_COLOR,
+        )
+
+    with c5:
+        render_kpi_card(
+            "Liquidità",
+            signed_euro(liquidity),
+            "💵",
+            liquidity_color,
+        )
+
+    st.caption(f"{len(filtered_df)} movimenti trovati")
     st.divider()
 
     if filtered_df.empty:
         st.warning("Nessun movimento trovato con i filtri selezionati.")
         return
 
-    for _, row in filtered_df.sort_values("data", ascending=False).iterrows():
+    filtered_df = filtered_df.sort_values(
+        by=["data", "id"],
+        ascending=[False, False],
+        na_position="last",
+        kind="stable",
+    )
+
+    for _, row in filtered_df.iterrows():
         amount = float(row["importo"])
-        amount_color = "#22c55e" if amount > 0 else "#ef4444"
-        sign = "+" if amount > 0 else ""
+        category = (
+            str(row["categoria"])
+            if row["categoria"] in categories
+            else "Altro"
+        )
+        is_investment = category == INVESTMENT_CATEGORY
 
-        category = row["categoria"] if row["categoria"] in categories else "Altro"
+        if is_investment:
+            amount_color = INVESTMENT_COLOR
+            displayed_amount = euro(abs(amount))
+        elif amount > 0:
+            amount_color = INCOME_COLOR
+            displayed_amount = f"+{euro(amount)}"
+        else:
+            amount_color = EXPENSE_COLOR
+            displayed_amount = euro(amount)
+
         icon = get_category_icon(category)
-
         date = format_date(row["data"])
-
         description = clean_description(row["descrizione"])
         full_description = clean_description(row["descrizione_completa"])
         title = full_description if full_description else description
+        account = clean_description(row["account"])
 
         with st.container(border=True):
             top_left, top_right = st.columns([4, 1.4])
 
             with top_left:
-                st.markdown(
+                render_html(
                     f"""
-                    <div style="font-size: 18px; font-weight: 850; color: #f8fafc;">
-                        {icon} {title}
+                    <div style="
+                        font-size:18px;
+                        font-weight:850;
+                        color:#f8fafc;
+                    ">
+                        {html.escape(icon)} {html.escape(title)}
                     </div>
-                    <div style="font-size: 13px; color: #94a3b8; margin-top: 8px;">
+                    <div style="
+                        font-size:13px;
+                        color:#94a3b8;
+                        margin-top:8px;
+                        display:flex;
+                        align-items:center;
+                        flex-wrap:wrap;
+                        gap:8px;
+                    ">
                         <span style="
-                            background: rgba(148, 163, 184, 0.16);
-                            color: #e5e7eb;
-                            padding: 4px 10px;
-                            border-radius: 999px;
-                            font-size: 12px;
-                            font-weight: 700;
-                        ">{category}</span>
-                        <span style="margin-left: 8px;">{date}</span>
-                        <span style="margin-left: 8px;">{row["account"]}</span>
+                            background:rgba(148,163,184,0.16);
+                            color:#e5e7eb;
+                            padding:4px 10px;
+                            border-radius:999px;
+                            font-size:12px;
+                            font-weight:700;
+                        ">{html.escape(category)}</span>
+                        <span>{html.escape(date)}</span>
+                        <span>{html.escape(account)}</span>
                     </div>
-                    """,
-                    unsafe_allow_html=True,
+                    """
                 )
 
             with top_right:
-                st.markdown(
+                render_html(
                     f"""
                     <div style="
-                        text-align: right;
-                        font-size: 24px;
-                        font-weight: 950;
-                        color: {amount_color};
-                        padding-top: 4px;
+                        text-align:right;
+                        font-size:24px;
+                        font-weight:950;
+                        color:{amount_color};
+                        padding-top:4px;
+                        white-space:nowrap;
                     ">
-                        {sign}{euro(amount)}
+                        {html.escape(displayed_amount)}
                     </div>
-                    """,
-                    unsafe_allow_html=True,
+                    """
                 )
 
             with st.expander("Dettagli"):
@@ -185,7 +304,10 @@ def show_movements() -> None:
                     )
 
                     if new_category != row["categoria"]:
-                        update_movement_category(int(row["id"]), new_category)
+                        update_movement_category(
+                            int(row["id"]),
+                            new_category,
+                        )
                         st.toast("Categoria aggiornata")
                         st.rerun()
 
@@ -196,27 +318,37 @@ def show_movements() -> None:
 
                 with edit_col_2:
                     st.markdown("<br>", unsafe_allow_html=True)
-
                     confirm_key = f"confirm_delete_{row['id']}"
 
                     if st.session_state.get(confirm_key):
                         st.warning("Eliminare?")
-
                         c_yes, c_no = st.columns(2)
 
                         with c_yes:
-                            if st.button("Sì", key=f"delete_yes_{row['id']}", use_container_width=True):
+                            if st.button(
+                                "Sì",
+                                key=f"delete_yes_{row['id']}",
+                                width="stretch",
+                            ):
                                 delete_movement(int(row["id"]))
                                 st.session_state[confirm_key] = False
                                 st.toast("Movimento eliminato")
                                 st.rerun()
 
                         with c_no:
-                            if st.button("No", key=f"delete_no_{row['id']}", use_container_width=True):
+                            if st.button(
+                                "No",
+                                key=f"delete_no_{row['id']}",
+                                width="stretch",
+                            ):
                                 st.session_state[confirm_key] = False
                                 st.rerun()
                     else:
-                        if st.button("🗑️ Elimina", key=f"delete_{row['id']}", use_container_width=True):
+                        if st.button(
+                            "🗑️ Elimina",
+                            key=f"delete_{row['id']}",
+                            width="stretch",
+                        ):
                             st.session_state[confirm_key] = True
                             st.rerun()
 
@@ -239,6 +371,6 @@ def show_movements() -> None:
                     "notes",
                 ]
             ],
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
