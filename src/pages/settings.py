@@ -1,4 +1,5 @@
 import streamlit as st
+from pathlib import Path
 
 from src.database.db import DB_PATH
 from src.services.backup_service import create_backup, restore_backup
@@ -21,6 +22,7 @@ from src.utils.version import get_app_version
 
 
 APP_VERSION = get_app_version()
+BACKUP_EXTENSIONS = {".zip"}
 
 CATEGORY_ICONS = [
     "🛒", "🍽️", "🍺", "☕", "🍕", "🍔", "🍟", "🌭", "🥪", "🥗",
@@ -521,14 +523,26 @@ def show_settings() -> None:
 
         st.markdown("#### Ripristina backup")
         st.caption(
-            "Sostituisce database e categorie con quelli del file zip."
+            "Sostituisce database e categorie con quelli del file zip. "
+            "Se la cartella sembra vuota, passa a 'Tutti i file' "
+            "nel dialog oppure trascina lo zip qui."
         )
 
         uploaded_backup = st.file_uploader(
             "Seleziona un backup (.zip)",
-            type=["zip"],
+            type=None,
             key="restore_backup_uploader",
+            help=(
+                "Seleziona un backup FinanceTracker (.zip). "
+                "Se non vedi i file, usa 'Tutti i file' o il drag & drop."
+            ),
         )
+
+        if uploaded_backup is not None:
+            suffix = Path(uploaded_backup.name).suffix.lower()
+            if suffix not in BACKUP_EXTENSIONS:
+                st.error("Formato non supportato. Usa un file backup .zip.")
+                uploaded_backup = None
 
         if uploaded_backup is not None:
             if st.button(

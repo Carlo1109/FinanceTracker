@@ -40,6 +40,8 @@ binaries = streamlit_binaries + webview_binaries
 
 hiddenimports = [
     "streamlit.web.cli",
+    "src.components.cards",
+    "src.components.navigation",
     "src.database.db",
     "src.pages.dashboard",
     "src.pages.import_data",
@@ -51,6 +53,7 @@ hiddenimports = [
     "src.services.movement_service",
     "src.theme.style",
     "src.theme.colors",
+    "src.utils",
     "src.utils.formatting",
     "src.utils.version",
 ]
