@@ -1,11 +1,21 @@
-#define MyAppName "FinanceTracker"
-#define MyAppVersion "1.0.1"
-#define MyAppPublisher "Carlo La Sala"
-#define MyAppExeName "FinanceTracker.exe"
-
 #ifndef ProjectRoot
   #define ProjectRoot "..\.."
 #endif
+
+#define VersionFile AddBackslash(ProjectRoot) + "VERSION"
+
+#if !FileExists(VersionFile)
+  #error "File VERSION non trovato nella root del progetto"
+#endif
+
+#define VerHandle FileOpen(VersionFile)
+#define MyAppVersion Trim(FileRead(VerHandle))
+#expr FileClose(VerHandle)
+#define MyAppName "FinanceTracker"
+#define MyAppPublisher "Carlo La Sala"
+#define MyAppExeName "FinanceTracker.exe"
+; VersionInfo* vuole 4 numeri (es. 1.1.0.0)
+#define MyAppVersionInfo MyAppVersion + ".0"
 
 [Setup]
 AppId={{86EC67C4-9446-4AA9-B2DD-894C37EEA735}
@@ -20,7 +30,7 @@ DisableProgramGroupPage=yes
 
 SourceDir={#ProjectRoot}
 OutputDir={#ProjectRoot}\installer_output
-OutputBaseFilename=FinanceTracker_Setup_v1.0.1
+OutputBaseFilename=FinanceTracker_Setup_v{#MyAppVersion}
 
 SetupIconFile={#ProjectRoot}\assets\icons\ft_logo.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
@@ -36,7 +46,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=yes
 RestartApplications=no
 
-VersionInfoVersion=1.0.1.0
+VersionInfoVersion={#MyAppVersionInfo}
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription=FinanceTracker Personal Finance Manager
 VersionInfoProductName={#MyAppName}
