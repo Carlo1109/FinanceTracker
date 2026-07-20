@@ -24,6 +24,7 @@ webview_datas, webview_binaries, webview_hidden = collect_all(
 
 datas = [
     (str(PROJECT_ROOT / "app.py"), "."),
+    (str(PROJECT_ROOT / "VERSION"), "."),
     (str(PROJECT_ROOT / "config" / "categories.json"), "config"),
     (str(PROJECT_ROOT / "assets"), "assets"),
 ]
@@ -49,6 +50,9 @@ hiddenimports = [
     "src.services.importer",
     "src.services.movement_service",
     "src.theme.style",
+    "src.theme.colors",
+    "src.utils.formatting",
+    "src.utils.version",
 ]
 
 hiddenimports += streamlit_hidden

@@ -5,7 +5,7 @@ from src.services.movement_service import save_movements
 
 
 def show_import_data() -> None:
-    st.title("📥 Importa dati")
+    st.title("Importa dati")
     st.caption("Importa movimenti da file esterni. I duplicati vengono ignorati automaticamente.")
 
     with st.container(border=True):
@@ -41,7 +41,7 @@ def show_import_data() -> None:
 
             st.markdown("")
 
-            if st.button("Importa movimenti", use_container_width=True, type="primary"):
+            if st.button("Importa movimenti", width="stretch", type="primary"):
                 if source == "Fineco Excel":
                     with st.spinner("Importazione in corso..."):
                         imported_df = import_fineco_excel(uploaded_file)

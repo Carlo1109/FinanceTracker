@@ -17,20 +17,13 @@ from src.components.cards import (
     render_info_card,
     render_kpi_card,
 )
-from src.services.importer import get_category_icon
+from src.services.importer import get_category_icon, load_category_definitions
 from src.services.movement_service import load_movements
+from src.theme.colors import get_category_colors
+from src.utils.formatting import euro, signed_euro
 
 
 INVESTMENT_CATEGORY = "Investimenti"
-
-
-def euro(value: float) -> str:
-    return f"{value:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
-
-
-def signed_euro(value: float) -> str:
-    sign = "+" if value >= 0 else ""
-    return f"{sign}{euro(value)}"
 
 
 def get_period_df(
@@ -118,21 +111,30 @@ def get_previous_period_bounds(
         )
 
     if period == "Ultimi 3 mesi":
-        # Periodo corrente: oggi e i 3 mesi precedenti come
-        # intervallo continuo di pari durata.
-        current_start = today - pd.DateOffset(months=3)
-        previous_end = current_start - pd.Timedelta(days=1)
-        previous_start = previous_end - pd.DateOffset(months=3)
+        # Allineato a get_period_df: 3 mesi di calendario (incluso quello corrente).
+        current_start_month = (
+            today - pd.DateOffset(months=2)
+        ).to_period("M")
+        previous_end_month = current_start_month - 1
+        previous_start_month = previous_end_month - 2
 
-        return previous_start, previous_end
+        return (
+            previous_start_month.start_time.normalize(),
+            previous_end_month.end_time.normalize(),
+        )
 
     if period == "Ultimi 6 mesi":
-        current_start = today - pd.DateOffset(months=6)
-        previous_end = current_start - pd.Timedelta(days=1)
-        previous_start = previous_end - pd.DateOffset(months=6)
+        # Allineato a get_period_df: 6 mesi di calendario (incluso quello corrente).
+        current_start_month = (
+            today - pd.DateOffset(months=5)
+        ).to_period("M")
+        previous_end_month = current_start_month - 1
+        previous_start_month = previous_end_month - 5
 
-        return previous_start, previous_end
-
+        return (
+            previous_start_month.start_time.normalize(),
+            previous_end_month.end_time.normalize(),
+        )
     if period == "Quest'anno":
         previous_start = pd.Timestamp(
             year=today.year - 1,
@@ -202,12 +204,12 @@ def get_daily_expense_comparison(
     if percentage_change < 0:
         return (
             f"↓ {formatted_percentage}% vs periodo prec.",
-            "#22c55e",
+            "#34d399",
         )
 
     return (
         f"↑ {formatted_percentage}% vs periodo prec.",
-        "#ef4444",
+        "#f87171",
     )
 
 
@@ -320,7 +322,7 @@ def calculate_financial_metrics(df: pd.DataFrame) -> dict[str, float]:
 
 
 def show_dashboard() -> None:
-    st.title("🏠 Dashboard")
+    st.title("Dashboard")
     st.caption("Panoramica generale delle tue finanze.")
 
     df = load_movements()
@@ -402,8 +404,8 @@ def show_dashboard() -> None:
 
 
     previous_bounds = get_previous_period_bounds(
-    period=period,
-    selected_month=selected_month,
+        period=period,
+        selected_month=selected_month,
     )
 
     daily_comparison_text = None
@@ -466,25 +468,23 @@ def show_dashboard() -> None:
     k1, k2, k3, k4 = st.columns(4)
 
     with k1:
-        render_kpi_card("Entrate", euro(entrate), "💰", INCOME_COLOR)
+        render_kpi_card("Entrate", euro(entrate), value_color=INCOME_COLOR)
 
     with k2:
-        render_kpi_card("Uscite", euro(uscite), "💸", EXPENSE_COLOR)
+        render_kpi_card("Uscite", euro(uscite), value_color=EXPENSE_COLOR)
 
     with k3:
         render_kpi_card(
             "Investimenti",
             euro(investimenti),
-            "📈",
-            INVESTMENT_COLOR,
+            value_color=INVESTMENT_COLOR,
         )
 
     with k4:
         render_kpi_card(
             "Liquidità",
             signed_euro(liquidita),
-            "💵",
-            liquidity_color,
+            value_color=liquidity_color,
         )
 
     st.markdown("")
@@ -516,7 +516,10 @@ def show_dashboard() -> None:
     left_col, right_col = st.columns([1.4, 1])
 
     with left_col:
-        st.markdown("### 📊 Dove sono andati i soldi?")
+        st.markdown(
+            '<div class="ft-section-title">Dove sono andati i soldi</div>',
+            unsafe_allow_html=True,
+        )
 
         category_df = (
             expense_df.groupby("categoria", as_index=False)["importo"]
@@ -532,6 +535,11 @@ def show_dashboard() -> None:
                 lambda category: f"{get_category_icon(category)} {category}"
             )
             total_expenses = float(category_df["importo"].sum())
+            category_definitions = load_category_definitions()
+            pie_colors = get_category_colors(
+                category_df["categoria"].astype(str).tolist(),
+                category_definitions,
+            )
 
             fig = go.Figure(
                 data=[
@@ -548,19 +556,19 @@ def show_dashboard() -> None:
                             "%{percent}<extra></extra>"
                         ),
                         marker=dict(
-                            colors=[
-                                "#22c55e",
-                                "#3b82f6",
-                                "#f59e0b",
-                                "#8b5cf6",
-                                "#ef4444",
-                                "#14b8a6",
-                                "#94a3b8",
-                                "#ec4899",
-                            ],
+                            colors=pie_colors,
                             line=dict(
-                                color="rgba(15,23,42,0.95)",
-                                width=3,
+                                color="rgba(7,11,20,0.95)",
+                                width=2,
+                            ),
+                        ),
+                        hoverlabel=dict(
+                            bgcolor="rgba(11,18,32,0.96)",
+                            bordercolor="#60a5fa",
+                            font=dict(
+                                size=13,
+                                color="#eef3ff",
+                                family="Manrope",
                             ),
                         ),
                     )
@@ -584,15 +592,23 @@ def show_dashboard() -> None:
                         ),
                         x=0.5,
                         y=0.5,
-                        font=dict(size=18, color="#f8fafc"),
+                        font=dict(
+                            size=18,
+                            color="#eef3ff",
+                            family="Manrope",
+                        ),
                         showarrow=False,
                     )
                 ],
             )
 
+            st.markdown(
+                '<span class="ft-pie-anchor" aria-hidden="true"></span>',
+                unsafe_allow_html=True,
+            )
             st.plotly_chart(
                 fig,
-                use_container_width=True,
+                width="stretch",
                 config={"displayModeBar": False},
             )
 
@@ -623,7 +639,10 @@ def show_dashboard() -> None:
                 )
 
     with right_col:
-        st.markdown("### 🕒 Ultimi movimenti")
+        st.markdown(
+            '<div class="ft-section-title">Ultimi movimenti</div>',
+            unsafe_allow_html=True,
+        )
 
         latest = filtered_df.sort_values("data", ascending=False).head(6)
 
@@ -656,26 +675,29 @@ def show_dashboard() -> None:
                         display:flex;
                         justify-content:space-between;
                         gap:12px;
+                        align-items:center;
                     ">
                         <div>
                             <div style="
-                                font-size:15px;
-                                font-weight:800;
-                                color:#f8fafc;
+                                font-size:14px;
+                                font-weight:700;
+                                color:#eef3ff;
+                                line-height:1.35;
                             ">
-                                {html.escape(icon)} {html.escape(str(title))}
+                                {html.escape(str(title))}
                             </div>
                             <div style="
                                 font-size:12px;
                                 color:#94a3b8;
                                 margin-top:4px;
                             ">
-                                {html.escape(category)} · {html.escape(date)}
+                                {html.escape(icon)} {html.escape(category)} · {html.escape(date)}
                             </div>
                         </div>
                         <div style="
-                            font-size:16px;
-                            font-weight:900;
+                            font-family:Fraunces,Georgia,serif;
+                            font-size:18px;
+                            font-weight:700;
                             color:{amount_color};
                             white-space:nowrap;
                         ">
@@ -685,17 +707,13 @@ def show_dashboard() -> None:
                     """
                 )
 
-    st.markdown("### 📈 Andamento mensile")
-
-    trend_df = df.copy()
-
-    if selected_account != "Tutti":
-        trend_df = trend_df[
-            trend_df["account"] == selected_account
-        ].copy()
+    st.markdown(
+        '<div class="ft-section-title">Andamento mensile</div>',
+        unsafe_allow_html=True,
+    )
 
     monthly_df = (
-        trend_df.assign(
+        filtered_df.assign(
             entrate=lambda x: x["importo"].where(x["importo"] > 0, 0),
             uscite=lambda x: x["importo"].where(
                 (x["importo"] < 0)
@@ -715,20 +733,13 @@ def show_dashboard() -> None:
         .sort_values("mese")
     )
 
-    monthly_df["bilancio"] = monthly_df["entrate"] - monthly_df["uscite"]
-    monthly_df["liquidita"] = (
-        monthly_df["bilancio"] - monthly_df["investimenti"]
-    )
-
     fig2 = px.line(
         monthly_df,
         x="mese",
         y=[
             "entrate",
             "uscite",
-            "bilancio",
             "investimenti",
-            "liquidita",
         ],
         markers=True,
         color_discrete_map={
@@ -742,26 +753,37 @@ def show_dashboard() -> None:
             "variable": "",
             "entrate": "Entrate",
             "uscite": "Uscite",
-            "bilancio": "Bilancio",
             "investimenti": "Investimenti",
-            "liquidita": "Liquidità",
         },
     )
 
     fig2.update_layout(
-        height=420,
+        height=400,
         margin=dict(l=10, r=20, t=10, b=10),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font_color="#e5e7eb",
+        font=dict(color="#94a3b8", family="Manrope"),
         legend_title_text="",
         xaxis_title="",
-        yaxis_title="€",
+        yaxis_title="",
         hovermode="x unified",
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="left",
+            x=0,
+        ),
+        xaxis=dict(showgrid=False, zeroline=False),
+        yaxis=dict(
+            showgrid=True,
+            gridcolor="rgba(148,163,184,0.12)",
+            zeroline=False,
+        ),
     )
 
     st.plotly_chart(
         fig2,
-        use_container_width=True,
+        width="stretch",
         config={"displayModeBar": False},
     )

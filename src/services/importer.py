@@ -10,10 +10,15 @@ import pandas as pd
 import re
 
 from src.database.db import DATA_DIR, DB_PATH
+from src.theme.colors import ensure_unique_category_colors
+from src.utils.formatting import movement_type_from_amount
 
 
 USER_CATEGORY_CONFIG_PATH = DATA_DIR / "categories.json"
 DEFAULT_CATEGORY_ICON = "❓"
+
+_category_definitions_cache: dict[str, dict[str, Any]] | None = None
+
 
 DEFAULT_CATEGORY_ICONS = {
     "Alimentari": "🛒",
@@ -73,6 +78,40 @@ def ensure_category_config() -> Path:
     return USER_CATEGORY_CONFIG_PATH
 
 
+def invalidate_category_cache() -> None:
+    global _category_definitions_cache
+    _category_definitions_cache = None
+
+
+def _merge_new_bundled_categories(
+    definitions: dict[str, dict[str, Any]],
+) -> tuple[dict[str, dict[str, Any]], bool]:
+    """
+    Aggiunge categorie presenti nel JSON di default ma assenti
+    nella copia utente, senza sovrascrivere quelle già personalizzate.
+    """
+    bundled_path = get_bundled_category_config_path()
+
+    if not bundled_path.exists():
+        return definitions, False
+
+    try:
+        with bundled_path.open("r", encoding="utf-8") as file:
+            bundled_raw = json.load(file)
+    except (json.JSONDecodeError, OSError):
+        return definitions, False
+
+    bundled_definitions, _ = _normalize_category_definitions(bundled_raw)
+    changed = False
+
+    for category_name, category_data in bundled_definitions.items():
+        if category_name not in definitions:
+            definitions[category_name] = category_data
+            changed = True
+
+    return definitions, changed
+
+
 def _normalize_category_definitions(
     raw_data: Any,
 ) -> tuple[dict[str, dict[str, Any]], bool]:
@@ -107,6 +146,7 @@ def _normalize_category_definitions(
                 category_name,
                 DEFAULT_CATEGORY_ICON,
             )
+            color = None
             changed = True
 
         elif isinstance(raw_value, dict):
@@ -118,6 +158,7 @@ def _normalize_category_definitions(
                     DEFAULT_CATEGORY_ICON,
                 ),
             )
+            color = raw_value.get("color")
 
             if "keywords" not in raw_value or "icon" not in raw_value:
                 changed = True
@@ -127,6 +168,7 @@ def _normalize_category_definitions(
                 category_name,
                 DEFAULT_CATEGORY_ICON,
             )
+            color = None
             changed = True
 
         if not isinstance(keywords, list):
@@ -144,10 +186,15 @@ def _normalize_category_definitions(
             ):
                 normalized_keywords.append(normalized_keyword)
 
-        normalized[category_name] = {
+        category_entry = {
             "icon": str(icon).strip() or DEFAULT_CATEGORY_ICON,
             "keywords": normalized_keywords,
         }
+
+        if color:
+            category_entry["color"] = str(color).strip()
+
+        normalized[category_name] = category_entry
 
     if "Altro" not in normalized:
         normalized["Altro"] = {
@@ -159,13 +206,38 @@ def _normalize_category_definitions(
     return normalized, changed
 
 
+def _copy_category_data(
+    data: dict[str, Any],
+) -> dict[str, Any]:
+    copied = {
+        "icon": data["icon"],
+        "keywords": list(data["keywords"]),
+    }
+
+    if data.get("color"):
+        copied["color"] = str(data["color"])
+
+    return copied
+
+
 def load_category_definitions() -> dict[str, dict[str, Any]]:
     """
-    Carica categorie, icone e keyword.
+    Carica categorie, icone, keyword e colori.
 
     Se trova il vecchio formato JSON, lo migra automaticamente
     senza perdere categorie o parole chiave.
+
+    Aggiunge anche eventuali nuove categorie del default bundled
+    che non sono ancora nella copia utente.
     """
+    global _category_definitions_cache
+
+    if _category_definitions_cache is not None:
+        return {
+            category: _copy_category_data(data)
+            for category, data in _category_definitions_cache.items()
+        }
+
     config_path = ensure_category_config()
 
     try:
@@ -175,19 +247,40 @@ def load_category_definitions() -> dict[str, dict[str, Any]]:
         raw_data = {}
 
     definitions, changed = _normalize_category_definitions(raw_data)
+    definitions, merged = _merge_new_bundled_categories(definitions)
+    definitions, colored = ensure_unique_category_colors(definitions)
 
-    if changed:
-        save_category_definitions(definitions)
+    if changed or merged or colored:
+        try:
+            save_category_definitions(definitions)
+        except OSError:
+            # Se la copia utente non è scrivibile, usa comunque
+            # le categorie unite per questa sessione.
+            _category_definitions_cache = {
+                category: _copy_category_data(data)
+                for category, data in definitions.items()
+            }
+    else:
+        _category_definitions_cache = {
+            category: _copy_category_data(data)
+            for category, data in definitions.items()
+        }
 
-    return definitions
+    return {
+        category: _copy_category_data(data)
+        for category, data in definitions.items()
+    }
 
 
 def save_category_definitions(
     definitions: dict[str, dict[str, Any]],
 ) -> None:
     """Salva il nuovo formato delle categorie."""
+    global _category_definitions_cache
+
     config_path = ensure_category_config()
     normalized, _ = _normalize_category_definitions(definitions)
+    normalized, _ = ensure_unique_category_colors(normalized)
 
     with config_path.open("w", encoding="utf-8") as file:
         json.dump(
@@ -196,6 +289,11 @@ def save_category_definitions(
             indent=2,
             ensure_ascii=False,
         )
+
+    _category_definitions_cache = {
+        category: _copy_category_data(data)
+        for category, data in normalized.items()
+    }
 
 
 def load_category_rules() -> dict[str, list[str]]:
@@ -425,9 +523,14 @@ def delete_category(category: str) -> tuple[bool, int]:
     return True, reassigned_movements
 
 
-def categorize(text: str) -> str:
+def categorize(
+    text: str,
+    definitions: dict[str, dict[str, Any]] | None = None,
+) -> str:
     normalized_text = str(text).upper()
-    definitions = load_category_definitions()
+
+    if definitions is None:
+        definitions = load_category_definitions()
 
     best_category = "Altro"
     best_keyword_length = -1
@@ -510,11 +613,12 @@ def import_fineco_excel(uploaded_file) -> pd.DataFrame:
     df["data"] = df.apply(get_transaction_date, axis=1)
     df["mese"] = df["data"].dt.to_period("M").astype(str)
 
-    df["categoria"] = df["testo"].apply(categorize)
-
-    df["tipo"] = df["importo"].apply(
-        lambda value: "Entrata" if value > 0 else "Uscita"
+    category_definitions = load_category_definitions()
+    df["categoria"] = df["testo"].apply(
+        lambda text: categorize(text, category_definitions)
     )
+
+    df["tipo"] = df["importo"].apply(movement_type_from_amount)
 
     df["category_source"] = "automatic"
 

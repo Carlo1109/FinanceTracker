@@ -19,18 +19,10 @@ from src.services.movement_service import (
     load_movements,
     update_movement_category,
 )
+from src.utils.formatting import euro, signed_euro
 
 
 INVESTMENT_CATEGORY = "Investimenti"
-
-
-def euro(value: float) -> str:
-    return f"{value:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
-
-
-def signed_euro(value: float) -> str:
-    sign = "+" if value >= 0 else ""
-    return f"{sign}{euro(value)}"
 
 
 def clean_description(value: str) -> str:
@@ -62,7 +54,7 @@ def get_categories() -> list[str]:
 
 
 def show_movements() -> None:
-    st.title("💳 Movimenti")
+    st.title("Movimenti")
     st.caption("Cerca, filtra e modifica i movimenti salvati.")
 
     df = load_movements()
@@ -173,28 +165,26 @@ def show_movements() -> None:
     c1, c2, c3, c4, c5 = st.columns(5)
 
     with c1:
-        render_kpi_card("Entrate", euro(total_income), "💰", INCOME_COLOR)
+        render_kpi_card("Entrate", euro(total_income), value_color=INCOME_COLOR)
 
     with c2:
-        render_kpi_card("Uscite", euro(total_expense), "💸", EXPENSE_COLOR)
+        render_kpi_card("Uscite", euro(total_expense), value_color=EXPENSE_COLOR)
 
     with c3:
-        render_kpi_card("Bilancio", signed_euro(balance), "📊", balance_color)
+        render_kpi_card("Bilancio", signed_euro(balance), value_color=balance_color)
 
     with c4:
         render_kpi_card(
             "Investimenti",
             euro(total_investments),
-            "📈",
-            INVESTMENT_COLOR,
+            value_color=INVESTMENT_COLOR,
         )
 
     with c5:
         render_kpi_card(
             "Liquidità",
             signed_euro(liquidity),
-            "💵",
-            liquidity_color,
+            value_color=liquidity_color,
         )
 
     st.caption(f"{len(filtered_df)} movimenti trovati")
@@ -238,37 +228,42 @@ def show_movements() -> None:
         account = clean_description(row["account"])
 
         with st.container(border=True):
-            top_left, top_right = st.columns([4, 1.4])
+            top_left, top_right = st.columns([4.2, 1.2])
 
             with top_left:
                 render_html(
                     f"""
-                    <div style="
-                        font-size:18px;
-                        font-weight:850;
-                        color:#f8fafc;
-                    ">
-                        {html.escape(icon)} {html.escape(title)}
-                    </div>
-                    <div style="
-                        font-size:13px;
-                        color:#94a3b8;
-                        margin-top:8px;
-                        display:flex;
-                        align-items:center;
-                        flex-wrap:wrap;
-                        gap:8px;
-                    ">
-                        <span style="
-                            background:rgba(148,163,184,0.16);
-                            color:#e5e7eb;
-                            padding:4px 10px;
-                            border-radius:999px;
-                            font-size:12px;
-                            font-weight:700;
-                        ">{html.escape(category)}</span>
-                        <span>{html.escape(date)}</span>
-                        <span>{html.escape(account)}</span>
+                    <div class="ft-movement-row" style="border-bottom:none;padding:2px 0;">
+                        <div>
+                            <div style="
+                                font-size:15px;
+                                font-weight:700;
+                                color:#eef3ff;
+                                line-height:1.35;
+                            ">
+                                {html.escape(title)}
+                            </div>
+                            <div style="
+                                margin-top:6px;
+                                font-size:12px;
+                                color:#94a3b8;
+                                display:flex;
+                                align-items:center;
+                                flex-wrap:wrap;
+                                gap:8px;
+                            ">
+                                <span style="
+                                    background:rgba(96,165,250,0.12);
+                                    color:#bfdbfe;
+                                    padding:3px 8px;
+                                    border-radius:8px;
+                                    font-size:11px;
+                                    font-weight:700;
+                                ">{html.escape(icon)} {html.escape(category)}</span>
+                                <span>{html.escape(date)}</span>
+                                <span>{html.escape(account)}</span>
+                            </div>
+                        </div>
                     </div>
                     """
                 )
@@ -278,10 +273,11 @@ def show_movements() -> None:
                     f"""
                     <div style="
                         text-align:right;
-                        font-size:24px;
-                        font-weight:950;
+                        font-family:Fraunces,Georgia,serif;
+                        font-size:22px;
+                        font-weight:700;
                         color:{amount_color};
-                        padding-top:4px;
+                        padding-top:2px;
                         white-space:nowrap;
                     ">
                         {html.escape(displayed_amount)}

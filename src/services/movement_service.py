@@ -84,7 +84,7 @@ def _serialize_date(value: Any) -> str:
     if pd.isna(parsed_value):
         return ""
 
-    return parsed_value.strftime("%Y-%m-%d %H:%M:%S")
+    return parsed_value.strftime("%Y-%m-%d")
 
 
 def generate_movement_hash(

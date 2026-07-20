@@ -9,7 +9,7 @@ def get_categories() -> list[str]:
 
 
 def show_manual_entry() -> None:
-    st.title("➕ Nuovo movimento")
+    st.title("Nuovo movimento")
     st.caption("Aggiungi manualmente una spesa o un'entrata non presente negli import.")
 
     categories = get_categories()
@@ -27,7 +27,7 @@ def show_manual_entry() -> None:
 
         with col1:
             movement_date = st.date_input("Data")
-            amount = st.number_input("Importo", min_value=0.01, step=0.01)
+            amount = st.number_input("Importo (€)", min_value=0.01, step=0.01)
 
         with col2:
             account = st.selectbox("Conto", ["Fineco", "Contanti", "PayPal", "Altro"])
@@ -49,7 +49,7 @@ def show_manual_entry() -> None:
 
         submitted = st.button(
             "Salva movimento",
-            use_container_width=True,
+            width="stretch",
             type="primary",
         )
 

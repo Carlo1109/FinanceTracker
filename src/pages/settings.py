@@ -1,7 +1,7 @@
 import streamlit as st
 
 from src.database.db import DB_PATH
-from src.services.backup_service import create_backup
+from src.services.backup_service import create_backup, restore_backup
 from src.services.importer import (
     USER_CATEGORY_CONFIG_PATH,
     add_category,
@@ -16,9 +16,11 @@ from src.services.movement_service import (
     load_movements,
     recalculate_automatic_categories,
 )
+from src.utils.formatting import euro
+from src.utils.version import get_app_version
 
 
-APP_VERSION = "v1.0.1"
+APP_VERSION = get_app_version()
 
 CATEGORY_ICONS = [
     "🛒", "🍽️", "🍺", "☕", "🍕", "🍔", "🍟", "🌭", "🥪", "🥗",
@@ -57,15 +59,6 @@ def show_feedback(state_key: str) -> None:
         st.warning(feedback_message)
 
 
-def format_euro(value: float) -> str:
-    return (
-        f"{value:,.2f} €"
-        .replace(",", "X")
-        .replace(".", ",")
-        .replace("X", ".")
-    )
-
-
 def set_icon_selection(state_key: str, icon: str) -> None:
     st.session_state[state_key] = icon
 
@@ -96,7 +89,7 @@ def render_icon_grid(
                 st.button(
                     icon,
                     key=f"{state_key}_{row_start + column_index}",
-                    use_container_width=True,
+                    width="stretch",
                     type=(
                         "primary"
                         if icon == selected_icon
@@ -110,7 +103,7 @@ def render_icon_grid(
 
 
 def show_settings() -> None:
-    st.title("⚙️ Impostazioni")
+    st.title("Impostazioni")
     st.caption("Gestisci configurazioni, dati e informazioni dell'app.")
 
     df = load_movements()
@@ -148,7 +141,7 @@ def show_settings() -> None:
                     with col_total:
                         st.metric(
                             "Saldo movimenti",
-                            format_euro(total),
+                            euro(total),
                         )
 
     with tab_categories:
@@ -215,7 +208,7 @@ def show_settings() -> None:
             if st.button(
                 "Crea categoria",
                 key="create_new_category",
-                use_container_width=True,
+                width="stretch",
                 type="primary",
             ):
                 created = add_category(
@@ -262,7 +255,7 @@ def show_settings() -> None:
             if st.button(
                 "Aggiungi parola chiave",
                 key="add_category_keyword",
-                use_container_width=True,
+                width="stretch",
                 type="primary",
             ):
                 added = add_keyword_to_category(
@@ -304,7 +297,7 @@ def show_settings() -> None:
                         if st.button(
                             "🎨 Cambia icona",
                             key=f"edit_icon_{category}",
-                            use_container_width=True,
+                            width="stretch",
                         ):
                             st.session_state[edit_icon_key] = category
                             st.session_state[f"category_icon_{category}"] = icon
@@ -325,7 +318,7 @@ def show_settings() -> None:
                                 if st.button(
                                     "Elimina",
                                     key=f"delete_category_yes_{category}",
-                                    use_container_width=True,
+                                    width="stretch",
                                     type="primary",
                                 ):
                                     deleted, reassigned = delete_category(category)
@@ -349,7 +342,7 @@ def show_settings() -> None:
                                 if st.button(
                                     "Annulla",
                                     key=f"delete_category_no_{category}",
-                                    use_container_width=True,
+                                    width="stretch",
                                 ):
                                     st.session_state[confirm_key] = False
                                     st.rerun()
@@ -357,7 +350,7 @@ def show_settings() -> None:
                             if st.button(
                                 "🗑️ Elimina categoria",
                                 key=f"delete_category_{category}",
-                                use_container_width=True,
+                                width="stretch",
                             ):
                                 st.session_state[confirm_key] = True
                                 st.rerun()
@@ -381,7 +374,7 @@ def show_settings() -> None:
                         if st.button(
                             "💾 Salva icona",
                             key=f"save_icon_{category}",
-                            use_container_width=True,
+                            width="stretch",
                             type="primary",
                         ):
                             updated = update_category_icon(
@@ -412,7 +405,7 @@ def show_settings() -> None:
                         if st.button(
                             "Annulla",
                             key=f"cancel_icon_{category}",
-                            use_container_width=True,
+                            width="stretch",
                         ):
                             st.session_state.pop(edit_icon_key, None)
                             st.session_state.pop(
@@ -440,7 +433,7 @@ def show_settings() -> None:
                                     f"{category}_{keyword}"
                                 ),
                                 help=f'Elimina "{keyword}"',
-                                use_container_width=True,
+                                width="stretch",
                             ):
                                 removed = remove_keyword_from_category(
                                     category,
@@ -468,7 +461,7 @@ def show_settings() -> None:
 
         if st.button(
             "🔄 Aggiorna categorie automatiche",
-            use_container_width=True,
+            width="stretch",
         ):
             updated = recalculate_automatic_categories()
 
@@ -512,7 +505,7 @@ def show_settings() -> None:
 
         if st.button(
             "📦 Crea backup completo",
-            use_container_width=True,
+            width="stretch",
         ):
             backup_path = create_backup()
             st.success("Backup creato correttamente.")
@@ -523,8 +516,33 @@ def show_settings() -> None:
                     data=backup_file,
                     file_name=backup_path.name,
                     mime="application/zip",
-                    use_container_width=True,
+                    width="stretch",
                 )
+
+        st.markdown("#### Ripristina backup")
+        st.caption(
+            "Sostituisce database e categorie con quelli del file zip."
+        )
+
+        uploaded_backup = st.file_uploader(
+            "Seleziona un backup (.zip)",
+            type=["zip"],
+            key="restore_backup_uploader",
+        )
+
+        if uploaded_backup is not None:
+            if st.button(
+                "♻️ Ripristina backup",
+                width="stretch",
+                type="primary",
+            ):
+                success, message = restore_backup(uploaded_backup)
+
+                if success:
+                    st.success(message)
+                    st.rerun()
+                else:
+                    st.error(message)
 
     with tab_info:
         st.markdown("## 💰 FinanceTracker")

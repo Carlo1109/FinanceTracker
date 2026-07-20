@@ -3,18 +3,18 @@ import html
 import streamlit as st
 
 
-INCOME_COLOR = "#22c55e"
-EXPENSE_COLOR = "#ff4d4f"
-INVESTMENT_COLOR = "#60a5fa"
+INCOME_COLOR = "#34d399"
+EXPENSE_COLOR = "#f87171"
+INVESTMENT_COLOR = "#fbbf24"
 LIQUIDITY_COLOR = "#34d399"
-BALANCE_COLOR = "#22c55e"
-TEXT_COLOR = "#f8fafc"
+BALANCE_COLOR = "#34d399"
+TEXT_COLOR = "#eef3ff"
 MUTED_COLOR = "#94a3b8"
 
-CARD_RADIUS = "22px"
+CARD_RADIUS = "18px"
 CARD_BORDER = "1px solid rgba(148,163,184,.16)"
-CARD_SHADOW = "0 14px 34px rgba(0,0,0,.40)"
-CARD_BACKGROUND = "rgba(15,23,42,.82)"
+CARD_SHADOW = "0 16px 36px rgba(0,0,0,.28)"
+CARD_BACKGROUND = "rgba(11,18,32,.90)"
 
 
 def compact_html(value: str) -> str:
@@ -39,41 +39,44 @@ def render_hero_card(
     render_html(
         f"""
         <div style="
-            margin-top:20px;
-            min-height:240px;
-            padding:28px 34px;
-            border-radius: {CARD_RADIUS};
+            margin-top:8px;
+            min-height:200px;
+            padding:36px 40px;
+            border-radius:{CARD_RADIUS};
             background:
                 radial-gradient(
-                    circle at top left,
-                    rgba(34,197,94,0.18),
-                    transparent 28%
+                    circle at 18% 0%,
+                    rgba(96,165,250,0.22),
+                    transparent 42%
                 ),
                 {CARD_BACKGROUND};
             border:{CARD_BORDER};
             box-shadow:{CARD_SHADOW};
             display:flex;
             flex-direction:column;
-            align-items:center;
+            align-items:flex-start;
             justify-content:center;
-            text-align:center;
+            text-align:left;
             box-sizing:border-box;
+            animation: ft-fade-up 280ms ease-out;
         ">
             <div style="
-                font-size:14px;
-                color:#94a3b8;
-                font-weight:700;
-                letter-spacing:1px;
+                font-family:Manrope,sans-serif;
+                font-size:13px;
+                color:{MUTED_COLOR};
+                font-weight:650;
+                letter-spacing:0.12em;
                 text-transform:uppercase;
             ">
                 {html.escape(title)}
             </div>
 
             <div style="
-                margin-top:14px;
-                font-size:clamp(42px,4vw,54px);
-                line-height:1.08;
-                font-weight:950;
+                margin-top:10px;
+                font-family:Fraunces,Georgia,serif;
+                font-size:clamp(46px,5vw,64px);
+                line-height:1.02;
+                font-weight:700;
                 color:{main_color};
                 white-space:normal;
                 overflow-wrap:anywhere;
@@ -88,47 +91,54 @@ def render_hero_card(
 def render_kpi_card(
     title: str,
     value: str,
-    icon: str,
+    icon: str = "",
     value_color: str = TEXT_COLOR,
 ) -> None:
+    icon_html = ""
+
+    if icon:
+        icon_html = f"{html.escape(icon)} "
+
     render_html(
         f"""
         <div style="
-            min-height:176px;
-            padding:20px 18px;
+            min-height:132px;
+            padding:18px 18px;
             border-radius:{CARD_RADIUS};
             background:{CARD_BACKGROUND};
             border:{CARD_BORDER};
             box-shadow:{CARD_SHADOW};
-
             display:flex;
             flex-direction:column;
             justify-content:center;
-            align-items:center;
-            text-align:center;
+            align-items:flex-start;
+            text-align:left;
             box-sizing:border-box;
+            animation: ft-fade-up 300ms ease-out;
         ">
             <div style="
-                font-size:14px;
-                color:#94a3b8;
-                font-weight:700;
-                letter-spacing:0.8px;
+                font-family:Manrope,sans-serif;
+                font-size:12px;
+                color:{MUTED_COLOR};
+                font-weight:650;
+                letter-spacing:0.08em;
                 text-transform:uppercase;
             ">
-                {icon} {title}
+                {icon_html}{html.escape(title)}
             </div>
 
             <div style="
-                margin-top:12px;
-                font-size:clamp(28px,2vw,36px);
+                margin-top:10px;
+                font-family:Fraunces,Georgia,serif;
+                font-size:clamp(26px,2vw,34px);
                 line-height:1.1;
-                font-weight:950;
+                font-weight:700;
                 color:{value_color};
                 white-space:normal;
                 overflow-wrap:anywhere;
                 word-break:break-word;
             ">
-                {value}
+                {html.escape(value)}
             </div>
         </div>
         """
@@ -140,20 +150,21 @@ def render_info_card(
     value: str,
     secondary_value: str | None = None,
     subtitle: str | None = None,
-    subtitle_color: str = "#94a3b8",
+    subtitle_color: str = MUTED_COLOR,
     footer: str | None = None,
-    value_color: str = "#f8fafc",
+    value_color: str = TEXT_COLOR,
 ) -> None:
     secondary_value_html = ""
 
     if secondary_value:
         secondary_value_html = f"""
             <div style="
-                margin-top:16px;
-                font-size:clamp(26px,2.1vw,36px);
+                margin-top:12px;
+                font-family:Fraunces,Georgia,serif;
+                font-size:clamp(22px,1.8vw,30px);
                 line-height:1.15;
-                font-weight:950;
-                color:#e2e8f0;
+                font-weight:700;
+                color:#dbeafe;
                 overflow-wrap:anywhere;
                 word-break:break-word;
             ">
@@ -166,12 +177,12 @@ def render_info_card(
     if subtitle:
         subtitle_html = f"""
             <div style="
-                margin-top:10px;
+                margin-top:8px;
                 font-size:13px;
-                line-height:1.25;
-                font-weight:750;
+                line-height:1.3;
+                font-weight:650;
                 color:{subtitle_color};
-                text-align:center;
+                text-align:left;
             ">
                 {html.escape(str(subtitle))}
             </div>
@@ -182,12 +193,12 @@ def render_info_card(
     if footer:
         footer_html = f"""
             <div style="
-                margin-top:7px;
+                margin-top:6px;
                 font-size:12px;
                 line-height:1.25;
-                font-weight:600;
+                font-weight:550;
                 color:#64748b;
-                text-align:center;
+                text-align:left;
             ">
                 {html.escape(str(footer))}
             </div>
@@ -196,38 +207,39 @@ def render_info_card(
     render_html(
         f"""
         <div style="
-            min-height:210px;
-            padding:22px 18px;
-            border-radius:22px;
-            background:rgba(15,23,42,0.82);
-            border:1px solid rgba(148,163,184,0.16);
-            box-shadow:0 14px 34px rgba(0,0,0,0.20);
-
+            min-height:168px;
+            padding:20px 18px;
+            border-radius:{CARD_RADIUS};
+            background:{CARD_BACKGROUND};
+            border:{CARD_BORDER};
+            box-shadow:{CARD_SHADOW};
             display:flex;
             flex-direction:column;
             justify-content:center;
-            align-items:center;
-            text-align:center;
-
+            align-items:flex-start;
+            text-align:left;
             box-sizing:border-box;
             overflow:hidden;
+            animation: ft-fade-up 320ms ease-out;
         ">
             <div style="
-                font-size:13px;
+                font-family:Manrope,sans-serif;
+                font-size:12px;
                 line-height:1.2;
-                color:#94a3b8;
-                font-weight:750;
-                letter-spacing:0.7px;
+                color:{MUTED_COLOR};
+                font-weight:650;
+                letter-spacing:0.08em;
                 text-transform:uppercase;
             ">
                 {html.escape(str(title))}
             </div>
 
             <div style="
-                margin-top:16px;
-                font-size:clamp(26px,2.1vw,36px);
+                margin-top:12px;
+                font-family:Fraunces,Georgia,serif;
+                font-size:clamp(22px,1.8vw,30px);
                 line-height:1.15;
-                font-weight:950;
+                font-weight:700;
                 color:{value_color};
                 overflow-wrap:anywhere;
                 word-break:break-word;
