@@ -1,4 +1,5 @@
 import html
+from collections.abc import Callable
 
 import streamlit as st
 
@@ -253,3 +254,182 @@ def render_info_card(
         </div>
         """
     )
+
+
+def _section_label(text: str) -> None:
+    render_html(
+        f"""
+        <div style="
+            font-family:Manrope,sans-serif;
+            font-size:12px;
+            color:{MUTED_COLOR};
+            font-weight:650;
+            letter-spacing:0.1em;
+            text-transform:uppercase;
+            margin-bottom:8px;
+        ">
+            {html.escape(text)}
+        </div>
+        """
+    )
+
+
+def _category_rows_html(rows: list[dict]) -> str:
+    items: list[str] = []
+
+    for index, row in enumerate(rows):
+        percent = max(0.0, min(100.0, float(row.get("percent", 0))))
+        color = html.escape(str(row.get("color") or "#60a5fa"))
+        border = (
+            "border-bottom:1px solid rgba(148,163,184,0.10);"
+            if index < len(rows) - 1
+            else ""
+        )
+        items.append(
+            f"""
+            <div style="padding:12px 0;{border}">
+                <div style="
+                    display:flex;
+                    justify-content:space-between;
+                    align-items:center;
+                    gap:12px;
+                ">
+                    <div style="
+                        display:flex;
+                        align-items:center;
+                        gap:10px;
+                        min-width:0;
+                    ">
+                        <span style="
+                            width:10px;
+                            height:10px;
+                            border-radius:999px;
+                            background:{color};
+                            box-shadow:0 0 0 3px {color}22;
+                            flex-shrink:0;
+                        "></span>
+                        <span style="
+                            font-family:Manrope,sans-serif;
+                            font-size:14px;
+                            font-weight:700;
+                            color:{TEXT_COLOR};
+                            white-space:nowrap;
+                            overflow:hidden;
+                            text-overflow:ellipsis;
+                        ">
+                            {html.escape(str(row.get("icon", "")))}
+                            {html.escape(str(row.get("name", "")))}
+                        </span>
+                    </div>
+                    <div style="text-align:right;flex-shrink:0;">
+                        <div style="
+                            font-family:Fraunces,Georgia,serif;
+                            font-size:16px;
+                            font-weight:700;
+                            color:{TEXT_COLOR};
+                            white-space:nowrap;
+                        ">
+                            {html.escape(str(row.get("amount", "")))}
+                        </div>
+                        <div style="
+                            margin-top:2px;
+                            font-size:12px;
+                            font-weight:600;
+                            color:{MUTED_COLOR};
+                        ">
+                            {percent:.1f}%
+                        </div>
+                    </div>
+                </div>
+                <div style="
+                    margin-top:8px;
+                    height:4px;
+                    border-radius:999px;
+                    background:rgba(148,163,184,0.12);
+                    overflow:hidden;
+                ">
+                    <div style="
+                        width:{percent:.2f}%;
+                        height:100%;
+                        border-radius:999px;
+                        background:linear-gradient(90deg,{color}aa,{color});
+                    "></div>
+                </div>
+            </div>
+            """
+        )
+
+    return "".join(items)
+
+
+def render_expense_distribution_card(
+    rows: list[dict],
+    *,
+    total_label: str,
+    render_pie: Callable[[], None],
+    list_max_height: int = 360,
+) -> None:
+    """
+    Card unica con torta a sinistra e lista scorrevole a destra.
+
+    ``render_pie`` è una callback senza argomenti (es. iframe Plotly).
+    La shell usa ``st.container(border=True)`` + ``.ft-distribution-anchor``.
+    """
+    with st.container(border=True):
+        render_html(
+            '<span class="ft-distribution-anchor" aria-hidden="true"></span>'
+        )
+        left_col, right_col = st.columns([1.15, 1], gap="large")
+
+        with left_col:
+            _section_label("Distribuzione")
+            render_pie()
+
+        with right_col:
+            _section_label("Per categoria")
+            render_html(
+                f"""
+                <div class="ft-category-scroll" style="
+                    max-height:{list_max_height}px;
+                    overflow-y:auto;
+                    overflow-x:hidden;
+                    padding-right:6px;
+                    margin-right:-2px;
+                    overscroll-behavior:contain;
+                ">
+                    {_category_rows_html(rows)}
+                </div>
+                <div style="
+                    margin-top:14px;
+                    padding-top:14px;
+                    border-top:1px solid rgba(148,163,184,0.14);
+                    display:flex;
+                    justify-content:space-between;
+                    align-items:center;
+                    gap:12px;
+                ">
+                    <span style="
+                        font-size:12px;
+                        font-weight:650;
+                        letter-spacing:0.08em;
+                        text-transform:uppercase;
+                        color:{MUTED_COLOR};
+                    ">Totale</span>
+                    <span style="
+                        font-family:Fraunces,Georgia,serif;
+                        font-size:20px;
+                        font-weight:700;
+                        color:{TEXT_COLOR};
+                    ">{html.escape(total_label)}</span>
+                </div>
+                """
+            )
+
+
+def render_chart_card(render_chart: Callable[[], None]) -> None:
+    """Card semplice che avvolge un grafico (callback senza argomenti)."""
+    with st.container(border=True):
+        render_html(
+            '<span class="ft-chart-card-anchor" aria-hidden="true"></span>'
+        )
+        render_chart()

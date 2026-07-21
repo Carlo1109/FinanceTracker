@@ -5,7 +5,7 @@ import tempfile
 import zipfile
 
 from src.database.db import DATA_DIR, DB_PATH
-from src.services.importer import (
+from src.services.categories import (
     USER_CATEGORY_CONFIG_PATH,
     ensure_category_config,
     invalidate_category_cache,

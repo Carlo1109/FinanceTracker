@@ -3,16 +3,8 @@ from pathlib import Path
 
 import streamlit as st
 
-from src.services.importer import import_fineco_excel
+from src.services.imports import get_importer_by_label, list_importers
 from src.services.movement_service import save_movements
-
-
-ALLOWED_EXTENSIONS = {".xlsx", ".xls"}
-
-
-def _is_excel_upload(uploaded_file) -> bool:
-    suffix = Path(uploaded_file.name).suffix.lower()
-    return suffix in ALLOWED_EXTENSIONS
 
 
 def show_import_data() -> None:
@@ -22,32 +14,32 @@ def show_import_data() -> None:
         "I duplicati vengono ignorati automaticamente."
     )
 
+    importers = list_importers()
+    labels = [info.label for info in importers]
+
     with st.container(border=True):
         st.markdown("### Sorgente dati")
 
-        source = st.selectbox(
-            "Origine",
-            ["Fineco Excel"],
-        )
+        source_label = st.selectbox("Origine", labels)
+        importer = get_importer_by_label(source_label)
+        info = importer.info
+        allowed_extensions = {ext.lower() for ext in info.extensions}
 
-        # Senza filtro stretto sull'<input accept>: su WebKit/Linux
-        # il dialog di sistema può mostrare Download vuota.
         uploaded_file = st.file_uploader(
-            "File Excel Fineco",
+            f"File {info.label}",
             type=None,
-            help=(
-                "Seleziona l'export movimenti Fineco (.xlsx o .xls). "
-                "Se la cartella sembra vuota, passa a 'Tutti i file' "
-                "nel dialog oppure trascina il file qui."
-            ),
+            help=info.help_text,
         )
 
-        if uploaded_file and not _is_excel_upload(uploaded_file):
-            st.error(
-                "Formato non supportato. Usa un file Excel Fineco "
-                "(.xlsx o .xls)."
-            )
-            uploaded_file = None
+        if uploaded_file:
+            suffix = Path(uploaded_file.name).suffix.lower()
+            if suffix not in allowed_extensions:
+                expected = ", ".join(sorted(allowed_extensions))
+                st.error(
+                    f"Formato non supportato per {info.label}. "
+                    f"Usa: {expected}"
+                )
+                uploaded_file = None
 
         if uploaded_file:
             st.markdown(
@@ -69,31 +61,36 @@ def show_import_data() -> None:
             st.markdown("")
 
             if st.button("Importa movimenti", width="stretch", type="primary"):
-                if source == "Fineco Excel":
-                    with st.spinner("Importazione in corso..."):
-                        imported_df = import_fineco_excel(uploaded_file)
+                with st.spinner("Importazione in corso..."):
+                    try:
+                        imported_df = importer.parse(uploaded_file)
                         inserted, skipped = save_movements(
                             imported_df,
-                            source="Fineco",
+                            source=info.label,
+                            account=info.account,
                         )
+                    except Exception as error:  # noqa: BLE001
+                        st.error(f"Import fallito: {error}")
+                        return
 
-                    st.success("Import completato")
+                st.success("Import completato")
 
-                    c1, c2 = st.columns(2)
+                c1, c2 = st.columns(2)
 
-                    with c1:
-                        st.metric("Nuovi movimenti", inserted)
+                with c1:
+                    st.metric("Nuovi movimenti", inserted)
 
-                    with c2:
-                        st.metric("Già presenti", skipped)
+                with c2:
+                    st.metric("Già presenti", skipped)
 
-                    if inserted == 0 and skipped > 0:
-                        st.info(
-                            "Il file era già stato importato. "
-                            "Nessun nuovo movimento aggiunto."
-                        )
+                if inserted == 0 and skipped > 0:
+                    st.info(
+                        "Il file era già stato importato. "
+                        "Nessun nuovo movimento aggiunto."
+                    )
         else:
+            expected = ", ".join(sorted(allowed_extensions))
             st.info(
-                "Seleziona un file Excel Fineco (.xlsx / .xls) per iniziare. "
+                f"Seleziona un file {info.label} ({expected}) per iniziare. "
                 "Puoi anche trascinarlo sulla zona di upload."
             )

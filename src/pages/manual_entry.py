@@ -1,6 +1,6 @@
 import streamlit as st
 
-from src.services.importer import get_category_icon, get_category_names
+from src.services.categories import get_category_icon, get_category_names
 from src.services.movement_service import add_manual_movement
 
 
@@ -30,7 +30,10 @@ def show_manual_entry() -> None:
             amount = st.number_input("Importo (€)", min_value=0.01, step=0.01)
 
         with col2:
-            account = st.selectbox("Conto", ["Fineco", "Contanti", "PayPal", "Altro"])
+            account = st.selectbox(
+                "Conto",
+                ["Fineco", "Revolut", "PostePay", "Contanti", "PayPal", "Altro"],
+            )
             category = st.selectbox(
                 "Categoria",
                 categories,

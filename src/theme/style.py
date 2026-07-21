@@ -306,6 +306,51 @@ def apply_theme() -> None:
             letter-spacing: -0.02em;
         }
 
+        /* Card pannello: distribuzione + grafici dashboard */
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-distribution-anchor),
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-chart-card-anchor) {
+            background:
+                radial-gradient(
+                    circle at 12% 0%,
+                    rgba(96, 165, 250, 0.12),
+                    transparent 42%
+                ),
+                var(--ft-panel) !important;
+            border: 1px solid var(--ft-border) !important;
+            border-radius: var(--ft-radius) !important;
+            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.28);
+            padding: 18px 16px 20px 16px !important;
+            margin-bottom: 4px;
+            animation: ft-fade-up 300ms ease-out;
+        }
+
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-distribution-anchor)
+        [data-testid="stHorizontalBlock"]
+        > div[data-testid="stColumn"]:first-child {
+            border-right: 1px solid rgba(148, 163, 184, 0.12);
+            padding-right: 12px;
+        }
+
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-distribution-anchor)
+        [data-testid="stHorizontalBlock"]
+        > div[data-testid="stColumn"]:last-child {
+            padding-left: 8px;
+        }
+
+        .ft-category-scroll {
+            scrollbar-width: thin;
+            scrollbar-color: #243044 transparent;
+        }
+
+        .ft-category-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .ft-category-scroll::-webkit-scrollbar-thumb {
+            background: #243044;
+            border-radius: 8px;
+        }
+
         .ft-movement-row {
             display: flex;
             justify-content: space-between;
@@ -330,23 +375,6 @@ def apply_theme() -> None:
 
         ::-webkit-scrollbar-thumb:hover {
             background: #334155;
-        }
-
-        /* Pie: soft shadow + brighter slice on hover */
-        .element-container:has(.ft-pie-anchor) + .element-container
-        [data-testid="stPlotlyChart"] {
-            filter: drop-shadow(0 16px 28px rgba(0, 0, 0, 0.45));
-        }
-
-        .element-container:has(.ft-pie-anchor) + .element-container
-        .js-plotly-plot .pielayer path {
-            transition: filter 0.15s ease, opacity 0.15s ease;
-        }
-
-        .element-container:has(.ft-pie-anchor) + .element-container
-        .js-plotly-plot .pielayer path:hover {
-            filter: brightness(1.22);
-            opacity: 1 !important;
         }
         </style>
         """,

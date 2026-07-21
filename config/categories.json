@@ -28,6 +28,8 @@
       "ENI",
       "Q8",
       "IP",
+      "TOTAL",
+      "TAMOIL",
       "PETROLOUTLET",
       "AUTOSTRADE",
       "TELEPASS",
@@ -64,7 +66,9 @@
       "BAR",
       "CAFFE",
       "CAFFÈ",
-      "BIRRERIA"
+      "CAFE",
+      "BIRRERIA",
+      "PANIFICIO"
     ]
   },
   "Shopping": {

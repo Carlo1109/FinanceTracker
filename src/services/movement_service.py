@@ -7,7 +7,7 @@ from typing import Any
 import pandas as pd
 
 from src.database.db import get_connection
-from src.services.importer import categorize
+from src.services.categories import categorize
 
 
 def _clean_text_value(value: Any) -> str:
@@ -112,10 +112,12 @@ def generate_movement_hash(
 def save_movements(
     df: pd.DataFrame,
     source: str = "Fineco",
+    account: str | None = None,
 ) -> tuple[int, int]:
     inserted = 0
     skipped = 0
     occurrences: dict[str, int] = {}
+    account_name = account or source
 
     with get_connection() as conn:
         for _, row in df.iterrows():
@@ -193,7 +195,7 @@ def save_movements(
                         float(row.get("importo", 0)),
                         _clean_text_value(row.get("stato")),
                         source,
-                        "Fineco",
+                        account_name,
                         "",
                     ),
                 )

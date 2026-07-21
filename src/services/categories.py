@@ -5,13 +5,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
-
 import re
 
 from src.database.db import DATA_DIR, DB_PATH
 from src.theme.colors import ensure_unique_category_colors
-from src.utils.formatting import movement_type_from_amount
 
 
 USER_CATEGORY_CONFIG_PATH = DATA_DIR / "categories.json"
@@ -555,85 +552,3 @@ def categorize(
                 best_keyword_length = len(normalized_keyword)
 
     return best_category
-
-
-def get_transaction_date(row) -> pd.Timestamp:
-    description = str(row.get("descrizione", "")).upper()
-    full_description = str(
-        row.get("descrizione_completa", "")
-    ).upper()
-
-    text = f"{description} {full_description}"
-
-    is_debit_card = (
-        "VISA DEBIT" in text
-        or "PAGAMENTO VISA" in text
-        or "PAGAMENTO POS" in text
-        or "CARTA DI DEBITO" in text
-    )
-
-    if is_debit_card and pd.notna(row.get("data_valuta")):
-        return row["data_valuta"]
-
-    if pd.notna(row.get("data_operazione")):
-        return row["data_operazione"]
-
-    return row["data_valuta"]
-
-
-def import_fineco_excel(uploaded_file) -> pd.DataFrame:
-    df = pd.read_excel(
-        uploaded_file,
-        sheet_name="Movimenti",
-        header=12,
-    )
-
-    df = df.rename(
-        columns={
-            "Data_Operazione": "data_operazione",
-            "Data_Valuta": "data_valuta",
-            "Entrate": "entrate",
-            "Uscite": "uscite",
-            "Descrizione": "descrizione",
-            "Descrizione_Completa": "descrizione_completa",
-            "Stato": "stato",
-        }
-    )
-
-    df["entrate"] = df["entrate"].fillna(0)
-    df["uscite"] = df["uscite"].fillna(0)
-    df["importo"] = df["entrate"] + df["uscite"]
-
-    df["testo"] = (
-        df["descrizione"].fillna("")
-        + " "
-        + df["descrizione_completa"].fillna("")
-    )
-
-    df["data"] = df.apply(get_transaction_date, axis=1)
-    df["mese"] = df["data"].dt.to_period("M").astype(str)
-
-    category_definitions = load_category_definitions()
-    df["categoria"] = df["testo"].apply(
-        lambda text: categorize(text, category_definitions)
-    )
-
-    df["tipo"] = df["importo"].apply(movement_type_from_amount)
-
-    df["category_source"] = "automatic"
-
-    return df[
-        [
-            "data",
-            "data_operazione",
-            "data_valuta",
-            "mese",
-            "descrizione",
-            "descrizione_completa",
-            "categoria",
-            "category_source",
-            "tipo",
-            "importo",
-            "stato",
-        ]
-    ].sort_values("data", ascending=False)

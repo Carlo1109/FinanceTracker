@@ -1,10 +1,11 @@
-import html
+import calendar
+import json
 
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import plotly.io as pio
 import streamlit as st
-import calendar
 
 from src.components.cards import (
     EXPENSE_COLOR,
@@ -12,18 +13,174 @@ from src.components.cards import (
     INVESTMENT_COLOR,
     LIQUIDITY_COLOR,
     BALANCE_COLOR,
+    render_chart_card,
+    render_expense_distribution_card,
     render_hero_card,
-    render_html,
     render_info_card,
     render_kpi_card,
 )
-from src.services.importer import get_category_icon, load_category_definitions
+from src.services.categories import get_category_icon, load_category_definitions
 from src.services.movement_service import load_movements
 from src.theme.colors import get_category_colors
 from src.utils.formatting import euro, signed_euro
 
 
 INVESTMENT_CATEGORY = "Investimenti"
+
+
+def _mix_rgb(color: str, target: tuple[int, int, int], amount: float) -> str:
+    raw = str(color).strip()
+    if raw.startswith("#"):
+        hex_value = raw[1:]
+        if len(hex_value) == 3:
+            hex_value = "".join(ch * 2 for ch in hex_value)
+        rgb = (
+            int(hex_value[0:2], 16),
+            int(hex_value[2:4], 16),
+            int(hex_value[4:6], 16),
+        )
+    else:
+        parts = [
+            int(part)
+            for part in raw.replace("rgba", "rgb").strip("rgb() ").split(",")[:3]
+        ]
+        rgb = (parts[0], parts[1], parts[2]) if len(parts) == 3 else (128, 128, 128)
+
+    mixed = tuple(
+        max(0, min(255, int(round(channel + (goal - channel) * amount))))
+        for channel, goal in zip(rgb, target)
+    )
+    return "rgb({},{},{})".format(*mixed)
+
+
+def render_category_pie_chart(fig: go.Figure, *, height: int = 420) -> None:
+    """
+    Donut in iframe con hover luminoso.
+
+    In WebKit/pywebview CSS filter:brightness sulle path spesso non si vede:
+    usiamo Plotly.restyle dei colori (+ fill SVG di backup).
+    """
+    trace = fig.data[0] if fig.data else None
+    base_colors = (
+        [str(color) for color in (trace.marker.colors or [])]
+        if trace is not None
+        else []
+    )
+    bright_colors = [
+        _mix_rgb(color, (255, 255, 255), 0.30) for color in base_colors
+    ]
+    dim_colors = [_mix_rgb(color, (7, 11, 20), 0.38) for color in base_colors]
+
+    fig.update_layout(
+        autosize=True,
+        margin=dict(l=4, r=4, t=4, b=4),
+        height=max(height - 20, 300),
+    )
+
+    chart_html = pio.to_html(
+        fig,
+        include_plotlyjs=True,
+        full_html=False,
+        config={"displayModeBar": False, "responsive": True},
+    )
+
+    base_json = json.dumps(base_colors)
+    bright_json = json.dumps(bright_colors)
+    dim_json = json.dumps(dim_colors)
+
+    st.iframe(
+        f"""
+        <style>
+          html, body {{
+            margin: 0;
+            padding: 0;
+            background: transparent !important;
+            overflow: hidden;
+          }}
+        </style>
+        <div id="ft-pie-root" style="
+          width:100%;
+          height:100%;
+          filter: drop-shadow(0 8px 14px rgba(0,0,0,0.22));
+        ">
+          {chart_html}
+        </div>
+        <script>
+        (function () {{
+          const BASE = {base_json};
+          const BRIGHT = {bright_json};
+          const DIM = {dim_json};
+
+          function slicePaths(gd) {{
+            let paths = gd.querySelectorAll('.pielayer g.slice path');
+            if (!paths.length) {{
+              paths = gd.querySelectorAll('.pielayer .trace path');
+            }}
+            return paths;
+          }}
+
+          function colorsFor(active) {{
+            if (active < 0) return BASE;
+            return BASE.map(function (_color, index) {{
+              return index === active ? BRIGHT[index] : DIM[index];
+            }});
+          }}
+
+          function paintFills(gd, active) {{
+            const paths = slicePaths(gd);
+            const colors = colorsFor(active);
+            for (let i = 0; i < paths.length && i < colors.length; i++) {{
+              paths[i].setAttribute('fill', colors[i]);
+            }}
+          }}
+
+          function setActive(gd, active) {{
+            const colors = colorsFor(active);
+            Plotly.restyle(gd, {{ 'marker.colors': [colors] }}, [0]).then(function () {{
+              paintFills(gd, active);
+            }}).catch(function () {{
+              paintFills(gd, active);
+            }});
+          }}
+
+          function bind(gd) {{
+            if (!gd || gd._ftPieHoverBound) return;
+            gd._ftPieHoverBound = true;
+            let last = -1;
+
+            gd.on('plotly_hover', function (ev) {{
+              if (!ev.points || !ev.points.length) return;
+              const index = ev.points[0].pointNumber;
+              if (index === last) return;
+              last = index;
+              setActive(gd, index);
+            }});
+
+            gd.on('plotly_unhover', function () {{
+              last = -1;
+              setActive(gd, -1);
+            }});
+          }}
+
+          function tryBind(left) {{
+            const plots = document.querySelectorAll('#ft-pie-root .js-plotly-plot');
+            const gd = plots[plots.length - 1];
+            if (gd && typeof Plotly !== 'undefined' && gd.data) {{
+              bind(gd);
+              try {{ Plotly.Plots.resize(gd); }} catch (error) {{}}
+              return;
+            }}
+            if (left <= 0) return;
+            setTimeout(function () {{ tryBind(left - 1); }}, 40);
+          }}
+
+          tryBind(50);
+        }})();
+        </script>
+        """,
+        height=height,
+        width="stretch",
+    )
 
 
 def get_period_df(
@@ -513,199 +670,112 @@ def show_dashboard() -> None:
             str(len(filtered_df)),
         )
 
-    left_col, right_col = st.columns([1.4, 1])
+    st.markdown(
+        '<div class="ft-section-title">Dove sono andati i soldi</div>',
+        unsafe_allow_html=True,
+    )
 
-    with left_col:
-        st.markdown(
-            '<div class="ft-section-title">Dove sono andati i soldi</div>',
-            unsafe_allow_html=True,
+    category_df = (
+        expense_df.groupby("categoria", as_index=False)["importo"]
+        .sum()
+        .assign(importo=lambda x: x["importo"].abs())
+        .sort_values("importo", ascending=False)
+    )
+
+    if category_df.empty:
+        st.info("Nessuna uscita da mostrare per questo periodo.")
+    else:
+        category_df["label"] = category_df["categoria"].apply(
+            lambda category: f"{get_category_icon(category)} {category}"
+        )
+        total_expenses = float(category_df["importo"].sum())
+        category_definitions = load_category_definitions()
+        pie_colors = get_category_colors(
+            category_df["categoria"].astype(str).tolist(),
+            category_definitions,
         )
 
-        category_df = (
-            expense_df.groupby("categoria", as_index=False)["importo"]
-            .sum()
-            .assign(importo=lambda x: x["importo"].abs())
-            .sort_values("importo", ascending=False)
-        )
-
-        if category_df.empty:
-            st.info("Nessuna uscita da mostrare per questo periodo.")
-        else:
-            category_df["label"] = category_df["categoria"].apply(
-                lambda category: f"{get_category_icon(category)} {category}"
-            )
-            total_expenses = float(category_df["importo"].sum())
-            category_definitions = load_category_definitions()
-            pie_colors = get_category_colors(
-                category_df["categoria"].astype(str).tolist(),
-                category_definitions,
-            )
-
-            fig = go.Figure(
-                data=[
-                    go.Pie(
-                        labels=category_df["label"],
-                        values=category_df["importo"],
-                        hole=0.68,
-                        sort=False,
-                        direction="clockwise",
-                        textinfo="none",
-                        hovertemplate=(
-                            "<b>%{label}</b><br>"
-                            "%{value:.2f} €<br>"
-                            "%{percent}<extra></extra>"
+        fig = go.Figure(
+            data=[
+                go.Pie(
+                    labels=category_df["label"],
+                    values=category_df["importo"],
+                    hole=0.68,
+                    sort=False,
+                    direction="clockwise",
+                    textinfo="none",
+                    hovertemplate=(
+                        "<b>%{label}</b><br>"
+                        "%{value:.2f} €<br>"
+                        "%{percent}<extra></extra>"
+                    ),
+                    marker=dict(
+                        colors=pie_colors,
+                        line=dict(
+                            color="rgba(7,11,20,0.95)",
+                            width=2,
                         ),
-                        marker=dict(
-                            colors=pie_colors,
-                            line=dict(
-                                color="rgba(7,11,20,0.95)",
-                                width=2,
-                            ),
-                        ),
-                        hoverlabel=dict(
-                            bgcolor="rgba(11,18,32,0.96)",
-                            bordercolor="#60a5fa",
-                            font=dict(
-                                size=13,
-                                color="#eef3ff",
-                                family="Manrope",
-                            ),
-                        ),
-                    )
-                ]
-            )
-
-            fig.update_layout(
-                height=390,
-                margin=dict(l=0, r=0, t=0, b=0),
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                font_color="#e5e7eb",
-                showlegend=False,
-                annotations=[
-                    dict(
-                        text=(
-                            f"<b>{euro(total_expenses)}</b><br>"
-                            "<span style='font-size:12px;color:#94a3b8'>"
-                            "Totale uscite"
-                            "</span>"
-                        ),
-                        x=0.5,
-                        y=0.5,
+                    ),
+                    hoverlabel=dict(
+                        bgcolor="rgba(11,18,32,0.96)",
+                        bordercolor="#60a5fa",
                         font=dict(
-                            size=18,
+                            size=13,
                             color="#eef3ff",
                             family="Manrope",
                         ),
-                        showarrow=False,
-                    )
-                ],
-            )
-
-            st.markdown(
-                '<span class="ft-pie-anchor" aria-hidden="true"></span>',
-                unsafe_allow_html=True,
-            )
-            st.plotly_chart(
-                fig,
-                width="stretch",
-                config={"displayModeBar": False},
-            )
-
-            for _, item in category_df.iterrows():
-                percentage = item["importo"] / total_expenses * 100
-                category = str(item["categoria"])
-                amount = euro(float(item["importo"]))
-
-                render_html(
-                    f"""
-                    <div style="
-                        display:flex;
-                        justify-content:space-between;
-                        align-items:center;
-                        gap:12px;
-                        padding:8px 0;
-                        border-bottom:1px solid rgba(148,163,184,0.10);
-                    ">
-                        <div style="font-weight:700;">
-                            {html.escape(get_category_icon(category))}
-                            {html.escape(category)}
-                        </div>
-                        <div style="color:#94a3b8;white-space:nowrap;">
-                            {html.escape(amount)} · {percentage:.1f}%
-                        </div>
-                    </div>
-                    """
+                    ),
                 )
-
-    with right_col:
-        st.markdown(
-            '<div class="ft-section-title">Ultimi movimenti</div>',
-            unsafe_allow_html=True,
+            ]
         )
 
-        latest = filtered_df.sort_values("data", ascending=False).head(6)
-
-        for _, row in latest.iterrows():
-            amount = float(row["importo"])
-            category = str(row["categoria"])
-            is_investment = category == INVESTMENT_CATEGORY
-
-            if is_investment:
-                amount_color = INVESTMENT_COLOR
-                displayed_amount = euro(abs(amount))
-            else:
-                amount_color = INCOME_COLOR if amount > 0 else EXPENSE_COLOR
-                displayed_amount = (
-                    f"+{euro(amount)}" if amount > 0 else euro(amount)
+        fig.update_layout(
+            height=400,
+            margin=dict(l=0, r=0, t=0, b=0),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font_color="#e5e7eb",
+            showlegend=False,
+            annotations=[
+                dict(
+                    text=(
+                        f"<b>{euro(total_expenses)}</b><br>"
+                        "<span style='font-size:12px;color:#94a3b8'>"
+                        "Totale uscite"
+                        "</span>"
+                    ),
+                    x=0.5,
+                    y=0.5,
+                    font=dict(
+                        size=18,
+                        color="#eef3ff",
+                        family="Manrope",
+                    ),
+                    showarrow=False,
                 )
+            ],
+        )
 
-            icon = get_category_icon(category)
-            title = row["descrizione_completa"] or row["descrizione"]
-            date = (
-                row["data"].strftime("%d/%m/%Y")
-                if pd.notna(row["data"])
-                else ""
+        breakdown_rows = []
+        for _, item in category_df.iterrows():
+            percentage = float(item["importo"]) / total_expenses * 100
+            category = str(item["categoria"])
+            breakdown_rows.append(
+                {
+                    "icon": get_category_icon(category),
+                    "name": category,
+                    "amount": euro(float(item["importo"])),
+                    "percent": percentage,
+                    "color": pie_colors[len(breakdown_rows)],
+                }
             )
 
-            with st.container(border=True):
-                render_html(
-                    f"""
-                    <div style="
-                        display:flex;
-                        justify-content:space-between;
-                        gap:12px;
-                        align-items:center;
-                    ">
-                        <div>
-                            <div style="
-                                font-size:14px;
-                                font-weight:700;
-                                color:#eef3ff;
-                                line-height:1.35;
-                            ">
-                                {html.escape(str(title))}
-                            </div>
-                            <div style="
-                                font-size:12px;
-                                color:#94a3b8;
-                                margin-top:4px;
-                            ">
-                                {html.escape(icon)} {html.escape(category)} · {html.escape(date)}
-                            </div>
-                        </div>
-                        <div style="
-                            font-family:Fraunces,Georgia,serif;
-                            font-size:18px;
-                            font-weight:700;
-                            color:{amount_color};
-                            white-space:nowrap;
-                        ">
-                            {html.escape(displayed_amount)}
-                        </div>
-                    </div>
-                    """
-                )
+        render_expense_distribution_card(
+            breakdown_rows,
+            total_label=euro(total_expenses),
+            render_pie=lambda: render_category_pie_chart(fig, height=420),
+            list_max_height=360,
+        )
 
     st.markdown(
         '<div class="ft-section-title">Andamento mensile</div>',
@@ -782,8 +852,10 @@ def show_dashboard() -> None:
         ),
     )
 
-    st.plotly_chart(
-        fig2,
-        width="stretch",
-        config={"displayModeBar": False},
+    render_chart_card(
+        lambda: st.plotly_chart(
+            fig2,
+            width="stretch",
+            config={"displayModeBar": False},
+        )
     )

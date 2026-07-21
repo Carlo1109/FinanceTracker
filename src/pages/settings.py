@@ -3,7 +3,7 @@ from pathlib import Path
 
 from src.database.db import DB_PATH
 from src.services.backup_service import create_backup, restore_backup
-from src.services.importer import (
+from src.services.categories import (
     USER_CATEGORY_CONFIG_PATH,
     add_category,
     add_keyword_to_category,

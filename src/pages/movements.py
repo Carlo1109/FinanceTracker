@@ -10,7 +10,7 @@ from src.components.cards import (
     render_html,
     render_kpi_card,
 )
-from src.services.importer import (
+from src.services.categories import (
     get_category_icon,
     get_category_names,
 )
