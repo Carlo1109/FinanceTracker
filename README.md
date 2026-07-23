@@ -6,7 +6,7 @@ FinanceTracker è un'app desktop sviluppata in Python per gestire le proprie fin
 
 - 📊 Dashboard con KPI
 - 🥧 Grafico a torta delle spese
-- 💳 Import estratti conto Fineco
+- 💳 Import estratti conto (al momento: Fineco, Revolut, PostePay, PayPal)
 - ✍️ Inserimento movimenti manuali
 - 🏷️ Gestione categorie e parole chiave
 - 💾 Backup del database
