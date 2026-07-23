@@ -4,7 +4,7 @@ from typing import Any
 
 import pandas as pd
 
-from src.services.imports.base import BankImporterInfo
+from src.services.imports.base import BankImporterInfo, read_bank_excel
 from src.services.imports.normalize import finalize_movements
 
 
@@ -22,7 +22,7 @@ class FinecoImporter:
     )
 
     def parse(self, uploaded_file: Any) -> pd.DataFrame:
-        df = pd.read_excel(
+        df = read_bank_excel(
             uploaded_file,
             sheet_name="Movimenti",
             header=12,

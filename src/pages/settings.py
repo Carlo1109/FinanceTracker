@@ -1,6 +1,10 @@
 import streamlit as st
 from pathlib import Path
 
+from src.components.export_dialog import (
+    open_export_confirm_dialog,
+    render_pending_export_dialog,
+)
 from src.database.db import DB_PATH
 from src.services.backup_service import create_backup, restore_backup
 from src.services.categories import (
@@ -14,9 +18,11 @@ from src.services.categories import (
     update_category_icon,
 )
 from src.services.movement_service import (
+    delete_account,
     load_movements,
     recalculate_automatic_categories,
 )
+from src.utils.export_excel import movements_export_filename
 from src.utils.formatting import euro
 from src.utils.version import get_app_version
 
@@ -54,7 +60,7 @@ def show_feedback(state_key: str) -> None:
     feedback_type, feedback_message = st.session_state.pop(state_key)
 
     if feedback_type == "success":
-        st.success(feedback_message)
+        st.toast(feedback_message)
     elif feedback_type == "error":
         st.error(feedback_message)
     else:
@@ -107,6 +113,7 @@ def render_icon_grid(
 def show_settings() -> None:
     st.title("Impostazioni")
     st.caption("Gestisci configurazioni, dati e informazioni dell'app.")
+    render_pending_export_dialog()
 
     df = load_movements()
     categories = load_category_definitions()
@@ -117,6 +124,11 @@ def show_settings() -> None:
 
     with tab_accounts:
         st.markdown("### Conti collegati")
+        st.caption(
+            "Rimuovere un conto cancella definitivamente dal database "
+            "tutti i suoi movimenti. Utile per pulizia o per reimportare."
+        )
+        show_feedback("account_delete_feedback")
 
         if df.empty:
             st.info(
@@ -132,6 +144,7 @@ def show_settings() -> None:
                 account_df = df[df["account"] == account]
                 movements_count = len(account_df)
                 total = account_df["importo"].sum()
+                confirm_key = f"confirm_delete_account_{account}"
 
                 with st.container(border=True):
                     col_info, col_total = st.columns([3, 1])
@@ -145,6 +158,83 @@ def show_settings() -> None:
                             "Saldo movimenti",
                             euro(total),
                         )
+
+                    if st.session_state.get(confirm_key):
+                        st.warning(
+                            f'Stai per eliminare **{movements_count}** movimenti '
+                            f'del conto **{account}**. Operazione irreversibile '
+                            "(salvo un backup)."
+                        )
+                        if st.button(
+                            f"Scarica prima i {movements_count} movimenti (Excel)",
+                            width="stretch",
+                            key=f"export_before_delete_open_{account}",
+                        ):
+                            open_export_confirm_dialog(
+                                account_df,
+                                file_name=movements_export_filename(
+                                    prefix="conto",
+                                    account=account,
+                                ),
+                                context_label=f"Conto {account}",
+                                dialog_key=f"before_delete_{account}",
+                            )
+                            st.rerun()
+                        typed = st.text_input(
+                            f'Digita "{account}" per confermare',
+                            key=f"type_delete_account_{account}",
+                        )
+                        yes_col, no_col = st.columns(2)
+
+                        with yes_col:
+                            if st.button(
+                                "Elimina conto",
+                                key=f"delete_account_yes_{account}",
+                                width="stretch",
+                                type="primary",
+                                disabled=typed.strip() != account,
+                            ):
+                                deleted = delete_account(account)
+                                st.session_state[confirm_key] = False
+                                st.session_state["account_delete_feedback"] = (
+                                    "success",
+                                    f'Conto "{account}" rimosso. '
+                                    f"{deleted} movimenti eliminati.",
+                                )
+                                st.rerun()
+
+                        with no_col:
+                            if st.button(
+                                "Annulla",
+                                key=f"delete_account_no_{account}",
+                                width="stretch",
+                            ):
+                                st.session_state[confirm_key] = False
+                                st.rerun()
+                    else:
+                        if st.button(
+                            "🗑️ Rimuovi conto",
+                            key=f"delete_account_{account}",
+                            width="stretch",
+                        ):
+                            st.session_state[confirm_key] = True
+                            st.rerun()
+
+                        if st.button(
+                            "Esporta Excel",
+                            type="secondary",
+                            key=f"export_account_open_{account}",
+                        ):
+                            open_export_confirm_dialog(
+                                account_df,
+                                file_name=movements_export_filename(
+                                    prefix="conto",
+                                    account=account,
+                                ),
+                                context_label=f"Conto {account}",
+                                dialog_key=f"account_{account}",
+                            )
+                            st.rerun()
 
     with tab_categories:
         st.markdown("### Categorie")
@@ -312,7 +402,13 @@ def show_settings() -> None:
                         confirm_key = f"confirm_delete_category_{category}"
 
                         if st.session_state.get(confirm_key):
-                            st.warning('I movimenti saranno spostati in "Altro".')
+                            category_count = int(
+                                (df["categoria"] == category).sum()
+                            ) if not df.empty else 0
+                            st.warning(
+                                f'**{category_count}** movimenti saranno '
+                                'spostati in "Altro".'
+                            )
 
                             yes_col, no_col = st.columns(2)
 
@@ -510,7 +606,7 @@ def show_settings() -> None:
             width="stretch",
         ):
             backup_path = create_backup()
-            st.success("Backup creato correttamente.")
+            st.toast("Backup creato correttamente.")
 
             with open(backup_path, "rb") as backup_file:
                 st.download_button(
@@ -553,18 +649,23 @@ def show_settings() -> None:
                 success, message = restore_backup(uploaded_backup)
 
                 if success:
-                    st.success(message)
+                    st.toast(message)
                     st.rerun()
                 else:
                     st.error(message)
 
     with tab_info:
-        st.markdown("## 💰 FinanceTracker")
+        st.markdown("### FinanceTracker")
+        st.caption(
+            "App desktop offline: i tuoi dati restano sul computer, "
+            "senza account e senza cloud."
+        )
 
         with st.container(border=True):
             st.markdown(f"**Versione:** {APP_VERSION}")
-            st.markdown("**Database:** SQLite")
-            st.markdown("**Framework:** Streamlit")
+            st.markdown("**Privacy:** elaborazione solo locale")
+            st.markdown("**Connessione:** non richiesta per l’uso quotidiano")
+            st.markdown("**Database:** SQLite sul dispositivo")
             st.markdown("**Sviluppatore:** Carlo La Sala")
 
         st.divider()

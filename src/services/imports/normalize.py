@@ -1,10 +1,22 @@
 from __future__ import annotations
 
+from datetime import date, datetime
+
 import pandas as pd
 
 from src.services.categories import categorize, load_category_definitions
 from src.services.imports.base import OUTPUT_COLUMNS
 from src.utils.formatting import movement_type_from_amount
+
+
+_DATE_FORMATS = (
+    "%d/%m/%Y",
+    "%d/%m/%y",
+    "%Y-%m-%d",
+    "%Y-%m-%d %H:%M:%S",
+    "%d-%m-%Y",
+    "%d.%m.%Y",
+)
 
 
 def get_transaction_date(row: pd.Series) -> pd.Timestamp:
@@ -29,7 +41,67 @@ def get_transaction_date(row: pd.Series) -> pd.Timestamp:
 
 
 def _to_datetime_series(values: pd.Series) -> pd.Series:
-    return pd.to_datetime(values, dayfirst=True, errors="coerce")
+    """
+    Converte date banca in Timestamp senza warning pandas su format inferito.
+    """
+    if values.empty:
+        return pd.Series(dtype="datetime64[ns]")
+
+    if pd.api.types.is_datetime64_any_dtype(values):
+        return pd.to_datetime(values, errors="coerce")
+
+    parsed = pd.Series(pd.NaT, index=values.index, dtype="datetime64[ns]")
+
+    object_mask = values.map(
+        lambda value: isinstance(value, (pd.Timestamp, datetime, date))
+        and pd.notna(value)
+    )
+    if object_mask.any():
+        parsed.loc[object_mask] = pd.to_datetime(
+            values.loc[object_mask],
+            errors="coerce",
+        )
+
+    unresolved = parsed.isna() & values.notna()
+    if not unresolved.any():
+        return parsed
+
+    text = values.loc[unresolved].map(
+        lambda value: str(value).strip() if pd.notna(value) else ""
+    )
+    invalid = {
+        "",
+        "nan",
+        "NaN",
+        "NaT",
+        "None",
+        "nat",
+        "-",
+        "--",
+    }
+    text = text.mask(text.isin(invalid))
+
+    for fmt in _DATE_FORMATS:
+        candidates = text[parsed.loc[text.index].isna() & text.notna()]
+        if candidates.empty:
+            break
+        converted = pd.to_datetime(candidates, format=fmt, errors="coerce")
+        ok = converted.notna()
+        if ok.any():
+            parsed.loc[converted.index[ok]] = converted.loc[ok]
+
+    leftover = text.index[parsed.loc[text.index].isna() & text.notna()]
+    if len(leftover) > 0:
+        converted = pd.to_datetime(
+            text.loc[leftover],
+            format="ISO8601",
+            errors="coerce",
+        )
+        ok = converted.notna()
+        if ok.any():
+            parsed.loc[converted.index[ok]] = converted.loc[ok]
+
+    return parsed
 
 
 def finalize_movements(df: pd.DataFrame) -> pd.DataFrame:

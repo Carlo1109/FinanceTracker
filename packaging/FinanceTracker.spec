@@ -35,12 +35,14 @@ datas += copy_metadata("streamlit")
 datas += copy_metadata("pandas")
 datas += copy_metadata("plotly")
 datas += copy_metadata("pywebview")
+datas += copy_metadata("openpyxl")
 
 binaries = streamlit_binaries + webview_binaries
 
 hiddenimports = [
     "streamlit.web.cli",
     "src.components.cards",
+    "src.components.export_dialog",
     "src.components.navigation",
     "src.database.db",
     "src.pages.dashboard",
@@ -48,6 +50,7 @@ hiddenimports = [
     "src.pages.manual_entry",
     "src.pages.movements",
     "src.pages.settings",
+    "src.services.analytics",
     "src.services.backup_service",
     "src.services.categories",
     "src.services.imports",
@@ -61,8 +64,16 @@ hiddenimports = [
     "src.theme.style",
     "src.theme.colors",
     "src.utils",
+    "src.utils.export_excel",
     "src.utils.formatting",
     "src.utils.version",
+    "openpyxl",
+    "openpyxl.cell",
+    "openpyxl.styles",
+    "openpyxl.drawing.image",
+    "et_xmlfile",
+    "PIL",
+    "PIL.Image",
 ]
 
 hiddenimports += streamlit_hidden

@@ -11,12 +11,26 @@ from src.utils.version import get_app_version
 
 NAVIGATION_OPEN_KEY = "navigation_open"
 
+_PAGES: dict[str, Any] = {}
+
 
 @dataclass(frozen=True)
 class NavItem:
     page: Any
     label: str
     icon: str
+
+
+def register_pages(**pages: Any) -> None:
+    """Registra gli oggetti st.Page per st.switch_page da altri moduli."""
+    _PAGES.update(pages)
+
+
+def switch_to(page_key: str) -> None:
+    page = _PAGES.get(page_key)
+    if page is None:
+        raise KeyError(f"Pagina non registrata: {page_key}")
+    st.switch_page(page)
 
 
 def ensure_navigation_state(*, default_open: bool = True) -> None:

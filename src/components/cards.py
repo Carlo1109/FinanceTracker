@@ -1,5 +1,7 @@
 import html
 from collections.abc import Callable
+from contextlib import contextmanager
+from typing import Any
 
 import streamlit as st
 
@@ -36,7 +38,23 @@ def render_hero_card(
     title: str,
     main_value: str,
     main_color: str,
+    subtitle: str | None = None,
+    subtitle_color: str = MUTED_COLOR,
 ) -> None:
+    subtitle_html = ""
+    if subtitle:
+        subtitle_html = f"""
+            <div style="
+                margin-top:12px;
+                font-family:Manrope,sans-serif;
+                font-size:14px;
+                font-weight:650;
+                color:{subtitle_color};
+            ">
+                {html.escape(subtitle)}
+            </div>
+        """
+
     render_html(
         f"""
         <div style="
@@ -84,6 +102,7 @@ def render_hero_card(
             ">
                 {html.escape(main_value)}
             </div>
+            {subtitle_html}
         </div>
         """
     )
@@ -94,11 +113,27 @@ def render_kpi_card(
     value: str,
     icon: str = "",
     value_color: str = TEXT_COLOR,
+    subtitle: str | None = None,
+    subtitle_color: str = MUTED_COLOR,
 ) -> None:
     icon_html = ""
 
     if icon:
         icon_html = f"{html.escape(icon)} "
+
+    subtitle_html = ""
+    if subtitle:
+        subtitle_html = f"""
+            <div style="
+                margin-top:8px;
+                font-size:12px;
+                line-height:1.3;
+                font-weight:650;
+                color:{subtitle_color};
+            ">
+                {html.escape(subtitle)}
+            </div>
+        """
 
     render_html(
         f"""
@@ -141,6 +176,7 @@ def render_kpi_card(
             ">
                 {html.escape(value)}
             </div>
+            {subtitle_html}
         </div>
         """
     )
@@ -285,6 +321,7 @@ def _category_rows_html(rows: list[dict]) -> str:
             if index < len(rows) - 1
             else ""
         )
+
         items.append(
             f"""
             <div style="padding:12px 0;{border}">
@@ -373,7 +410,6 @@ def render_expense_distribution_card(
     Card unica con torta a sinistra e lista scorrevole a destra.
 
     ``render_pie`` è una callback senza argomenti (es. iframe Plotly).
-    La shell usa ``st.container(border=True)`` + ``.ft-distribution-anchor``.
     """
     with st.container(border=True):
         render_html(
@@ -433,3 +469,24 @@ def render_chart_card(render_chart: Callable[[], None]) -> None:
             '<span class="ft-chart-card-anchor" aria-hidden="true"></span>'
         )
         render_chart()
+
+
+def render_section_title(text: str) -> None:
+    render_html(
+        f'<div class="ft-section-title">{html.escape(text)}</div>'
+    )
+
+
+@contextmanager
+def styled_panel(*, kind: str = "panel") -> Any:
+    """
+    Pannello con lo stesso look delle card Dashboard.
+
+    kind: panel | movement
+    """
+    with st.container(border=True):
+        render_html(
+            f'<span class="ft-{html.escape(kind)}-anchor" '
+            'aria-hidden="true"></span>'
+        )
+        yield

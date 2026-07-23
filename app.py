@@ -2,7 +2,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from src.components.navigation import NavItem, render_app_shell
+from src.components.navigation import NavItem, register_pages, render_app_shell
 from src.database.db import init_db
 from src.pages.dashboard import show_dashboard
 from src.pages.import_data import show_import_data
@@ -73,6 +73,14 @@ NAV_ITEMS = [
     NavItem(import_page, "Importa dati", "📥"),
     NavItem(settings_page, "Impostazioni", "⚙️"),
 ]
+
+register_pages(
+    dashboard=dashboard_page,
+    movements=movements_page,
+    manual_entry=manual_entry_page,
+    import_data=import_page,
+    settings=settings_page,
+)
 
 navigation = st.navigation(
     [item.page for item in NAV_ITEMS],

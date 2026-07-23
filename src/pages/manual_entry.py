@@ -1,5 +1,9 @@
 import streamlit as st
 
+from src.components.cards import (
+    render_section_title,
+    styled_panel,
+)
 from src.services.categories import get_category_icon, get_category_names
 from src.services.movement_service import add_manual_movement
 
@@ -10,13 +14,15 @@ def get_categories() -> list[str]:
 
 def show_manual_entry() -> None:
     st.title("Nuovo movimento")
-    st.caption("Aggiungi manualmente una spesa o un'entrata non presente negli import.")
+    st.caption(
+        "Aggiungi manualmente una spesa o un'entrata "
+        "non presente negli import."
+    )
 
     categories = get_categories()
 
-    with st.container(border=True):
-        st.markdown("### Dettagli movimento")
-
+    render_section_title("Dettagli movimento")
+    with styled_panel():
         movement_type = st.radio(
             "Tipo movimento",
             ["Uscita", "Entrata"],
@@ -71,5 +77,4 @@ def show_manual_entry() -> None:
             notes=notes.strip(),
         )
 
-        st.success("Movimento salvato correttamente.")
-        st.toast("Movimento aggiunto")
+        st.toast("Movimento salvato")

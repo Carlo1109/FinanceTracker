@@ -109,6 +109,126 @@ def generate_movement_hash(
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _existing_movement_hashes() -> set[str]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT movement_hash FROM movements"
+        ).fetchall()
+    return {str(row[0]) for row in rows if row and row[0]}
+
+
+def preview_movements(
+    df: pd.DataFrame,
+    source: str = "Fineco",
+    account: str | None = None,
+) -> dict[str, Any]:
+    """
+    Analizza un file importato senza scrivere sul database.
+
+    Restituisce conteggi nuovi/duplicati, top categorie dei nuovi
+    movimenti e eventuali avvisi.
+    """
+    existing_hashes = _existing_movement_hashes()
+    occurrences: dict[str, int] = {}
+    new_rows: list[dict[str, Any]] = []
+    skipped = 0
+    account_name = account or source
+
+    for _, row in df.iterrows():
+        data = _serialize_date(row.get("data"))
+        data_operazione = _serialize_date(row.get("data_operazione"))
+        data_valuta = _serialize_date(row.get("data_valuta"))
+
+        base_key = "|".join(
+            [
+                data,
+                data_operazione,
+                data_valuta,
+                _clean_text_value(row.get("descrizione")),
+                _clean_text_value(row.get("descrizione_completa")),
+                _clean_text_value(row.get("importo")),
+                _clean_text_value(row.get("stato")),
+                source,
+            ]
+        )
+        occurrences[base_key] = occurrences.get(base_key, 0) + 1
+
+        movement_hash = generate_movement_hash(
+            row,
+            occurrence=occurrences[base_key],
+            source=source,
+        )
+
+        if movement_hash in existing_hashes:
+            skipped += 1
+            continue
+
+        amount = float(row.get("importo", 0) or 0)
+        category = (
+            _clean_text_value(row.get("categoria", "Altro")) or "Altro"
+        )
+        new_rows.append(
+            {
+                "data": data,
+                "importo": amount,
+                "categoria": category,
+                "descrizione": _clean_text_value(row.get("descrizione")),
+                "account": account_name,
+            }
+        )
+
+    new_df = pd.DataFrame(new_rows)
+    top_categories: list[tuple[str, float]] = []
+    total_new_expense = 0.0
+    total_new_income = 0.0
+    warnings: list[str] = []
+
+    if not new_df.empty:
+        total_new_income = float(
+            new_df.loc[new_df["importo"] > 0, "importo"].sum()
+        )
+        expense_mask = new_df["importo"] < 0
+        total_new_expense = float(
+            abs(new_df.loc[expense_mask, "importo"].sum())
+        )
+        if expense_mask.any():
+            ranked = (
+                new_df.loc[expense_mask]
+                .groupby("categoria")["importo"]
+                .sum()
+                .abs()
+                .sort_values(ascending=False)
+                .head(3)
+            )
+            top_categories = [
+                (str(name), float(value))
+                for name, value in ranked.items()
+            ]
+
+        missing_dates = int(new_df["data"].fillna("").eq("").sum())
+        if missing_dates:
+            warnings.append(
+                f"{missing_dates} movimenti senza data valida."
+            )
+
+    if len(new_rows) == 0 and skipped > 0:
+        warnings.append(
+            "Tutti i movimenti di questo file risultano già presenti."
+        )
+
+    return {
+        "new_count": len(new_rows),
+        "skip_count": skipped,
+        "total_count": len(df),
+        "total_new_income": total_new_income,
+        "total_new_expense": total_new_expense,
+        "top_categories": top_categories,
+        "warnings": warnings,
+        "account": account_name,
+        "source": source,
+    }
+
+
 def save_movements(
     df: pd.DataFrame,
     source: str = "Fineco",
@@ -344,6 +464,20 @@ def delete_movement(movement_id: int) -> None:
             (movement_id,),
         )
         conn.commit()
+
+
+def delete_account(account: str) -> int:
+    """Elimina dal DB tutti i movimenti del conto. Restituisce quante righe sono state cancellate."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            DELETE FROM movements
+            WHERE account = ?
+            """,
+            (account,),
+        )
+        conn.commit()
+        return int(cursor.rowcount)
 
 
 def recalculate_automatic_categories() -> int:

@@ -9,6 +9,17 @@ from src.components.cards import (
     INVESTMENT_COLOR,
     render_html,
     render_kpi_card,
+    render_section_title,
+    styled_panel,
+)
+from src.components.export_dialog import (
+    open_export_confirm_dialog,
+    render_pending_export_dialog,
+)
+from src.components.navigation import switch_to
+from src.services.analytics import (
+    INVESTMENT_CATEGORY,
+    calculate_financial_metrics,
 )
 from src.services.categories import (
     get_category_icon,
@@ -19,10 +30,10 @@ from src.services.movement_service import (
     load_movements,
     update_movement_category,
 )
+from src.utils.export_excel import (
+    movements_export_filename,
+)
 from src.utils.formatting import euro, signed_euro
-
-
-INVESTMENT_CATEGORY = "Investimenti"
 
 
 def clean_description(value: str) -> str:
@@ -56,14 +67,56 @@ def get_categories() -> list[str]:
 def show_movements() -> None:
     st.title("Movimenti")
     st.caption("Cerca, filtra e modifica i movimenti salvati.")
+    render_pending_export_dialog()
 
     df = load_movements()
 
     if df.empty:
-        st.info(
-            "Non ci sono ancora movimenti. "
-            "Importa un file o aggiungi un movimento manuale."
+        render_html(
+            """
+            <div class="ft-empty-hero" style="
+                margin-top:12px;
+                padding:36px 26px 30px 26px;
+                border-radius:18px;
+                background:
+                    radial-gradient(
+                        circle at 14% 0%,
+                        rgba(96,165,250,0.18),
+                        transparent 44%
+                    ),
+                    rgba(11,18,32,0.94);
+                border:1px solid rgba(148,163,184,0.16);
+                box-shadow:0 18px 40px rgba(0,0,0,0.30);
+                animation: ft-fade-up 360ms ease-out;
+            ">
+                <div style="
+                    font-family:Fraunces,Georgia,serif;
+                    font-size:clamp(28px, 3.2vw, 38px);
+                    font-weight:700;
+                    color:#eef3ff;
+                    letter-spacing:-0.02em;
+                ">Nessun movimento</div>
+                <div style="
+                    margin-top:12px;
+                    max-width:32rem;
+                    font-size:15px;
+                    line-height:1.5;
+                    color:#94a3b8;
+                ">
+                    Importa un estratto conto oppure aggiungi il primo
+                    movimento manualmente.
+                </div>
+            </div>
+            """
         )
+        st.markdown("")
+        c1, c2, _ = st.columns([1.2, 1.2, 2])
+        with c1:
+            if st.button("Importa dati", type="primary", width="stretch"):
+                switch_to("import_data")
+        with c2:
+            if st.button("Nuovo movimento", type="secondary", width="stretch"):
+                switch_to("manual_entry")
         return
 
     categories = get_categories()
@@ -132,36 +185,17 @@ def show_movements() -> None:
         )
         filtered_df = filtered_df[mask].copy()
 
-    total_income = float(
-        filtered_df.loc[filtered_df["importo"] > 0, "importo"].sum()
-    )
-
-    total_expense = float(
-        abs(
-            filtered_df.loc[
-                (filtered_df["importo"] < 0)
-                & (filtered_df["categoria"] != INVESTMENT_CATEGORY),
-                "importo",
-            ].sum()
-        )
-    )
-
-    total_investments = float(
-        abs(
-            filtered_df.loc[
-                (filtered_df["importo"] < 0)
-                & (filtered_df["categoria"] == INVESTMENT_CATEGORY),
-                "importo",
-            ].sum()
-        )
-    )
-
-    balance = total_income - total_expense
-    liquidity = balance - total_investments
+    metrics = calculate_financial_metrics(filtered_df)
+    total_income = metrics["entrate"]
+    total_expense = metrics["uscite"]
+    total_investments = metrics["investimenti"]
+    balance = metrics["bilancio"]
+    liquidity = metrics["liquidita"]
 
     balance_color = INCOME_COLOR if balance >= 0 else EXPENSE_COLOR
     liquidity_color = INCOME_COLOR if liquidity >= 0 else EXPENSE_COLOR
 
+    render_section_title("Riepilogo")
     c1, c2, c3, c4, c5 = st.columns(5)
 
     with c1:
@@ -188,11 +222,14 @@ def show_movements() -> None:
         )
 
     st.caption(f"{len(filtered_df)} movimenti trovati")
-    st.divider()
 
     if filtered_df.empty:
-        st.warning("Nessun movimento trovato con i filtri selezionati.")
+        st.warning(
+            "Nessun movimento trovato con i filtri selezionati (0 risultati)."
+        )
         return
+
+    render_section_title("Lista")
 
     filtered_df = filtered_df.sort_values(
         by=["data", "id"],
@@ -227,7 +264,7 @@ def show_movements() -> None:
         title = full_description if full_description else description
         account = clean_description(row["account"])
 
-        with st.container(border=True):
+        with styled_panel(kind="movement"):
             top_left, top_right = st.columns([4.2, 1.2])
 
             with top_left:
@@ -317,7 +354,10 @@ def show_movements() -> None:
                     confirm_key = f"confirm_delete_{row['id']}"
 
                     if st.session_state.get(confirm_key):
-                        st.warning("Eliminare?")
+                        st.warning(
+                            "Eliminare questo movimento? "
+                            "L'operazione non si può annullare."
+                        )
                         c_yes, c_no = st.columns(2)
 
                         with c_yes:
@@ -347,6 +387,31 @@ def show_movements() -> None:
                         ):
                             st.session_state[confirm_key] = True
                             st.rerun()
+
+    st.markdown("")
+    export_name = movements_export_filename(
+        month=str(selected_month),
+        account=(
+            selected_account
+            if selected_account != "Tutti"
+            else None
+        ),
+    )
+    context = f"Mese {selected_month}"
+    if selected_account != "Tutti":
+        context += f" · conto {selected_account}"
+    if st.button(
+        "Esporta Excel",
+        type="secondary",
+        key="export_movements_open",
+    ):
+        open_export_confirm_dialog(
+            filtered_df,
+            file_name=export_name,
+            context_label=context,
+            dialog_key="movements",
+        )
+        st.rerun()
 
     with st.expander("Vista avanzata"):
         st.dataframe(

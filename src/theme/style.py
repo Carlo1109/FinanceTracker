@@ -139,6 +139,21 @@ def apply_theme() -> None:
             to { opacity: 1; transform: translateY(0); }
         }
 
+        @keyframes ft-import-pop {
+            0% {
+                opacity: 0;
+                transform: translateY(14px) scale(0.97);
+            }
+            60% {
+                opacity: 1;
+                transform: translateY(-2px) scale(1.01);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
         [data-testid="stColumn"]:has(.ft-navigation-anchor)
         [data-testid="stVerticalBlockBorderWrapper"] {
             min-height: 100%;
@@ -308,7 +323,9 @@ def apply_theme() -> None:
 
         /* Card pannello: distribuzione + grafici dashboard */
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-distribution-anchor),
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-chart-card-anchor) {
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-chart-card-anchor),
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-panel-anchor),
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor) {
             background:
                 radial-gradient(
                     circle at 12% 0%,
@@ -322,6 +339,18 @@ def apply_theme() -> None:
             padding: 18px 16px 20px 16px !important;
             margin-bottom: 4px;
             animation: ft-fade-up 300ms ease-out;
+        }
+
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor) {
+            padding: 14px 14px 12px 14px !important;
+            margin-bottom: 10px;
+            background:
+                radial-gradient(
+                    circle at 8% 0%,
+                    rgba(96, 165, 250, 0.08),
+                    transparent 40%
+                ),
+                var(--ft-panel) !important;
         }
 
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-distribution-anchor)
