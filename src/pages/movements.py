@@ -29,6 +29,8 @@ from src.services.movement_service import (
     delete_movement,
     load_movements,
     update_movement_category,
+    update_movement_notes,
+    update_movement_speciale,
 )
 from src.utils.export_excel import (
     movements_export_filename,
@@ -248,6 +250,8 @@ def show_movements() -> None:
             else "Altro"
         )
         is_investment = category == INVESTMENT_CATEGORY
+        is_special = bool(row.get("speciale", False))
+        special_months = int(row.get("speciale_mesi") or 0)
 
         if is_investment:
             amount_color = INVESTMENT_COLOR
@@ -265,6 +269,22 @@ def show_movements() -> None:
         full_description = clean_description(row["descrizione_completa"])
         title = full_description if full_description else description
         account = clean_description(row["account"])
+        special_chip = ""
+        if is_special:
+            chip_label = "Speciale"
+            if special_months > 0:
+                chip_label = f"Speciale · {special_months} mesi"
+            special_chip = f"""
+                                <span style="
+                                    background:rgba(var(--ft-accent-rgb),0.10);
+                                    color:var(--ft-muted);
+                                    padding:3px 8px;
+                                    border-radius:8px;
+                                    font-size:11px;
+                                    font-weight:700;
+                                    border:1px solid var(--ft-border);
+                                ">{html.escape(chip_label)}</span>
+            """
 
         with styled_panel(kind="movement"):
             top_left, top_right = st.columns([4.2, 1.2])
@@ -299,6 +319,7 @@ def show_movements() -> None:
                                     font-size:11px;
                                     font-weight:750;
                                 ">{html.escape(icon)} {html.escape(category)}</span>
+                                {special_chip}
                                 <span>{html.escape(date)}</span>
                                 <span>{html.escape(account)}</span>
                             </div>
@@ -346,7 +367,75 @@ def show_movements() -> None:
                         st.toast("Categoria aggiornata")
                         st.rerun()
 
-                    if row.get("notes"):
+                    is_expense = float(row["importo"]) < 0 and not is_investment
+                    if is_expense:
+                        marked_special = st.checkbox(
+                            "Spesa speciale",
+                            value=is_special,
+                            key=f"speciale_{row['id']}",
+                        )
+                        spread_months = 0
+                        if marked_special:
+                            spread_months = int(
+                                st.number_input(
+                                    "Ripartisci su mesi",
+                                    min_value=0,
+                                    max_value=60,
+                                    value=special_months,
+                                    step=1,
+                                    key=f"speciale_mesi_{row['id']}",
+                                )
+                            )
+                            if spread_months > 0:
+                                monthly = abs(float(row["importo"])) / spread_months
+                                st.caption(
+                                    f"Nella media giornaliera conta "
+                                    f"{euro(monthly)}/mese per {spread_months} mesi "
+                                    f"(dal mese del pagamento). Resta intera nei totali."
+                                )
+                            else:
+                                st.caption(
+                                    "0 mesi = esclusa del tutto dalla media "
+                                    "giornaliera (resta nei totali)."
+                                )
+
+                            current_notes = str(row.get("notes") or "")
+                            special_note = st.text_area(
+                                "Nota",
+                                value=current_notes,
+                                key=f"speciale_note_{row['id']}",
+                                height=68,
+                            )
+                            if special_note.strip() != current_notes.strip():
+                                update_movement_notes(
+                                    int(row["id"]),
+                                    special_note,
+                                )
+                                st.toast("Nota aggiornata")
+                                st.rerun()
+                        else:
+                            st.caption(
+                                "Segna spese fuori ritmo e, se vuoi, "
+                                "ripartiscile sui mesi."
+                            )
+                            if row.get("notes"):
+                                st.caption(f"Note: {row['notes']}")
+
+                        if (
+                            marked_special != is_special
+                            or (
+                                marked_special
+                                and spread_months != special_months
+                            )
+                        ):
+                            update_movement_speciale(
+                                int(row["id"]),
+                                marked_special,
+                                spread_months,
+                            )
+                            st.toast("Spesa speciale aggiornata")
+                            st.rerun()
+                    elif row.get("notes"):
                         st.caption(f"Note: {row['notes']}")
 
                     st.caption(description)
@@ -431,6 +520,8 @@ def show_movements() -> None:
                     "importo",
                     "source",
                     "account",
+                    "speciale",
+                    "speciale_mesi",
                     "notes",
                 ]
             ],

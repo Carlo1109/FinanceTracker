@@ -288,9 +288,11 @@ def save_movements(
                         status,
                         source,
                         account,
-                        notes
+                        notes,
+                        speciale,
+                        speciale_mesi
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         movement_hash,
@@ -317,6 +319,8 @@ def save_movements(
                         source,
                         account_name,
                         "",
+                        0,
+                        0,
                     ),
                 )
                 inserted += 1
@@ -347,7 +351,9 @@ def load_movements() -> pd.DataFrame:
                 status AS stato,
                 source,
                 account,
-                notes
+                notes,
+                speciale,
+                speciale_mesi
             FROM movements
             ORDER BY date DESC
             """,
@@ -365,6 +371,19 @@ def load_movements() -> pd.DataFrame:
 
     for column in date_columns:
         df[column] = df[column].apply(_parse_date_value)
+
+    df["speciale"] = (
+        pd.to_numeric(df["speciale"], errors="coerce")
+        .fillna(0)
+        .astype(int)
+        .astype(bool)
+    )
+    df["speciale_mesi"] = (
+        pd.to_numeric(df["speciale_mesi"], errors="coerce")
+        .fillna(0)
+        .astype(int)
+        .clip(lower=0)
+    )
 
     df = df.sort_values(
         by=["data", "id"],
@@ -384,6 +403,8 @@ def add_manual_movement(
     movement_type: str,
     account: str,
     notes: str = "",
+    speciale: bool = False,
+    speciale_mesi: int = 0,
 ) -> None:
     signed_amount = (
         abs(amount)
@@ -413,9 +434,11 @@ def add_manual_movement(
                 status,
                 source,
                 account,
-                notes
+                notes,
+                speciale,
+                speciale_mesi
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 movement_hash,
@@ -433,6 +456,8 @@ def add_manual_movement(
                 "Manuale",
                 account,
                 notes,
+                1 if speciale else 0,
+                max(0, int(speciale_mesi)) if speciale else 0,
             ),
         )
         conn.commit()
@@ -450,6 +475,40 @@ def update_movement_category(
             WHERE id = ?
             """,
             (category, movement_id),
+        )
+        conn.commit()
+
+
+def update_movement_speciale(
+    movement_id: int,
+    speciale: bool,
+    speciale_mesi: int = 0,
+) -> None:
+    mesi = max(0, int(speciale_mesi)) if speciale else 0
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE movements
+            SET speciale = ?, speciale_mesi = ?
+            WHERE id = ?
+            """,
+            (1 if speciale else 0, mesi, movement_id),
+        )
+        conn.commit()
+
+
+def update_movement_notes(
+    movement_id: int,
+    notes: str,
+) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE movements
+            SET notes = ?
+            WHERE id = ?
+            """,
+            (notes.strip(), movement_id),
         )
         conn.commit()
 

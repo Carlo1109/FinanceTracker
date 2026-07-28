@@ -18,6 +18,8 @@ EXPORT_COLUMNS = [
     ("descrizione", "Descrizione"),
     ("categoria", "Categoria"),
     ("importo", "Importo"),
+    ("speciale", "Speciale"),
+    ("speciale_mesi", "Mesi ripartizione"),
     ("notes", "Note"),
 ]
 
@@ -39,6 +41,22 @@ def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
             dayfirst=True,
         )
         frame["data"] = frame["data"].dt.strftime("%d/%m/%Y")
+
+    if "speciale" in frame.columns:
+        frame["speciale"] = frame["speciale"].fillna(False).map(
+            lambda value: "Sì" if bool(value) else "No"
+        )
+    else:
+        frame["speciale"] = "No"
+
+    if "speciale_mesi" in frame.columns:
+        frame["speciale_mesi"] = (
+            pd.to_numeric(frame["speciale_mesi"], errors="coerce")
+            .fillna(0)
+            .astype(int)
+        )
+    else:
+        frame["speciale_mesi"] = 0
 
     columns = [
         source

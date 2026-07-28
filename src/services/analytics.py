@@ -256,15 +256,290 @@ def calculate_financial_metrics(df: pd.DataFrame) -> dict[str, float]:
     }
 
 
+def _speciale_mask(df: pd.DataFrame) -> pd.Series:
+    if df.empty or "speciale" not in df.columns:
+        return pd.Series(False, index=df.index)
+    return df["speciale"].fillna(False).astype(bool)
+
+
+def _speciale_mesi_series(df: pd.DataFrame) -> pd.Series:
+    if df.empty or "speciale_mesi" not in df.columns:
+        return pd.Series(0, index=df.index, dtype=int)
+    return (
+        pd.to_numeric(df["speciale_mesi"], errors="coerce")
+        .fillna(0)
+        .astype(int)
+        .clip(lower=0)
+    )
+
+
+def operational_expense_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Uscite operative escluse investimenti e spese speciali."""
+    expenses = expense_frame(df)
+    if expenses.empty:
+        return expenses
+    return expenses.loc[~_speciale_mask(expenses)].copy()
+
+
+def resolve_analysis_bounds(
+    df: pd.DataFrame,
+    period: str,
+    selected_month: str | None = None,
+) -> tuple[pd.Timestamp, pd.Timestamp]:
+    """Limiti calendario usati per ripartire le spese speciali."""
+    bounds = get_current_period_bounds(period, selected_month)
+    if bounds is not None:
+        return bounds
+
+    today = pd.Timestamp.today().normalize()
+    dated = normalize_date_column(df)
+    valid = dated["data"].dropna()
+    if valid.empty:
+        return today, today
+    start = valid.min().normalize()
+    end = max(valid.max().normalize(), today)
+    return start, end
+
+
+def amortized_special_in_period(
+    source_df: pd.DataFrame,
+    period_start: pd.Timestamp,
+    period_end: pd.Timestamp,
+) -> tuple[float, int]:
+    """
+    Quota delle spese speciali ripartite che cade nel periodo.
+
+    Ogni spesa con speciale_mesi = N contribuisce importo/N interi
+    per ciascun mese di ripartizione che interseca il periodo
+    (quota fissa mensile).
+    """
+    period_start = pd.Timestamp(period_start).normalize()
+    period_end = pd.Timestamp(period_end).normalize()
+    if period_end < period_start:
+        return 0.0, 0
+
+    expenses = expense_frame(source_df)
+    if expenses.empty:
+        return 0.0, 0
+
+    special = expenses.loc[_speciale_mask(expenses)].copy()
+    if special.empty:
+        return 0.0, 0
+
+    special["speciale_mesi"] = _speciale_mesi_series(special)
+    special = special.loc[special["speciale_mesi"] > 0]
+    if special.empty:
+        return 0.0, 0
+
+    special = normalize_date_column(special)
+    total = 0.0
+    contributing_ids: set[int] = set()
+
+    for _, row in special.iterrows():
+        expense_date = row.get("data")
+        if pd.isna(expense_date):
+            continue
+        months = int(row["speciale_mesi"])
+        monthly_share = abs(float(row["importo"])) / months
+        start_period = pd.Timestamp(expense_date).to_period("M")
+
+        for offset in range(months):
+            month = start_period + offset
+            month_start = month.start_time.normalize()
+            month_end = month.end_time.normalize()
+            if period_end < month_start or period_start > month_end:
+                continue
+            total += monthly_share
+            row_id = row.get("id")
+            if pd.notna(row_id):
+                contributing_ids.add(int(row_id))
+
+    return float(total), len(contributing_ids)
+
+
+def special_expense_summary(
+    period_df: pd.DataFrame,
+    *,
+    source_df: pd.DataFrame | None = None,
+    period_start: pd.Timestamp | None = None,
+    period_end: pd.Timestamp | None = None,
+) -> dict[str, float | int]:
+    """
+    Riepilogo spese speciali per caption Dashboard.
+
+    - excluded_*: speciali nel periodo con mesi=0 (fuori dalle medie)
+    - amortized_*: quota ripartita che cade nel periodo (anche se il
+      pagamento è fuori dal periodo filtrato)
+    """
+    expenses = expense_frame(period_df)
+    excluded_count = 0
+    excluded_total = 0.0
+    if not expenses.empty:
+        special = expenses.loc[_speciale_mask(expenses)].copy()
+        if not special.empty:
+            special["speciale_mesi"] = _speciale_mesi_series(special)
+            excluded = special.loc[special["speciale_mesi"] <= 0]
+            excluded_count = int(len(excluded))
+            excluded_total = (
+                float(abs(excluded["importo"].sum())) if excluded_count else 0.0
+            )
+
+    amortized_amount = 0.0
+    amortized_count = 0
+    if (
+        source_df is not None
+        and period_start is not None
+        and period_end is not None
+    ):
+        amortized_amount, amortized_count = amortized_special_in_period(
+            source_df,
+            period_start,
+            period_end,
+        )
+
+    return {
+        "excluded_count": excluded_count,
+        "excluded_total": excluded_total,
+        "amortized_count": amortized_count,
+        "amortized_amount": amortized_amount,
+    }
+
+
+def _format_month_period(period: pd.Period) -> str:
+    return f"{_MONTHS_IT[period.month - 1]} {period.year}"
+
+
+def special_expenses_overview(
+    source_df: pd.DataFrame,
+    period_start: pd.Timestamp,
+    period_end: pd.Timestamp,
+) -> pd.DataFrame:
+    """
+    Tabella spese speciali rilevanti per il periodo.
+
+    Include:
+    - speciali con pagamento nel periodo
+    - speciali ripartite la cui finestra mesi interseca il periodo
+    """
+    columns = [
+        "data",
+        "descrizione",
+        "categoria",
+        "account",
+        "importo",
+        "modalita",
+        "quota_mese",
+        "mesi_range",
+        "notes",
+    ]
+    empty = pd.DataFrame(columns=columns)
+
+    expenses = expense_frame(source_df)
+    if expenses.empty:
+        return empty
+
+    special = expenses.loc[_speciale_mask(expenses)].copy()
+    if special.empty:
+        return empty
+
+    special = normalize_date_column(special)
+    special["speciale_mesi"] = _speciale_mesi_series(special)
+    period_start = pd.Timestamp(period_start).normalize()
+    period_end = pd.Timestamp(period_end).normalize()
+
+    rows: list[dict] = []
+    for _, row in special.iterrows():
+        expense_date = row.get("data")
+        if pd.isna(expense_date):
+            continue
+
+        amount = abs(float(row["importo"]))
+        months = int(row["speciale_mesi"])
+        stamp = pd.Timestamp(expense_date).normalize()
+        in_period_cash = period_start <= stamp <= period_end
+
+        monthly_share = None
+        mesi_range = "—"
+        overlaps_period = False
+
+        if months > 0:
+            monthly_share = amount / months
+            start_month = stamp.to_period("M")
+            end_month = start_month + (months - 1)
+            mesi_range = (
+                f"{_format_month_period(start_month)}"
+                f" → {_format_month_period(end_month)}"
+            )
+            for offset in range(months):
+                month = start_month + offset
+                month_start = month.start_time.normalize()
+                month_end = month.end_time.normalize()
+                if not (period_end < month_start or period_start > month_end):
+                    overlaps_period = True
+                    break
+            modalita = f"Ripartita · {months} mesi"
+        else:
+            modalita = "Esclusa dalle medie"
+
+        if not (in_period_cash or overlaps_period):
+            continue
+
+        description = row.get("descrizione_completa") or row.get("descrizione") or ""
+        note = str(row.get("notes") or "").strip()
+        rows.append(
+            {
+                "data": stamp,
+                "descrizione": str(description).strip(),
+                "categoria": str(row.get("categoria") or ""),
+                "account": str(row.get("account") or ""),
+                "importo": amount,
+                "modalita": modalita,
+                "quota_mese": monthly_share,
+                "mesi_range": mesi_range,
+                "notes": note,
+            }
+        )
+
+    if not rows:
+        return empty
+
+    overview = pd.DataFrame(rows)
+    return overview.sort_values(
+        by=["data", "importo"],
+        ascending=[False, False],
+        kind="stable",
+    ).reset_index(drop=True)
+
+
 def calculate_daily_expense(
     period_df: pd.DataFrame,
     period_days: int,
+    *,
+    source_df: pd.DataFrame | None = None,
+    period_start: pd.Timestamp | None = None,
+    period_end: pd.Timestamp | None = None,
 ) -> float:
-    metrics = calculate_financial_metrics(period_df)
-    expenses = float(metrics["uscite"])
+    """
+    Spesa media giornaliera operativa.
+
+    Esclude le spese speciali; se hanno speciale_mesi > 0, aggiunge la
+    quota ripartita che cade nel periodo analizzato.
+    """
     if period_days <= 0:
         return 0.0
-    return expenses / period_days
+    operational = float(abs(operational_expense_frame(period_df)["importo"].sum()))
+    amortized = 0.0
+    if (
+        source_df is not None
+        and period_start is not None
+        and period_end is not None
+    ):
+        amortized, _ = amortized_special_in_period(
+            source_df,
+            period_start,
+            period_end,
+        )
+    return (operational + amortized) / period_days
 
 
 def get_value_comparison(

@@ -21,6 +21,7 @@ from src.components.cards import (
     render_info_card,
     render_kpi_card,
     render_section_title,
+    styled_panel,
 )
 from src.components.navigation import switch_to
 from src.services.analytics import (
@@ -37,7 +38,10 @@ from src.services.analytics import (
     get_value_comparison,
     monthly_flow_totals,
     normalize_date_column,
+    resolve_analysis_bounds,
     savings_rate,
+    special_expense_summary,
+    special_expenses_overview,
     top_expense_category,
 )
 from src.services.categories import get_category_icon, load_category_definitions
@@ -366,7 +370,47 @@ def show_dashboard() -> None:
         period,
         selected_month,
     )
-    avg_daily_expense = calculate_daily_expense(filtered_df, period_days)
+    analysis_start, analysis_end = resolve_analysis_bounds(
+        filtered_df,
+        period,
+        selected_month,
+    )
+    specials_source_df = dated_all
+    if selected_account != "Tutti":
+        specials_source_df = dated_all[
+            dated_all["account"] == selected_account
+        ].copy()
+
+    avg_daily_expense = calculate_daily_expense(
+        filtered_df,
+        period_days,
+        source_df=specials_source_df,
+        period_start=analysis_start,
+        period_end=analysis_end,
+    )
+    special_summary = special_expense_summary(
+        filtered_df,
+        source_df=specials_source_df,
+        period_start=analysis_start,
+        period_end=analysis_end,
+    )
+
+    daily_footer_parts = [f"su {period_days} giorni"]
+    amortized_count = int(special_summary["amortized_count"])
+    amortized_amount = float(special_summary["amortized_amount"])
+    excluded_count = int(special_summary["excluded_count"])
+    excluded_total = float(special_summary["excluded_total"])
+    if amortized_count > 0:
+        noun = "ripartita" if amortized_count == 1 else "ripartite"
+        daily_footer_parts.append(
+            f"{amortized_count} {noun} ({euro(amortized_amount)} nel periodo)"
+        )
+    if excluded_count > 0:
+        noun = "esclusa" if excluded_count == 1 else "escluse"
+        daily_footer_parts.append(
+            f"{excluded_count} {noun} ({euro(excluded_total)})"
+        )
+    daily_footer = " · ".join(daily_footer_parts)
 
     comparison_source_df = normalize_date_column(df)
 
@@ -405,6 +449,9 @@ def show_dashboard() -> None:
         previous_daily_expense = calculate_daily_expense(
             previous_period_df,
             previous_period_days,
+            source_df=comparison_source_df,
+            period_start=previous_start,
+            period_end=previous_end,
         )
 
         daily_comparison_text, daily_comparison_color = (
@@ -562,7 +609,7 @@ def show_dashboard() -> None:
             value=euro(avg_daily_expense),
             subtitle=daily_comparison_text,
             subtitle_color=daily_comparison_color,
-            footer=f"su {period_days} giorni",
+            footer=daily_footer,
         )
 
     with s3:
@@ -572,6 +619,158 @@ def show_dashboard() -> None:
             value_color=savings_color,
             footer=savings_footer,
         )
+
+    special_overview = special_expenses_overview(
+        specials_source_df,
+        analysis_start,
+        analysis_end,
+    )
+    render_section_title("Spese speciali")
+    if special_overview.empty:
+        st.caption(
+            "Nessuna spesa speciale nel periodo. "
+            "Puoi segnalarle in Movimenti → Dettagli."
+        )
+    else:
+        st.caption(
+            "Nei totali del mese restano come le hai pagate. "
+            "Nella media giornaliera puoi escluderle "
+            "oppure spalmarle sui mesi scelti."
+        )
+        with styled_panel():
+            rows_html: list[str] = []
+            for index, item in special_overview.iterrows():
+                date_label = pd.Timestamp(item["data"]).strftime("%d/%m/%Y")
+                title = html.escape(str(item["descrizione"] or "Senza descrizione"))
+                category = html.escape(str(item["categoria"] or ""))
+                account = html.escape(str(item["account"] or ""))
+                mesi_range = html.escape(str(item["mesi_range"] or "—"))
+                amount_label = html.escape(euro(float(item["importo"])))
+                quota = item["quota_mese"]
+                mode_chip = html.escape(str(item["modalita"] or ""))
+
+                if pd.notna(quota):
+                    quota_block = f"""
+                        <div style="
+                            margin-top:8px;
+                            font-size:12px;
+                            color:var(--ft-muted);
+                        ">
+                          Quota mensile
+                          <span style="
+                              color:var(--ft-accent-strong);
+                              font-weight:700;
+                          ">{html.escape(euro(float(quota)))}</span>
+                        </div>
+                    """
+                    range_block = f"""
+                        <div style="
+                            display:inline-flex;
+                            align-items:center;
+                            gap:6px;
+                            margin-top:8px;
+                            padding:4px 10px;
+                            border-radius:999px;
+                            background:rgba(var(--ft-accent-rgb),0.10);
+                            border:1px solid rgba(var(--ft-accent-rgb),0.22);
+                            color:var(--ft-accent-strong);
+                            font-size:11px;
+                            font-weight:700;
+                            letter-spacing:0.01em;
+                        ">
+                          {mesi_range}
+                        </div>
+                    """
+                else:
+                    quota_block = ""
+                    range_block = """
+                        <div style="
+                            margin-top:8px;
+                            font-size:12px;
+                            color:var(--ft-muted);
+                        ">Nessuna ripartizione</div>
+                    """
+
+                note_text = str(item.get("notes") or "").strip()
+                note_block = ""
+                if note_text:
+                    note_block = f"""
+                        <div style="
+                            margin-top:10px;
+                            font-size:13px;
+                            line-height:1.45;
+                            color:var(--ft-muted);
+                            font-style:italic;
+                        ">{html.escape(note_text)}</div>
+                    """
+
+                border = (
+                    "border-bottom:1px solid var(--ft-border);"
+                    if int(index) < len(special_overview) - 1
+                    else ""
+                )
+                rows_html.append(
+                    f"""
+                    <div style="
+                        display:flex;
+                        justify-content:space-between;
+                        gap:18px;
+                        padding:16px 2px;
+                        {border}
+                        flex-wrap:wrap;
+                    ">
+                      <div style="min-width:min(100%, 280px);flex:1;">
+                        <div style="
+                            font-size:15px;
+                            font-weight:700;
+                            color:var(--ft-text);
+                            line-height:1.35;
+                        ">{title}</div>
+                        <div style="
+                            margin-top:8px;
+                            display:flex;
+                            flex-wrap:wrap;
+                            gap:8px;
+                            align-items:center;
+                            font-size:12px;
+                            color:var(--ft-muted);
+                        ">
+                          <span style="
+                              background:rgba(var(--ft-accent-rgb),0.14);
+                              color:var(--ft-accent-strong);
+                              padding:3px 8px;
+                              border-radius:8px;
+                              font-size:11px;
+                              font-weight:750;
+                          ">{html.escape(get_category_icon(str(item['categoria'])))} {category}</span>
+                          <span>{html.escape(date_label)}</span>
+                          <span>{account}</span>
+                          <span style="
+                              padding:3px 8px;
+                              border-radius:8px;
+                              border:1px solid var(--ft-border);
+                              background:var(--ft-panel-soft);
+                              font-weight:650;
+                          ">{mode_chip}</span>
+                        </div>
+                        {range_block}
+                        {quota_block}
+                        {note_block}
+                      </div>
+                      <div style="
+                          text-align:right;
+                          font-family:Fraunces,Georgia,serif;
+                          font-size:22px;
+                          font-weight:700;
+                          color:var(--ft-danger);
+                          white-space:nowrap;
+                          padding-top:2px;
+                      ">{amount_label}</div>
+                    </div>
+                    """
+                )
+
+            render_html("".join(rows_html))
 
     render_section_title("Dove sono andati i soldi")
 

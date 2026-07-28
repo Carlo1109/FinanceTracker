@@ -14,19 +14,11 @@ _IMPORTERS: list[BankImporter] = [
     PayPalImporter(),
 ]
 
-_BY_ID = {importer.info.id: importer for importer in _IMPORTERS}
 _BY_LABEL = {importer.info.label: importer for importer in _IMPORTERS}
 
 
 def list_importers() -> list[BankImporterInfo]:
     return [importer.info for importer in _IMPORTERS]
-
-
-def get_importer_by_id(importer_id: str) -> BankImporter:
-    try:
-        return _BY_ID[importer_id]
-    except KeyError as error:
-        raise KeyError(f"Importer sconosciuto: {importer_id}") from error
 
 
 def get_importer_by_label(label: str) -> BankImporter:

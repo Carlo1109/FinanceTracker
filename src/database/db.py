@@ -68,6 +68,8 @@ def init_db() -> None:
                 source TEXT NOT NULL DEFAULT 'manual',
                 account TEXT NOT NULL DEFAULT 'Fineco',
                 notes TEXT,
+                speciale INTEGER NOT NULL DEFAULT 0,
+                speciale_mesi INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
             """
@@ -105,6 +107,24 @@ def init_db() -> None:
                 """
                 ALTER TABLE movements
                 ADD COLUMN notes TEXT
+                """
+            )
+
+        if "speciale" not in column_names:
+            connection.execute(
+                """
+                ALTER TABLE movements
+                ADD COLUMN speciale INTEGER
+                NOT NULL DEFAULT 0
+                """
+            )
+
+        if "speciale_mesi" not in column_names:
+            connection.execute(
+                """
+                ALTER TABLE movements
+                ADD COLUMN speciale_mesi INTEGER
+                NOT NULL DEFAULT 0
                 """
             )
 

@@ -293,41 +293,6 @@ def save_category_definitions(
     }
 
 
-def load_category_rules() -> dict[str, list[str]]:
-    """
-    Compatibilità con il codice esistente:
-    restituisce soltanto le keyword per categoria.
-    """
-    definitions = load_category_definitions()
-
-    return {
-        category: list(data["keywords"])
-        for category, data in definitions.items()
-    }
-
-
-def save_category_rules(rules: dict[str, list[str]]) -> None:
-    """
-    Compatibilità con il codice esistente:
-    aggiorna le keyword conservando le icone già assegnate.
-    """
-    definitions = load_category_definitions()
-
-    for category, keywords in rules.items():
-        if category not in definitions:
-            definitions[category] = {
-                "icon": DEFAULT_CATEGORY_ICONS.get(
-                    category,
-                    DEFAULT_CATEGORY_ICON,
-                ),
-                "keywords": [],
-            }
-
-        definitions[category]["keywords"] = keywords
-
-    save_category_definitions(definitions)
-
-
 def get_category_names() -> list[str]:
     """Restituisce i nomi delle categorie nell'ordine del JSON."""
     return list(load_category_definitions().keys())

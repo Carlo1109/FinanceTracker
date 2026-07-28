@@ -6,6 +6,7 @@ from src.components.cards import (
 )
 from src.services.categories import get_category_icon, get_category_names
 from src.services.movement_service import add_manual_movement
+from src.utils.formatting import euro
 
 
 def get_categories() -> list[str]:
@@ -56,6 +57,42 @@ def show_manual_entry() -> None:
             placeholder="Opzionale",
         )
 
+        is_special = False
+        speciale_mesi = 0
+        if movement_type == "Uscita":
+            is_special = st.checkbox(
+                "Spesa speciale",
+                value=False,
+                key="manual_speciale",
+            )
+            if is_special:
+                speciale_mesi = int(
+                    st.number_input(
+                        "Ripartisci su mesi",
+                        min_value=0,
+                        max_value=60,
+                        value=0,
+                        step=1,
+                        key="manual_speciale_mesi",
+                    )
+                )
+                if speciale_mesi > 0:
+                    st.caption(
+                        f"Nella media giornaliera conterà "
+                        f"{euro(amount / speciale_mesi)}/mese "
+                        f"per {speciale_mesi} mesi. L'importo intero resta nei totali."
+                    )
+                else:
+                    st.caption(
+                        "0 mesi = esclusa del tutto dalla media giornaliera "
+                        "(resta nei totali)."
+                    )
+            else:
+                st.caption(
+                    "Segna spese fuori ritmo e, se vuoi, ripartiscile "
+                    "sui mesi (es. abbonamento annuale su 12)."
+                )
+
         submitted = st.button(
             "Salva movimento",
             width="stretch",
@@ -75,6 +112,8 @@ def show_manual_entry() -> None:
             movement_type=movement_type,
             account=account,
             notes=notes.strip(),
+            speciale=is_special,
+            speciale_mesi=speciale_mesi,
         )
 
         st.toast("Movimento salvato")
