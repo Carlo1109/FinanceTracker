@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import html
+
 import pandas as pd
 import streamlit as st
 
+from src.components.cards import MUTED_COLOR, TEXT_COLOR, render_html
 from src.utils.export_excel import movements_to_export_bytes
+
 
 EXCEL_MIME = (
     "application/vnd.openxmlformats-officedocument"
@@ -58,15 +62,43 @@ def _export_confirm_dialog(
     dialog_key: str = "export",
 ) -> None:
     count = len(df)
-    st.markdown(
-        f"Stai per esportare **{count}** movimenti "
-        "in un file Excel brandizzato."
-    )
+    context_html = ""
     if context_label:
-        st.caption(context_label)
-    st.caption(
-        "Il file include logo FinanceTracker e "
-        "Personal Finance Manager."
+        context_html = (
+            f'<div style="margin-top:8px;font-size:13px;'
+            f'font-weight:650;color:var(--ft-accent);">'
+            f"{html.escape(context_label)}</div>"
+        )
+
+    render_html(
+        f"""
+        <div style="padding:2px 0 8px 0;">
+          <div class="ft-appearance-chip" style="width:fit-content;">
+            <span class="ft-appearance-chip-dot"></span>
+            Excel brandizzato
+          </div>
+          <div style="
+              margin-top:14px;
+              font-family:Fraunces,Georgia,serif;
+              font-size:clamp(22px, 2.2vw, 28px);
+              font-weight:700;
+              color:{TEXT_COLOR};
+              line-height:1.2;
+          ">
+            Esporta {count} movimenti
+          </div>
+          {context_html}
+          <div style="
+              margin-top:10px;
+              font-size:13px;
+              line-height:1.45;
+              color:{MUTED_COLOR};
+          ">
+            Il file include logo FinanceTracker e
+            Personal Finance Manager.
+          </div>
+        </div>
+        """
     )
 
     confirm_col, cancel_col = st.columns(2)

@@ -6,18 +6,20 @@ from typing import Any
 import streamlit as st
 
 
-INCOME_COLOR = "#34d399"
-EXPENSE_COLOR = "#f87171"
-INVESTMENT_COLOR = "#fbbf24"
-LIQUIDITY_COLOR = "#34d399"
-BALANCE_COLOR = "#34d399"
-TEXT_COLOR = "#eef3ff"
-MUTED_COLOR = "#94a3b8"
+# HTML: entrate/uscite fissi (verde/rosso); accento per il resto dell’UI.
+INCOME_COLOR = "var(--ft-income)"
+EXPENSE_COLOR = "var(--ft-danger)"
+INVESTMENT_COLOR = "var(--ft-investment)"
+LIQUIDITY_COLOR = "var(--ft-income)"
+BALANCE_COLOR = "var(--ft-income)"
+TEXT_COLOR = "var(--ft-text)"
+MUTED_COLOR = "var(--ft-muted)"
+ACCENT_COLOR = "var(--ft-accent)"
 
 CARD_RADIUS = "18px"
-CARD_BORDER = "1px solid rgba(148,163,184,.16)"
-CARD_SHADOW = "0 16px 36px rgba(0,0,0,.28)"
-CARD_BACKGROUND = "rgba(11,18,32,.90)"
+CARD_BORDER = "1px solid var(--ft-border)"
+CARD_SHADOW = "var(--ft-shadow)"
+CARD_BACKGROUND = "var(--ft-panel)"
 
 
 def compact_html(value: str) -> str:
@@ -65,7 +67,7 @@ def render_hero_card(
             background:
                 radial-gradient(
                     circle at 18% 0%,
-                    rgba(96,165,250,0.22),
+                    rgba(var(--ft-accent-rgb), 0.22),
                     transparent 42%
                 ),
                 {CARD_BACKGROUND};
@@ -141,7 +143,13 @@ def render_kpi_card(
             min-height:132px;
             padding:18px 18px;
             border-radius:{CARD_RADIUS};
-            background:{CARD_BACKGROUND};
+            background:
+                radial-gradient(
+                    circle at 12% 0%,
+                    rgba(var(--ft-accent-rgb), 0.14),
+                    transparent 46%
+                ),
+                {CARD_BACKGROUND};
             border:{CARD_BORDER};
             box-shadow:{CARD_SHADOW};
             display:flex;
@@ -177,6 +185,17 @@ def render_kpi_card(
                 {html.escape(value)}
             </div>
             {subtitle_html}
+            <div style="
+                margin-top:12px;
+                width:36px;
+                height:3px;
+                border-radius:999px;
+                background:linear-gradient(
+                    90deg,
+                    var(--ft-accent),
+                    var(--ft-accent-strong)
+                );
+            "></div>
         </div>
         """
     )
@@ -201,7 +220,7 @@ def render_info_card(
                 font-size:clamp(22px,1.8vw,30px);
                 line-height:1.15;
                 font-weight:700;
-                color:#dbeafe;
+                color:{ACCENT_COLOR};
                 overflow-wrap:anywhere;
                 word-break:break-word;
             ">
@@ -234,7 +253,7 @@ def render_info_card(
                 font-size:12px;
                 line-height:1.25;
                 font-weight:550;
-                color:#64748b;
+                color:{MUTED_COLOR};
                 text-align:left;
             ">
                 {html.escape(str(footer))}
@@ -247,7 +266,13 @@ def render_info_card(
             min-height:168px;
             padding:20px 18px;
             border-radius:{CARD_RADIUS};
-            background:{CARD_BACKGROUND};
+            background:
+                radial-gradient(
+                    circle at 10% 0%,
+                    rgba(var(--ft-accent-rgb), 0.10),
+                    transparent 48%
+                ),
+                {CARD_BACKGROUND};
             border:{CARD_BORDER};
             box-shadow:{CARD_SHADOW};
             display:flex;
@@ -315,9 +340,9 @@ def _category_rows_html(rows: list[dict]) -> str:
 
     for index, row in enumerate(rows):
         percent = max(0.0, min(100.0, float(row.get("percent", 0))))
-        color = html.escape(str(row.get("color") or "#60a5fa"))
+        color = html.escape(str(row.get("color") or "var(--ft-accent)"))
         border = (
-            "border-bottom:1px solid rgba(148,163,184,0.10);"
+            "border-bottom:1px solid var(--ft-border);"
             if index < len(rows) - 1
             else ""
         )

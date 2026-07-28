@@ -26,8 +26,8 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-apply_theme()
 init_db()
+apply_theme()
 
 
 dashboard_page = st.Page(

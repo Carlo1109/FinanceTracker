@@ -5,6 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import plotly.io as pio
 import streamlit as st
+import html
 
 from src.components.cards import (
     EXPENSE_COLOR,
@@ -12,12 +13,14 @@ from src.components.cards import (
     INVESTMENT_COLOR,
     LIQUIDITY_COLOR,
     BALANCE_COLOR,
+    MUTED_COLOR,
     render_chart_card,
     render_expense_distribution_card,
     render_hero_card,
     render_html,
     render_info_card,
     render_kpi_card,
+    render_section_title,
 )
 from src.components.navigation import switch_to
 from src.services.analytics import (
@@ -40,6 +43,7 @@ from src.services.analytics import (
 from src.services.categories import get_category_icon, load_category_definitions
 from src.services.movement_service import load_movements
 from src.theme.colors import get_category_colors
+from src.theme.tokens import resolve_semantic
 from src.utils.formatting import euro, signed_euro
 
 
@@ -81,10 +85,24 @@ def render_category_pie_chart(
         if trace is not None
         else []
     )
-    bright_colors = [
-        _mix_rgb(color, (255, 255, 255), 0.30) for color in base_colors
-    ]
-    dim_colors = [_mix_rgb(color, (7, 11, 20), 0.38) for color in base_colors]
+    from src.services.settings_service import get_theme_mode
+
+    is_light = get_theme_mode() == "light"
+    # Sul chiaro: spegnere = scurire (non schiarire verso lo sfondo).
+    if is_light:
+        bright_colors = [
+            _mix_rgb(color, (255, 255, 255), 0.22) for color in base_colors
+        ]
+        dim_colors = [
+            _mix_rgb(color, (15, 23, 42), 0.42) for color in base_colors
+        ]
+    else:
+        bright_colors = [
+            _mix_rgb(color, (255, 255, 255), 0.30) for color in base_colors
+        ]
+        dim_colors = [
+            _mix_rgb(color, (7, 11, 20), 0.38) for color in base_colors
+        ]
 
     fig.update_layout(
         autosize=True,
@@ -215,12 +233,12 @@ def show_dashboard() -> None:
                 background:
                     radial-gradient(
                         circle at 14% 0%,
-                        rgba(96,165,250,0.18),
+                        rgba(var(--ft-accent-rgb), 0.18),
                         transparent 44%
                     ),
-                    rgba(11,18,32,0.94);
-                border:1px solid rgba(148,163,184,0.16);
-                box-shadow:0 18px 40px rgba(0,0,0,0.30);
+                    var(--ft-panel);
+                border:1px solid var(--ft-border);
+                box-shadow:var(--ft-shadow);
                 animation: ft-fade-up 360ms ease-out;
                 text-align:left;
             ">
@@ -228,16 +246,35 @@ def show_dashboard() -> None:
                     font-family:Fraunces,Georgia,serif;
                     font-size:clamp(34px, 4vw, 48px);
                     font-weight:700;
-                    color:#eef3ff;
+                    color:var(--ft-text);
                     letter-spacing:-0.03em;
                     line-height:1.05;
-                ">FinanceTracker</div>
+                ">Finance<span style="color:var(--ft-accent)">Tracker</span></div>
+                <div style="
+                    margin-top:10px;
+                    display:inline-flex;
+                    align-items:center;
+                    gap:8px;
+                    padding:6px 12px;
+                    border-radius:999px;
+                    background:rgba(var(--ft-accent-rgb), 0.14);
+                    color:var(--ft-accent);
+                    font-size:12px;
+                    font-weight:700;
+                ">
+                    <span style="
+                        width:8px;height:8px;border-radius:999px;
+                        background:var(--ft-accent);
+                        box-shadow:0 0 0 3px rgba(var(--ft-accent-rgb), 0.25);
+                    "></span>
+                    Inizia da qui
+                </div>
                 <div style="
                     margin-top:14px;
                     max-width:34rem;
                     font-size:16px;
                     line-height:1.5;
-                    color:#94a3b8;
+                    color:var(--ft-muted);
                 ">
                     Nessun movimento ancora. Importa un estratto conto
                     oppure aggiungi il primo movimento manualmente.
@@ -345,7 +382,7 @@ def show_dashboard() -> None:
     )
 
     daily_comparison_text = None
-    daily_comparison_color = "#94a3b8"
+    daily_comparison_color = MUTED_COLOR
     previous_metrics: dict[str, float] | None = None
 
     if previous_bounds is not None:
@@ -383,7 +420,7 @@ def show_dashboard() -> None:
         higher_is_better: bool,
     ) -> tuple[str | None, str]:
         if previous_metrics is None:
-            return None, "#94a3b8"
+            return None, MUTED_COLOR
         return get_value_comparison(
             metrics[key],
             previous_metrics[key],
@@ -435,7 +472,7 @@ def show_dashboard() -> None:
     rate = savings_rate(metrics)
     if rate is None:
         savings_label = "—"
-        savings_color = "#94a3b8"
+        savings_color = MUTED_COLOR
         savings_footer = "serve almeno un’entrata"
     else:
         savings_label = f"{rate:.1f}".replace(".", ",") + "%"
@@ -444,6 +481,21 @@ def show_dashboard() -> None:
 
     if comparison_caption:
         st.caption(f"Confronto: {comparison_caption}")
+
+    account_chip = html.escape(
+        selected_account
+        if selected_account != "Tutti"
+        else "Tutti i conti"
+    )
+    period_chip = html.escape(period)
+    render_html(
+        f"""
+        <div class="ft-appearance-chip" style="margin:4px 0 14px 0;width:fit-content;">
+          <span class="ft-appearance-chip-dot"></span>
+          {period_chip} · {account_chip}
+        </div>
+        """
+    )
 
     render_hero_card(
         title="BILANCIO DEL PERIODO",
@@ -521,12 +573,10 @@ def show_dashboard() -> None:
             footer=savings_footer,
         )
 
-    st.markdown(
-        '<div class="ft-section-title">Dove sono andati i soldi</div>',
-        unsafe_allow_html=True,
-    )
+    render_section_title("Dove sono andati i soldi")
 
     category_df = category_expense_breakdown(filtered_df)
+    sem = resolve_semantic()
 
     if category_df.empty:
         st.info("Nessuna uscita da mostrare per questo periodo.")
@@ -559,16 +609,16 @@ def show_dashboard() -> None:
                     marker=dict(
                         colors=pie_colors,
                         line=dict(
-                            color="rgba(7,11,20,0.95)",
+                            color=sem.pie_outline,
                             width=2,
                         ),
                     ),
                     hoverlabel=dict(
-                        bgcolor="rgba(11,18,32,0.96)",
-                        bordercolor="#60a5fa",
+                        bgcolor=sem.hover_bg,
+                        bordercolor=sem.info,
                         font=dict(
                             size=13,
-                            color="#eef3ff",
+                            color=sem.text,
                             family="Manrope",
                         ),
                     ),
@@ -581,13 +631,13 @@ def show_dashboard() -> None:
             margin=dict(l=0, r=0, t=0, b=0),
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
-            font_color="#e5e7eb",
+            font_color=sem.text,
             showlegend=False,
             annotations=[
                 dict(
                     text=(
                         f"<b>{euro(total_expenses)}</b><br>"
-                        "<span style='font-size:12px;color:#94a3b8'>"
+                        f"<span style='font-size:12px;color:{sem.muted}'>"
                         "Totale uscite"
                         "</span>"
                     ),
@@ -595,7 +645,7 @@ def show_dashboard() -> None:
                     y=0.5,
                     font=dict(
                         size=18,
-                        color="#eef3ff",
+                        color=sem.text,
                         family="Manrope",
                     ),
                     showarrow=False,
@@ -624,10 +674,7 @@ def show_dashboard() -> None:
             list_max_height=360,
         )
 
-    st.markdown(
-        '<div class="ft-section-title">Andamento mensile</div>',
-        unsafe_allow_html=True,
-    )
+    render_section_title("Andamento mensile")
 
     monthly_df = monthly_flow_totals(filtered_df)
 
@@ -641,9 +688,9 @@ def show_dashboard() -> None:
         ],
         markers=True,
         color_discrete_map={
-            "entrate": INCOME_COLOR,
-            "uscite": EXPENSE_COLOR,
-            "investimenti": INVESTMENT_COLOR,
+            "entrate": sem.income,
+            "uscite": sem.expense,
+            "investimenti": sem.investment,
         },
         labels={
             "mese": "",
@@ -660,7 +707,7 @@ def show_dashboard() -> None:
         margin=dict(l=10, r=20, t=10, b=10),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="#94a3b8", family="Manrope"),
+        font=dict(color=sem.muted, family="Manrope"),
         legend_title_text="",
         xaxis_title="",
         yaxis_title="",

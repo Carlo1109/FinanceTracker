@@ -1,0 +1,24 @@
+# Entrambi i modi abilitano lo switch nativo Streamlit (widget, uploader, select).
+# I colori runtime (accento) restano gestiti da src/theme/style.py.
+
+[theme.light]
+primaryColor = "#2563eb"
+backgroundColor = "#e9eef6"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#0f172a"
+borderColor = "#cbd5e1"
+font = "sans serif"
+baseRadius = "0.75rem"
+buttonRadius = "0.75rem"
+showWidgetBorder = true
+
+[theme.dark]
+primaryColor = "#60a5fa"
+backgroundColor = "#0b1220"
+secondaryBackgroundColor = "#111a2e"
+textColor = "#eef3ff"
+borderColor = "#334155"
+font = "sans serif"
+baseRadius = "0.75rem"
+buttonRadius = "0.75rem"
+showWidgetBorder = true

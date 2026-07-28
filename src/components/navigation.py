@@ -59,7 +59,6 @@ def render_brand(logo_path: Path, app_version: str | None = None) -> None:
         st.button(
             "☰",
             key="close_navigation",
-            help="Nascondi menu",
             on_click=close_navigation,
         )
 
@@ -80,7 +79,7 @@ def render_brand(logo_path: Path, app_version: str | None = None) -> None:
             font-weight:700;
             letter-spacing:-0.03em;
         ">
-            <span style="color:#ffffff;">Finance</span><span style="color:#80e848;">Tracker</span>
+            <span class="ft-brand-finance">Finance</span><span class="ft-brand-tracker">Tracker</span>
         </h1>
         """,
         unsafe_allow_html=True,
@@ -88,9 +87,8 @@ def render_brand(logo_path: Path, app_version: str | None = None) -> None:
 
     st.markdown(
         """
-        <div style="
+        <div class="ft-brand-subtitle" style="
             text-align:center;
-            color:#94a3b8;
             margin-top:2px;
             margin-bottom:12px;
             font-size:13px;
@@ -106,12 +104,10 @@ def render_brand(logo_path: Path, app_version: str | None = None) -> None:
     st.markdown(
         f"""
         <div style="text-align:center;">
-            <span style="
+            <span class="ft-version-chip" style="
                 display:inline-block;
                 padding:3px 10px;
                 border-radius:8px;
-                background:rgba(96,165,250,.12);
-                color:#60a5fa;
                 font-weight:700;
                 font-size:11px;
                 letter-spacing:0.04em;
@@ -178,7 +174,6 @@ def render_app_shell(
         st.button(
             "☰",
             key="open_navigation",
-            help="Mostra menu",
             width="stretch",
             type="primary",
             on_click=open_navigation,

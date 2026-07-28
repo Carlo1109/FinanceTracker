@@ -1,55 +1,149 @@
+"""CSS globale FinanceTracker: temi chiaro/scuro + accenti via CSS variables."""
+
+from __future__ import annotations
+
 import streamlit as st
 
+from src.services.settings_service import get_accent, get_theme_mode
+from src.theme.tokens import resolve_palette
 
-def apply_theme() -> None:
+
+def _sync_streamlit_native_theme(theme_id: str) -> None:
+    """
+    Allinea il tema nativo Streamlit (select, uploader, …) alla preferenza FT.
+
+    Lo sfondo custom via CSS non basta: Baseweb legge Light/Dark da
+    localStorage. Se non coincide, i widget restano neri sul tema chiaro.
+    """
+    desired = "Light" if theme_id == "light" else "Dark"
+    st.html(
+        f"""
+        <div hidden aria-hidden="true" data-ft-theme-sync="{desired}"></div>
+        <script>
+        (function () {{
+          const desired = {desired!r};
+          const path = window.location.pathname || "/";
+          const key = "stActiveTheme-" + path + "-v2";
+          const payload = JSON.stringify(desired);
+          let current = null;
+          try {{
+            current = JSON.parse(window.localStorage.getItem(key));
+          }} catch (err) {{
+            current = null;
+          }}
+          for (let i = 0; i < window.localStorage.length; i++) {{
+            const k = window.localStorage.key(i);
+            if (k && k.indexOf("stActiveTheme") === 0 && k.slice(-3) === "-v2") {{
+              window.localStorage.setItem(k, payload);
+            }}
+          }}
+          window.localStorage.setItem(key, payload);
+          if (current !== desired) {{
+            window.location.reload();
+          }}
+        }})();
+        </script>
+        """,
+        width="content",
+        unsafe_allow_javascript=True,
+    )
+
+
+def apply_theme(
+    theme_id: str | None = None,
+    accent_id: str | None = None,
+) -> None:
+    theme_id = theme_id or get_theme_mode()
+    accent_id = accent_id or get_accent()
+    theme, accent = resolve_palette(theme_id, accent_id)
+
+    primary_btn_text = "#04203a" if theme_id == "dark" else "#0b1220"
+    if theme_id == "light" and accent_id in ("amber",):
+        primary_btn_text = "#422006"
+
+    _sync_streamlit_native_theme(theme_id)
+
     st.markdown(
-        """
+        f"""
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap');
 
-        :root {
-            --ft-bg-0: #070b14;
-            --ft-bg-1: #0b1220;
-            --ft-bg-2: #111a2e;
-            --ft-panel: rgba(11, 18, 32, 0.90);
-            --ft-panel-soft: rgba(17, 26, 46, 0.74);
-            --ft-border: rgba(148, 163, 184, 0.16);
-            --ft-text: #eef3ff;
-            --ft-muted: #94a3b8;
-            --ft-accent: #60a5fa;
-            --ft-accent-strong: #3b82f6;
-            --ft-danger: #f87171;
+        :root {{
+            --ft-bg-0: {theme.bg_0};
+            --ft-bg-1: {theme.bg_1};
+            --ft-bg-2: {theme.bg_2};
+            --ft-panel: {theme.panel};
+            --ft-panel-soft: {theme.panel_soft};
+            --ft-border: {theme.border};
+            --ft-text: {theme.text};
+            --ft-muted: {theme.muted};
+            --ft-nav-text: {theme.nav_text};
+            --ft-accent: {accent.accent};
+            --ft-accent-strong: {accent.accent_strong};
+            --ft-accent-rgb: {accent.accent_rgb};
+            --ft-danger: {theme.danger};
+            --ft-income: #34d399;
+            --ft-investment: {theme.investment};
+            --ft-shadow: {theme.shadow};
+            --ft-scrollbar: {theme.scrollbar};
+            --ft-input-bg: {theme.input_bg};
+            --ft-glow-alpha: {theme.glow_alpha};
+            --ft-primary-btn-text: {primary_btn_text};
             --ft-font: "Manrope", "Segoe UI", sans-serif;
             --ft-display: "Fraunces", Georgia, serif;
             --ft-radius: 18px;
-        }
+
+            /* Variabili usate internamente da Streamlit/Baseweb */
+            --background-color: {theme.bg_1};
+            --secondary-background-color: {theme.input_bg};
+            --text-color: {theme.text};
+            --primary-color: {accent.accent};
+            --secondary-text: {theme.muted};
+        }}
+
+        html, body, .stApp, [data-testid="stAppViewContainer"] {{
+            color-scheme: {theme_id} !important;
+        }}
 
         #MainMenu,
         footer,
         header[data-testid="stHeader"],
         [data-testid="stToolbar"],
         [data-testid="stSidebar"],
-        [data-testid="collapsedControl"] {
+        [data-testid="collapsedControl"] {{
             display: none !important;
-        }
+        }}
 
-        html, body, [class*="css"], .stApp, .stMarkdown, .stText, .stCaption {
+        /* Niente toolbar fullscreen sulle immagini (logo, …) */
+        [data-testid="stElementToolbar"],
+        [data-testid="stElementToolbarButton"],
+        [data-testid="stElementToolbarButtonContainer"],
+        [data-testid="stImage"] [data-testid="stElementToolbar"],
+        [data-testid="stImageContainer"] [data-testid="stElementToolbar"],
+        .stImage button {{
+            display: none !important;
+            visibility: hidden !important;
+            pointer-events: none !important;
+            opacity: 0 !important;
+        }}
+
+        html, body, [class*="css"], .stApp, .stMarkdown, .stText, .stCaption {{
             font-family: var(--ft-font) !important;
-        }
+        }}
 
-        .block-container {
+        .block-container {{
             max-width: 100%;
             padding-top: 0.85rem;
             padding-right: 1.1rem;
             padding-bottom: 1.2rem;
             padding-left: 0.7rem;
-        }
+        }}
 
-        [data-testid="stAppViewContainer"] {
+        [data-testid="stAppViewContainer"] {{
             background:
                 radial-gradient(
                     ellipse 70% 45% at 8% -10%,
-                    rgba(96, 165, 250, 0.16),
+                    rgba(var(--ft-accent-rgb), var(--ft-glow-alpha)),
                     transparent 55%
                 ),
                 linear-gradient(
@@ -58,27 +152,27 @@ def apply_theme() -> None:
                     var(--ft-bg-1) 52%,
                     var(--ft-bg-2) 100%
                 );
-        }
+        }}
 
-        h1, h2, h3 {
+        h1, h2, h3 {{
             color: var(--ft-text) !important;
             font-family: var(--ft-display) !important;
             font-weight: 700 !important;
             letter-spacing: -0.02em;
-        }
+        }}
 
-        p, label, span, div, .stCaption {
+        p, label, span, div, .stCaption {{
             color: var(--ft-text);
-        }
+        }}
 
-        [data-testid="stCaption"] {
+        [data-testid="stCaption"] {{
             color: var(--ft-muted) !important;
-        }
+        }}
 
         /* ---- Custom navigation ---- */
 
         [data-testid="stColumn"]:has(.ft-navigation-anchor)
-        [data-testid="stPageLink"] a {
+        [data-testid="stPageLink"] a {{
             min-height: 46px;
             display: flex;
             align-items: center;
@@ -87,7 +181,7 @@ def apply_theme() -> None:
             padding: 0 14px;
             border-radius: 12px;
             border: 1px solid transparent;
-            color: #c5d5cc !important;
+            color: var(--ft-nav-text) !important;
             font-size: 14px;
             font-weight: 650;
             text-decoration: none !important;
@@ -95,23 +189,23 @@ def apply_theme() -> None:
                 transform 160ms ease,
                 background 160ms ease,
                 border-color 160ms ease;
-        }
+        }}
 
         [data-testid="stColumn"]:has(.ft-navigation-anchor)
-        [data-testid="stPageLink"] a:hover {
+        [data-testid="stPageLink"] a:hover {{
             transform: translateX(2px);
-            background: rgba(96, 165, 250, 0.08);
-            border-color: rgba(96, 165, 250, 0.14);
-        }
+            background: rgba(var(--ft-accent-rgb), 0.08);
+            border-color: rgba(var(--ft-accent-rgb), 0.14);
+        }}
 
         [data-testid="stColumn"]:has(.ft-navigation-anchor)
-        [data-testid="stPageLink"] a[aria-current="page"] {
-            background: rgba(96, 165, 250, 0.16);
-            border-color: rgba(96, 165, 250, 0.38);
-            color: #ffffff !important;
-        }
+        [data-testid="stPageLink"] a[aria-current="page"] {{
+            background: rgba(var(--ft-accent-rgb), 0.16);
+            border-color: rgba(var(--ft-accent-rgb), 0.38);
+            color: var(--ft-text) !important;
+        }}
 
-        [data-testid="stColumn"]:has(.ft-navigation-anchor) {
+        [data-testid="stColumn"]:has(.ft-navigation-anchor) {{
             position: sticky;
             top: 0.75rem;
             align-self: flex-start;
@@ -123,39 +217,39 @@ def apply_theme() -> None:
             animation: ft-navigation-enter 220ms ease-out;
             scrollbar-width: none;
             -ms-overflow-style: none;
-        }
+        }}
 
-        [data-testid="stColumn"]:has(.ft-navigation-anchor)::-webkit-scrollbar {
+        [data-testid="stColumn"]:has(.ft-navigation-anchor)::-webkit-scrollbar {{
             display: none;
-        }
+        }}
 
-        @keyframes ft-navigation-enter {
-            from { opacity: 0; transform: translateX(-8px); }
-            to { opacity: 1; transform: translateX(0); }
-        }
+        @keyframes ft-navigation-enter {{
+            from {{ opacity: 0; transform: translateX(-8px); }}
+            to {{ opacity: 1; transform: translateX(0); }}
+        }}
 
-        @keyframes ft-fade-up {
-            from { opacity: 0; transform: translateY(8px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+        @keyframes ft-fade-up {{
+            from {{ opacity: 0; transform: translateY(8px); }}
+            to {{ opacity: 1; transform: translateY(0); }}
+        }}
 
-        @keyframes ft-import-pop {
-            0% {
+        @keyframes ft-import-pop {{
+            0% {{
                 opacity: 0;
                 transform: translateY(14px) scale(0.97);
-            }
-            60% {
+            }}
+            60% {{
                 opacity: 1;
                 transform: translateY(-2px) scale(1.01);
-            }
-            100% {
+            }}
+            100% {{
                 opacity: 1;
                 transform: translateY(0) scale(1);
-            }
-        }
+            }}
+        }}
 
         [data-testid="stColumn"]:has(.ft-navigation-anchor)
-        [data-testid="stVerticalBlockBorderWrapper"] {
+        [data-testid="stVerticalBlockBorderWrapper"] {{
             min-height: 100%;
             padding: 0.85rem;
             border-radius: 22px;
@@ -163,15 +257,15 @@ def apply_theme() -> None:
             background:
                 radial-gradient(
                     circle at top left,
-                    rgba(96, 165, 250, 0.12),
+                    rgba(var(--ft-accent-rgb), 0.12),
                     transparent 34%
                 ),
                 var(--ft-panel);
-            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
-        }
+            box-shadow: var(--ft-shadow);
+        }}
 
         [data-testid="stColumn"]:has(.ft-navigation-anchor)
-        .stButton > button {
+        .stButton > button {{
             min-height: 46px;
             justify-content: flex-start;
             padding-left: 14px;
@@ -183,40 +277,40 @@ def apply_theme() -> None:
                 transform 140ms ease,
                 background 140ms ease,
                 border-color 140ms ease;
-        }
+        }}
 
         [data-testid="stColumn"]:has(.ft-navigation-anchor)
-        .stButton > button[kind="secondary"] {
+        .stButton > button[kind="secondary"] {{
             background: transparent !important;
             border: 1px solid transparent !important;
-            color: #c5d5cc !important;
-        }
+            color: var(--ft-nav-text) !important;
+        }}
 
         [data-testid="stColumn"]:has(.ft-navigation-anchor)
-        .stButton > button[kind="secondary"]:hover {
+        .stButton > button[kind="secondary"]:hover {{
             transform: translateX(2px);
-            background: rgba(96, 165, 250, 0.08) !important;
-            border-color: rgba(96, 165, 250, 0.14) !important;
-        }
+            background: rgba(var(--ft-accent-rgb), 0.08) !important;
+            border-color: rgba(var(--ft-accent-rgb), 0.14) !important;
+        }}
 
         [data-testid="stColumn"]:has(.ft-navigation-anchor)
-        .stButton > button[kind="primary"] {
-            background: rgba(96, 165, 250, 0.18) !important;
-            border: 1px solid rgba(96, 165, 250, 0.38) !important;
-            color: #ffffff !important;
+        .stButton > button[kind="primary"] {{
+            background: rgba(var(--ft-accent-rgb), 0.18) !important;
+            border: 1px solid rgba(var(--ft-accent-rgb), 0.38) !important;
+            color: var(--ft-text) !important;
             box-shadow: none !important;
-        }
+        }}
 
         [data-testid="stColumn"]:has(.ft-navigation-anchor)
         [data-testid="stHorizontalBlock"]:first-of-type
-        .stButton {
+        .stButton {{
             display: flex;
             justify-content: flex-end;
-        }
+        }}
 
         [data-testid="stColumn"]:has(.ft-navigation-anchor)
         [data-testid="stHorizontalBlock"]:first-of-type
-        .stButton > button {
+        .stButton > button {{
             width: 38px !important;
             min-width: 38px !important;
             height: 38px !important;
@@ -229,182 +323,649 @@ def apply_theme() -> None:
             background: transparent !important;
             border: none !important;
             box-shadow: none !important;
-            color: #c5d5cc !important;
+            color: var(--ft-nav-text) !important;
             font-size: 22px !important;
             font-weight: 600 !important;
             line-height: 1 !important;
-        }
+        }}
 
         [data-testid="stColumn"]:has(.ft-navigation-anchor)
         [data-testid="stHorizontalBlock"]:first-of-type
-        .stButton > button:hover {
+        .stButton > button:hover {{
             color: var(--ft-accent) !important;
             transform: scale(1.06);
             background: transparent !important;
             border: none !important;
             box-shadow: none !important;
-        }
+        }}
 
         [data-testid="stColumn"]:has(.ft-navigation-anchor)
         [data-testid="stHorizontalBlock"]:first-of-type
         .stButton > button:focus,
         [data-testid="stColumn"]:has(.ft-navigation-anchor)
         [data-testid="stHorizontalBlock"]:first-of-type
-        .stButton > button:active {
+        .stButton > button:active {{
             outline: none !important;
             border: none !important;
             box-shadow: none !important;
             background: transparent !important;
-        }
+        }}
 
         /* ---- Content surfaces ---- */
 
-        [data-testid="stVerticalBlockBorderWrapper"] {
+        [data-testid="stVerticalBlockBorderWrapper"] {{
             border-radius: var(--ft-radius);
             border-color: var(--ft-border);
             background: var(--ft-panel-soft);
             animation: ft-fade-up 240ms ease-out;
-        }
+        }}
 
-        .stButton > button {
+        .stButton > button {{
             border-radius: 12px;
             font-weight: 700;
             border: 1px solid var(--ft-border);
             font-family: var(--ft-font) !important;
-        }
+        }}
 
-        .stButton > button[kind="primary"] {
+        .stButton > button[kind="primary"],
+        [data-testid="stBaseButton-primary"] {{
             background: linear-gradient(
                 135deg,
                 var(--ft-accent),
                 var(--ft-accent-strong)
-            );
-            color: #04203a;
-            border: none;
-        }
+            ) !important;
+            color: var(--ft-primary-btn-text) !important;
+            border: none !important;
+        }}
 
-        .stButton > button[kind="secondary"] {
+        .stButton > button[kind="secondary"] {{
             background: transparent;
             color: var(--ft-text);
-        }
+        }}
 
-        .stTextInput input,
-        .stNumberInput input,
-        .stDateInput input,
-        .stTextArea textarea {
+        /* Nasconde il marker HTML del sync tema (nessun iframe) */
+        [data-ft-theme-sync] {{
+            display: none !important;
+        }}
+
+        /* ---- Appearance picker (Impostazioni → Aspetto) ---- */
+
+        .ft-appearance-hero {{
+            position: relative;
+            overflow: hidden;
+            border-radius: 20px;
+            padding: 22px 22px 20px 22px;
+            border: 1px solid var(--ft-border);
+            background:
+                radial-gradient(
+                    circle at 12% 0%,
+                    rgba(var(--ft-accent-rgb), 0.28),
+                    transparent 42%
+                ),
+                radial-gradient(
+                    circle at 88% 20%,
+                    rgba(var(--ft-accent-rgb), 0.12),
+                    transparent 40%
+                ),
+                linear-gradient(
+                    145deg,
+                    var(--ft-bg-0),
+                    var(--ft-bg-1) 55%,
+                    var(--ft-bg-2)
+                );
+            box-shadow: var(--ft-shadow);
+            animation: ft-fade-up 280ms ease-out;
+        }}
+
+        .ft-appearance-hero-top {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 16px;
+        }}
+
+        .ft-appearance-brand {{
+            font-family: var(--ft-display) !important;
+            font-size: 1.55rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            color: var(--ft-text);
+            line-height: 1.1;
+        }}
+
+        .ft-appearance-brand span {{
+            color: var(--ft-accent);
+        }}
+
+        .ft-appearance-chip {{
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: rgba(var(--ft-accent-rgb), 0.14);
+            color: var(--ft-accent-strong);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            white-space: nowrap;
+        }}
+
+        .ft-appearance-chip-dot {{
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: var(--ft-accent);
+            box-shadow: 0 0 0 3px rgba(var(--ft-accent-rgb), 0.25);
+        }}
+
+        .ft-appearance-kpis {{
+            display: grid;
+            grid-template-columns: 1.2fr 1fr 1fr;
+            gap: 10px;
+        }}
+
+        .ft-appearance-kpi {{
+            border-radius: 14px;
+            padding: 12px 14px;
+            background: var(--ft-panel);
+            border: 1px solid var(--ft-border);
+            backdrop-filter: blur(8px);
+        }}
+
+        .ft-appearance-kpi-label {{
+            font-size: 11px;
+            font-weight: 650;
+            color: var(--ft-muted);
+            margin-bottom: 6px;
+        }}
+
+        .ft-appearance-kpi-value {{
+            font-family: var(--ft-display) !important;
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--ft-text);
+            letter-spacing: -0.02em;
+        }}
+
+        .ft-appearance-kpi-bar {{
+            margin-top: 10px;
+            height: 6px;
+            border-radius: 999px;
+            background: rgba(var(--ft-accent-rgb), 0.14);
+            overflow: hidden;
+        }}
+
+        .ft-appearance-kpi-bar > span {{
+            display: block;
+            height: 100%;
+            width: 68%;
+            border-radius: 999px;
+            background: linear-gradient(
+                90deg,
+                var(--ft-accent),
+                var(--ft-accent-strong)
+            );
+        }}
+
+        .ft-theme-card {{
+            border-radius: 18px;
+            padding: 12px;
+            border: 1px solid var(--ft-border);
+            background: var(--ft-panel-soft);
+            transition:
+                transform 160ms ease,
+                border-color 160ms ease,
+                box-shadow 160ms ease;
+        }}
+
+        .ft-theme-card.is-selected {{
+            border-color: rgba(var(--ft-accent-rgb), 0.55);
+            box-shadow:
+                0 0 0 3px rgba(var(--ft-accent-rgb), 0.16),
+                var(--ft-shadow);
+            transform: translateY(-1px);
+        }}
+
+        .ft-theme-card-window {{
             border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid rgba(148, 163, 184, 0.22);
+            min-height: 108px;
+        }}
+
+        .ft-theme-card-chrome {{
+            display: flex;
+            gap: 5px;
+            padding: 8px 10px;
+            background: rgba(0, 0, 0, 0.18);
+        }}
+
+        .ft-theme-card-chrome span {{
+            width: 7px;
+            height: 7px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.35);
+        }}
+
+        .ft-theme-card-body {{
+            display: grid;
+            grid-template-columns: 34px 1fr;
+            gap: 8px;
+            padding: 10px;
+            min-height: 72px;
+        }}
+
+        .ft-theme-card-nav {{
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.08);
+        }}
+
+        .ft-theme-card-main {{
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }}
+
+        .ft-theme-card-line {{
+            height: 10px;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.12);
+        }}
+
+        .ft-theme-card-line.accent {{
+            width: 42%;
+            background: var(--ft-card-accent, #60a5fa);
+        }}
+
+        .ft-theme-card-meta {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 10px;
+            padding: 0 2px;
+        }}
+
+        .ft-theme-card-title {{
+            font-weight: 750;
+            font-size: 14px;
+            color: var(--ft-text);
+        }}
+
+        .ft-theme-card-hint {{
+            font-size: 11px;
+            font-weight: 650;
+            color: var(--ft-muted);
+        }}
+
+        .ft-theme-card.is-selected .ft-theme-card-hint {{
+            color: var(--ft-accent);
+        }}
+
+        .ft-accent-swatch {{
+            text-align: center;
+            padding: 4px 2px 2px 2px;
+        }}
+
+        .ft-accent-orb {{
+            width: 52px;
+            height: 52px;
+            margin: 0 auto 4px auto;
+            border-radius: 999px;
+            background: linear-gradient(
+                145deg,
+                var(--ft-orb-a),
+                var(--ft-orb-b)
+            );
+            box-shadow:
+                0 10px 22px rgba(0, 0, 0, 0.18),
+                inset 0 1px 0 rgba(255, 255, 255, 0.35);
+            border: 3px solid transparent;
+            transition:
+                transform 160ms ease,
+                box-shadow 160ms ease,
+                border-color 160ms ease;
+        }}
+
+        .ft-accent-swatch.is-selected .ft-accent-orb {{
+            transform: scale(1.06);
+            border-color: var(--ft-text);
+            box-shadow:
+                0 0 0 3px rgba(var(--ft-accent-rgb), 0.28),
+                0 12px 24px rgba(0, 0, 0, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        }}
+
+        .ft-accent-name {{
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--ft-muted);
+        }}
+
+        .ft-accent-swatch.is-selected .ft-accent-name {{
+            color: var(--ft-text);
+        }}
+
+        .ft-appearance-label {{
+            font-size: 13px;
+            font-weight: 750;
+            color: var(--ft-text);
+            margin: 4px 0 10px 0;
+            letter-spacing: -0.01em;
+        }}
+
+        /* ---- Form widgets (Streamlit / Baseweb) ---- */
+
+        label[data-testid="stWidgetLabel"] p,
+        label[data-testid="stWidgetLabel"] span {{
+            color: var(--ft-muted) !important;
+        }}
+
+        .stApp .stTextInput input,
+        .stApp .stNumberInput input,
+        .stApp .stDateInput input,
+        .stApp .stTextArea textarea,
+        .stApp .stNumberInput [data-baseweb="input"],
+        .stApp .stTextInput [data-baseweb="base-input"],
+        .stApp .stDateInput [data-baseweb="base-input"],
+        .stApp .stTextArea [data-baseweb="base-input"],
+        .stApp div[data-baseweb="input"],
+        .stApp div[data-baseweb="base-input"],
+        .stApp [data-testid="stTextInput"] input,
+        .stApp [data-testid="stNumberInput"] input,
+        .stApp [data-testid="stDateInput"] input,
+        .stApp [data-testid="stTextArea"] textarea {{
+            border-radius: 12px !important;
             font-family: var(--ft-font) !important;
-        }
+            background-color: {theme.input_bg} !important;
+            background: {theme.input_bg} !important;
+            color: {theme.text} !important;
+            border-color: {theme.border} !important;
+            caret-color: {theme.text} !important;
+        }}
 
-        div[data-baseweb="select"] {
-            border-radius: 12px;
-        }
+        .stTextInput input::placeholder,
+        .stTextArea textarea::placeholder {{
+            color: {theme.muted} !important;
+            opacity: 0.85;
+        }}
 
-        div[data-testid="stFileUploader"] section {
-            border-radius: 16px;
-            border: 1px dashed rgba(96, 165, 250, 0.28);
-            background: rgba(11, 18, 32, 0.55);
-        }
+        .stApp [data-testid="stSelectbox"] div[data-baseweb="select"],
+        .stApp [data-testid="stMultiSelect"] div[data-baseweb="select"],
+        .stApp div[data-baseweb="select"] {{
+            border-radius: 12px !important;
+        }}
 
-        div[data-testid="stExpander"] {
+        .stApp [data-testid="stSelectbox"] div[data-baseweb="select"] > div,
+        .stApp [data-testid="stMultiSelect"] div[data-baseweb="select"] > div,
+        .stApp div[data-baseweb="select"] > div,
+        .stApp [data-testid="stSelectbox"] div[data-baseweb="select"] > div > div,
+        .stApp [data-testid="stMultiSelect"] div[data-baseweb="select"] > div > div {{
+            background-color: {theme.input_bg} !important;
+            background: {theme.input_bg} !important;
+            border-color: {theme.border} !important;
+            color: {theme.text} !important;
+            min-height: 42px;
+        }}
+
+        .stApp div[data-baseweb="select"] span,
+        .stApp div[data-baseweb="select"] div,
+        .stApp div[data-baseweb="select"] p,
+        .stApp div[data-baseweb="select"] svg,
+        .stApp [data-testid="stSelectbox"] span,
+        .stApp [data-testid="stSelectbox"] svg {{
+            color: {theme.text} !important;
+            fill: {theme.text} !important;
+        }}
+
+        /* Menu a tendina select (non i tooltip di help) */
+        ul[role="listbox"],
+        li[role="option"],
+        div[data-baseweb="menu"],
+        div[data-baseweb="popover"] ul[role="listbox"],
+        div[data-baseweb="popover"] div[data-baseweb="menu"] {{
+            background-color: {theme.input_bg} !important;
+            background: {theme.input_bg} !important;
+            color: {theme.text} !important;
+            border-color: {theme.border} !important;
+        }}
+
+        li[role="option"]:hover,
+        li[aria-selected="true"] {{
+            background-color: rgba(var(--ft-accent-rgb), 0.14) !important;
+        }}
+
+        /* Tooltip help: niente override aggressivi (evita “pallini” strani) */
+        div[role="tooltip"],
+        [data-testid="stTooltipContent"],
+        [data-testid="stTooltipHoverTarget"] {{
+            color: {theme.text} !important;
+        }}
+
+        /* File uploader */
+        .stApp div[data-testid="stFileUploader"] section,
+        .stApp div[data-testid="stFileUploaderDropzone"],
+        .stApp [data-testid="stFileUploaderDropzone"] {{
+            border-radius: 16px !important;
+            border: 1px dashed rgba(var(--ft-accent-rgb), 0.35) !important;
+            background: {theme.input_bg} !important;
+            background-color: {theme.input_bg} !important;
+            color: {theme.text} !important;
+        }}
+
+        .stApp [data-testid="stFileUploaderDropzone"] *,
+        .stApp [data-testid="stFileUploaderDropzoneInstructions"] *,
+        .stApp [data-testid="stFileUploader"] small,
+        .stApp [data-testid="stFileUploader"] span,
+        .stApp [data-testid="stFileUploader"] p {{
+            color: {theme.muted} !important;
+        }}
+
+        .stApp [data-testid="stFileUploader"] button,
+        .stApp [data-testid="stFileUploaderDropzone"] button,
+        .stApp [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"],
+        .stApp [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"] > button {{
+            background: {theme.panel} !important;
+            background-color: {theme.input_bg} !important;
+            color: {theme.text} !important;
+            border: 1px solid {theme.border} !important;
+            border-radius: 12px !important;
+            box-shadow: none !important;
+        }}
+
+        .stApp [data-testid="stFileUploader"] button:hover,
+        .stApp [data-testid="stFileUploaderDropzone"] button:hover {{
+            border-color: rgba(var(--ft-accent-rgb), 0.45) !important;
+            background: rgba(var(--ft-accent-rgb), 0.08) !important;
+        }}
+
+        /* Alert / info / warning */
+        [data-testid="stAlert"] {{
+            border-radius: 14px !important;
+            border: 1px solid var(--ft-border) !important;
+            background: var(--ft-panel) !important;
+            color: var(--ft-text) !important;
+        }}
+
+        [data-testid="stAlert"] p,
+        [data-testid="stAlert"] span,
+        [data-testid="stAlert"] div {{
+            color: var(--ft-text) !important;
+        }}
+
+        /* Tabs */
+        button[data-baseweb="tab"] {{
+            color: var(--ft-muted) !important;
+        }}
+
+        button[data-baseweb="tab"][aria-selected="true"] {{
+            color: var(--ft-text) !important;
+        }}
+
+        div[data-baseweb="tab-highlight"] {{
+            background-color: var(--ft-accent) !important;
+            background: var(--ft-accent) !important;
+            height: 3px !important;
+            border-radius: 999px !important;
+        }}
+
+        div[data-baseweb="tab-border"] {{
+            background-color: var(--ft-border) !important;
+            background: var(--ft-border) !important;
+        }}
+
+        div[data-testid="stExpander"] {{
             border-radius: 14px;
             border-color: var(--ft-border);
-            background: rgba(11, 18, 32, 0.42);
-        }
+            background: var(--ft-panel-soft);
+        }}
 
-        .ft-section-title {
+        div[data-testid="stExpander"] summary,
+        div[data-testid="stExpander"] p,
+        div[data-testid="stExpander"] span {{
+            color: var(--ft-text) !important;
+        }}
+
+        /* Code / path blocks */
+        [data-testid="stCode"],
+        [data-testid="stCode"] pre,
+        [data-testid="stCode"] code {{
+            background: rgba(var(--ft-accent-rgb), 0.06) !important;
+            color: var(--ft-text) !important;
+            border: 1px solid var(--ft-border) !important;
+            border-radius: 12px !important;
+        }}
+
+        /* Radio / checkbox */
+        .stRadio label,
+        .stCheckbox label {{
+            color: var(--ft-text) !important;
+        }}
+
+        /* Icone Streamlit (uploader / material) */
+        [data-testid="stIconMaterial"],
+        [data-testid="stIconEmoji"],
+        [data-testid="stFileUploader"] svg,
+        [data-testid="stFileUploaderDropzone"] svg {{
+            color: {theme.text} !important;
+            fill: {theme.text} !important;
+        }}
+
+        /* Evita “blocchi neri” residui nei controlli */
+        .stApp [class*="st-"] input,
+        .stApp [class*="st-"] textarea {{
+            background-color: {theme.input_bg} !important;
+            color: {theme.text} !important;
+        }}
+
+        .ft-section-title {{
             font-family: var(--ft-display) !important;
             font-size: 1.35rem;
             font-weight: 700;
             color: var(--ft-text);
             margin: 1.1rem 0 0.55rem 0;
             letter-spacing: -0.02em;
-        }
+        }}
 
         /* Card pannello: distribuzione + grafici dashboard */
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-distribution-anchor),
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-chart-card-anchor),
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-panel-anchor),
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor) {
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor) {{
             background:
                 radial-gradient(
                     circle at 12% 0%,
-                    rgba(96, 165, 250, 0.12),
+                    rgba(var(--ft-accent-rgb), 0.12),
                     transparent 42%
                 ),
                 var(--ft-panel) !important;
             border: 1px solid var(--ft-border) !important;
             border-radius: var(--ft-radius) !important;
-            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.28);
+            box-shadow: var(--ft-shadow);
             padding: 18px 16px 20px 16px !important;
             margin-bottom: 4px;
             animation: ft-fade-up 300ms ease-out;
-        }
+        }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor) {
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor) {{
             padding: 14px 14px 12px 14px !important;
             margin-bottom: 10px;
             background:
                 radial-gradient(
                     circle at 8% 0%,
-                    rgba(96, 165, 250, 0.08),
+                    rgba(var(--ft-accent-rgb), 0.08),
                     transparent 40%
                 ),
                 var(--ft-panel) !important;
-        }
+        }}
 
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-distribution-anchor)
         [data-testid="stHorizontalBlock"]
-        > div[data-testid="stColumn"]:first-child {
-            border-right: 1px solid rgba(148, 163, 184, 0.12);
+        > div[data-testid="stColumn"]:first-child {{
+            border-right: 1px solid var(--ft-border);
             padding-right: 12px;
-        }
+        }}
 
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-distribution-anchor)
         [data-testid="stHorizontalBlock"]
-        > div[data-testid="stColumn"]:last-child {
+        > div[data-testid="stColumn"]:last-child {{
             padding-left: 8px;
-        }
+        }}
 
-        .ft-category-scroll {
+        .ft-category-scroll {{
             scrollbar-width: thin;
-            scrollbar-color: #243044 transparent;
-        }
+            scrollbar-color: var(--ft-scrollbar) transparent;
+        }}
 
-        .ft-category-scroll::-webkit-scrollbar {
+        .ft-category-scroll::-webkit-scrollbar {{
             width: 6px;
-        }
+        }}
 
-        .ft-category-scroll::-webkit-scrollbar-thumb {
-            background: #243044;
+        .ft-category-scroll::-webkit-scrollbar-thumb {{
+            background: var(--ft-scrollbar);
             border-radius: 8px;
-        }
+        }}
 
-        .ft-movement-row {
+        .ft-movement-row {{
             display: flex;
             justify-content: space-between;
             align-items: center;
             gap: 16px;
             padding: 12px 4px;
-            border-bottom: 1px solid rgba(148, 163, 184, 0.10);
-        }
+            border-bottom: 1px solid var(--ft-border);
+        }}
 
-        .ft-movement-row:last-child {
+        .ft-movement-row:last-child {{
             border-bottom: none;
-        }
+        }}
 
-        ::-webkit-scrollbar {
+        .ft-brand-finance {{
+            color: var(--ft-text);
+        }}
+
+        .ft-brand-tracker {{
+            color: var(--ft-accent-strong);
+        }}
+
+        .ft-brand-subtitle {{
+            color: var(--ft-muted);
+        }}
+
+        .ft-version-chip {{
+            background: rgba(var(--ft-accent-rgb), 0.14);
+            color: var(--ft-accent-strong);
+            font-weight: 750;
+        }}
+
+        ::-webkit-scrollbar {{
             width: 8px;
-        }
+        }}
 
-        ::-webkit-scrollbar-thumb {
-            background: #243044;
+        ::-webkit-scrollbar-thumb {{
+            background: var(--ft-scrollbar);
             border-radius: 8px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: #334155;
-        }
+        }}
         </style>
         """,
         unsafe_allow_html=True,

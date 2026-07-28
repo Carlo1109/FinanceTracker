@@ -4,6 +4,7 @@ from pathlib import Path
 import streamlit as st
 
 from src.components.cards import (
+    ACCENT_COLOR,
     EXPENSE_COLOR,
     INCOME_COLOR,
     MUTED_COLOR,
@@ -38,9 +39,14 @@ def _render_preview_panel(preview: dict) -> None:
         render_html(
             f"""
             <div style="
-                margin-bottom:14px;
+                margin-bottom:16px;
+                padding:4px 0 2px 0;
                 animation: ft-fade-up 280ms ease-out;
             ">
+                <div class="ft-appearance-chip" style="width:fit-content;margin-bottom:12px;">
+                  <span class="ft-appearance-chip-dot"></span>
+                  Pronto per l’import
+                </div>
                 <div style="
                     font-family:Fraunces,Georgia,serif;
                     font-size:clamp(24px, 2.4vw, 30px);
@@ -96,51 +102,63 @@ def _render_import_wow(result: dict) -> None:
             f"Top: {get_category_icon(name)} {name} · {euro(amount)}"
         )
 
-    with styled_panel():
-        render_html(
-            f"""
-            <div style="
-                padding:6px 2px 2px 2px;
-                animation: ft-import-pop 520ms cubic-bezier(0.22, 1, 0.36, 1);
-            ">
-                <div style="
-                    font-family:Manrope,sans-serif;
-                    font-size:12px;
-                    font-weight:650;
-                    letter-spacing:0.1em;
-                    text-transform:uppercase;
-                    color:#86efac;
-                ">Import completato</div>
-                <div style="
-                    margin-top:10px;
-                    font-family:Fraunces,Georgia,serif;
-                    font-size:clamp(28px, 3vw, 36px);
-                    font-weight:700;
-                    color:{TEXT_COLOR};
-                    line-height:1.15;
-                ">
-                    +{inserted} movimenti
-                </div>
-                <div style="
-                    margin-top:8px;
-                    font-size:14px;
-                    color:{MUTED_COLOR};
-                ">
-                    {skipped} già presenti · uscite
-                    {euro(float(result.get("total_new_expense") or 0))}
-                    · entrate {euro(float(result.get("total_new_income") or 0))}
-                </div>
-                <div style="
-                    margin-top:10px;
-                    font-size:14px;
-                    font-weight:650;
-                    color:#bbf7d0;
-                ">
-                    {html.escape(top_line)}
-                </div>
+    render_html(
+        f"""
+        <div style="
+            display:flex;
+            flex-direction:column;
+            align-items:center;
+            justify-content:center;
+            text-align:center;
+            min-height:200px;
+            box-sizing:border-box;
+            padding:36px 28px;
+            border-radius:18px;
+            background:
+                radial-gradient(
+                    circle at 50% 45%,
+                    rgba(var(--ft-accent-rgb), 0.22),
+                    transparent 58%
+                ),
+                var(--ft-panel);
+            border:1px solid var(--ft-border);
+            box-shadow:var(--ft-shadow);
+            animation: ft-import-pop 520ms cubic-bezier(0.22, 1, 0.36, 1);
+        ">
+            <div class="ft-appearance-chip" style="width:fit-content;">
+              <span class="ft-appearance-chip-dot"></span>
+              Import completato
             </div>
-            """
-        )
+            <div style="
+                margin-top:14px;
+                font-family:Fraunces,Georgia,serif;
+                font-size:clamp(28px, 3vw, 36px);
+                font-weight:700;
+                color:{TEXT_COLOR};
+                line-height:1.15;
+            ">
+                +{inserted} movimenti
+            </div>
+            <div style="
+                margin-top:10px;
+                font-size:14px;
+                color:{MUTED_COLOR};
+            ">
+                {skipped} già presenti · uscite
+                {euro(float(result.get("total_new_expense") or 0))}
+                · entrate {euro(float(result.get("total_new_income") or 0))}
+            </div>
+            <div style="
+                margin-top:10px;
+                font-size:14px;
+                font-weight:650;
+                color:{ACCENT_COLOR};
+            ">
+                {html.escape(top_line)}
+            </div>
+        </div>
+        """
+    )
 
     if inserted == 0 and skipped > 0:
         st.info(
@@ -176,8 +194,8 @@ def show_import_data() -> None:
         uploaded_file = st.file_uploader(
             f"File {info.label}",
             type=None,
-            help=info.help_text,
         )
+        st.caption(info.help_text)
 
         if uploaded_file:
             suffix = Path(uploaded_file.name).suffix.lower()
@@ -197,11 +215,20 @@ def show_import_data() -> None:
                     margin-bottom:4px;
                     padding:14px 16px;
                     border-radius:14px;
-                    background:rgba(52,211,153,0.10);
-                    border:1px solid rgba(52,211,153,0.22);
+                    background:rgba(var(--ft-accent-rgb), 0.10);
+                    border:1px solid rgba(var(--ft-accent-rgb), 0.28);
                     color:{TEXT_COLOR};
                     font-size:14px;
+                    animation: ft-fade-up 240ms ease-out;
                 ">
+                    <span style="
+                        display:inline-block;
+                        width:8px;height:8px;border-radius:999px;
+                        background:var(--ft-accent);
+                        margin-right:8px;
+                        box-shadow:0 0 0 3px rgba(var(--ft-accent-rgb), 0.22);
+                        vertical-align:middle;
+                    "></span>
                     File selezionato:
                     <b>{html.escape(uploaded_file.name)}</b>
                 </div>

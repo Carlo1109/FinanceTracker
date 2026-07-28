@@ -108,4 +108,14 @@ def init_db() -> None:
                 """
             )
 
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
         connection.commit()

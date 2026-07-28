@@ -27,6 +27,7 @@ datas = [
     (str(PROJECT_ROOT / "VERSION"), "."),
     (str(PROJECT_ROOT / "config" / "categories.json"), "config"),
     (str(PROJECT_ROOT / "assets"), "assets"),
+    (str(PROJECT_ROOT / ".streamlit"), ".streamlit"),
 ]
 
 datas += streamlit_datas
@@ -53,6 +54,7 @@ hiddenimports = [
     "src.services.analytics",
     "src.services.backup_service",
     "src.services.categories",
+    "src.services.settings_service",
     "src.services.imports",
     "src.services.imports.base",
     "src.services.imports.fineco",
@@ -63,6 +65,7 @@ hiddenimports = [
     "src.services.movement_service",
     "src.theme.style",
     "src.theme.colors",
+    "src.theme.tokens",
     "src.utils",
     "src.utils.export_excel",
     "src.utils.formatting",

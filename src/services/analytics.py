@@ -273,15 +273,18 @@ def get_value_comparison(
     *,
     higher_is_better: bool,
 ) -> tuple[str | None, str]:
-    muted = "#94a3b8"
-    good = "#34d399"
-    bad = "#f87171"
+    muted = "var(--ft-muted)"
+    good = "var(--ft-income)"
+    bad = "var(--ft-danger)"
 
     if previous_value == 0 and current_value == 0:
         return None, muted
 
     if previous_value == 0:
-        return "Nessun confronto possibile vs periodo prec.", "#60a5fa"
+        return (
+            "Nessun confronto possibile vs periodo prec.",
+            "var(--ft-accent)",
+        )
 
     percentage_change = (
         (current_value - previous_value) / abs(previous_value) * 100

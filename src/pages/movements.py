@@ -81,19 +81,19 @@ def show_movements() -> None:
                 background:
                     radial-gradient(
                         circle at 14% 0%,
-                        rgba(96,165,250,0.18),
+                        rgba(var(--ft-accent-rgb), 0.18),
                         transparent 44%
                     ),
-                    rgba(11,18,32,0.94);
-                border:1px solid rgba(148,163,184,0.16);
-                box-shadow:0 18px 40px rgba(0,0,0,0.30);
+                    var(--ft-panel);
+                border:1px solid var(--ft-border);
+                box-shadow:var(--ft-shadow);
                 animation: ft-fade-up 360ms ease-out;
             ">
                 <div style="
                     font-family:Fraunces,Georgia,serif;
                     font-size:clamp(28px, 3.2vw, 38px);
                     font-weight:700;
-                    color:#eef3ff;
+                    color:var(--ft-text);
                     letter-spacing:-0.02em;
                 ">Nessun movimento</div>
                 <div style="
@@ -101,7 +101,7 @@ def show_movements() -> None:
                     max-width:32rem;
                     font-size:15px;
                     line-height:1.5;
-                    color:#94a3b8;
+                    color:var(--ft-muted);
                 ">
                     Importa un estratto conto oppure aggiungi il primo
                     movimento manualmente.
@@ -123,32 +123,34 @@ def show_movements() -> None:
     months = sorted(df["mese"].dropna().unique(), reverse=True)
     accounts = sorted(df["account"].dropna().unique().tolist())
 
-    filter_col_1, filter_col_2, filter_col_3, filter_col_4 = st.columns(
-        [1.2, 1.4, 1.4, 2.4]
-    )
-
-    with filter_col_1:
-        selected_month = st.selectbox("Mese", months)
-
-    with filter_col_2:
-        selected_account = st.selectbox("Conto", ["Tutti"] + accounts)
-
-    with filter_col_3:
-        selected_category = st.selectbox(
-            "Categoria",
-            ["Tutte"] + categories,
-            format_func=lambda name: (
-                name
-                if name == "Tutte"
-                else f"{get_category_icon(name)} {name}"
-            ),
+    render_section_title("Filtri")
+    with styled_panel():
+        filter_col_1, filter_col_2, filter_col_3, filter_col_4 = st.columns(
+            [1.2, 1.4, 1.4, 2.4]
         )
 
-    with filter_col_4:
-        search = st.text_input(
-            "Cerca",
-            placeholder="Lidl, PayPal, Trenitalia...",
-        )
+        with filter_col_1:
+            selected_month = st.selectbox("Mese", months)
+
+        with filter_col_2:
+            selected_account = st.selectbox("Conto", ["Tutti"] + accounts)
+
+        with filter_col_3:
+            selected_category = st.selectbox(
+                "Categoria",
+                ["Tutte"] + categories,
+                format_func=lambda name: (
+                    name
+                    if name == "Tutte"
+                    else f"{get_category_icon(name)} {name}"
+                ),
+            )
+
+        with filter_col_4:
+            search = st.text_input(
+                "Cerca",
+                placeholder="Lidl, PayPal, Trenitalia...",
+            )
 
     filtered_df = df[df["mese"] == selected_month].copy()
 
@@ -275,7 +277,7 @@ def show_movements() -> None:
                             <div style="
                                 font-size:15px;
                                 font-weight:700;
-                                color:#eef3ff;
+                                color:var(--ft-text);
                                 line-height:1.35;
                             ">
                                 {html.escape(title)}
@@ -283,19 +285,19 @@ def show_movements() -> None:
                             <div style="
                                 margin-top:6px;
                                 font-size:12px;
-                                color:#94a3b8;
+                                color:var(--ft-muted);
                                 display:flex;
                                 align-items:center;
                                 flex-wrap:wrap;
                                 gap:8px;
                             ">
                                 <span style="
-                                    background:rgba(96,165,250,0.12);
-                                    color:#bfdbfe;
+                                    background:rgba(var(--ft-accent-rgb),0.14);
+                                    color:var(--ft-accent-strong);
                                     padding:3px 8px;
                                     border-radius:8px;
                                     font-size:11px;
-                                    font-weight:700;
+                                    font-weight:750;
                                 ">{html.escape(icon)} {html.escape(category)}</span>
                                 <span>{html.escape(date)}</span>
                                 <span>{html.escape(account)}</span>
