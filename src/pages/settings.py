@@ -958,6 +958,7 @@ def show_settings() -> None:
                         file_name=backup_path.name,
                         mime="application/zip",
                         width="stretch",
+                        type="primary",
                     )
 
             st.markdown("#### Ripristina backup")

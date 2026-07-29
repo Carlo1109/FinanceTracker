@@ -29,10 +29,12 @@ packaging/macos/*.iconset/
 assets/icons/*.icns
 packaging/windows/installer_staging/
 
-# Secrets / tokens (never commit)
+# Secrets / token GitHub (mai commitare)
+# Nota: src/theme/tokens.py è codice del tema, non un secret.
 *ghp*
 token*.txt
-*token*
+token *
+!src/theme/tokens.py
 
 # ==========================================
 # Local application data

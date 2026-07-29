@@ -20,6 +20,7 @@ EXPORT_COLUMNS = [
     ("importo", "Importo"),
     ("speciale", "Speciale"),
     ("speciale_mesi", "Mesi ripartizione"),
+    ("escludi_metriche", "Escludere dalle metriche"),
     ("notes", "Note"),
 ]
 
@@ -57,6 +58,13 @@ def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
         )
     else:
         frame["speciale_mesi"] = 0
+
+    if "escludi_metriche" in frame.columns:
+        frame["escludi_metriche"] = frame["escludi_metriche"].fillna(
+            False
+        ).map(lambda value: "Sì" if bool(value) else "No")
+    else:
+        frame["escludi_metriche"] = "No"
 
     columns = [
         source

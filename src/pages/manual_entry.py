@@ -4,6 +4,10 @@ from src.components.cards import (
     render_section_title,
     styled_panel,
 )
+from src.components.date_input import themed_date_input
+from src.services.analytics import (
+    is_transfer_category,
+)
 from src.services.categories import get_category_icon, get_category_names
 from src.services.movement_service import add_manual_movement
 from src.utils.formatting import euro
@@ -30,17 +34,25 @@ def show_manual_entry() -> None:
             horizontal=True,
         )
 
-        col1, col2 = st.columns([1, 1])
+        movement_date = themed_date_input("Data", key="manual_date")
 
-        with col1:
-            movement_date = st.date_input("Data")
-            amount = st.number_input("Importo (€)", min_value=0.01, step=0.01)
+        amount_col, account_col, category_col = st.columns(3)
 
-        with col2:
+        with amount_col:
+            amount = st.number_input(
+                "Importo (€)",
+                min_value=0.01,
+                step=0.01,
+                format="%.2f",
+            )
+
+        with account_col:
             account = st.selectbox(
                 "Conto",
                 ["Fineco", "Revolut", "PostePay", "Contanti", "PayPal", "Altro"],
             )
+
+        with category_col:
             category = st.selectbox(
                 "Categoria",
                 categories,
@@ -59,11 +71,34 @@ def show_manual_entry() -> None:
 
         is_special = False
         speciale_mesi = 0
-        if movement_type == "Uscita":
+        exclude_from_metrics = False
+
+        if is_transfer_category(category):
+            st.caption(
+                "I trasferimenti interni restano in lista ma non entrano "
+                "in entrate, uscite o medie."
+            )
+        else:
+            exclude_from_metrics = st.checkbox(
+                "Escludere dalle metriche",
+                key="manual_escludi_metriche",
+                help=(
+                    "Il movimento resta in lista ma non conta "
+                    "in entrate, uscite, medie e grafici."
+                ),
+            )
+
+        if movement_type == "Uscita" and not is_transfer_category(category):
             is_special = st.checkbox(
                 "Spesa speciale",
-                value=False,
                 key="manual_speciale",
+                help=(
+                    "Segna spese fuori dalla normalità. "
+                    "Opzionale: ripartiscile sui mesi "
+                    "(es. abbonamento annuale su 12). "
+                    "0 mesi = esclusa dalla media giornaliera; "
+                    "l'importo intero resta nei totali."
+                ),
             )
             if is_special:
                 speciale_mesi = int(
@@ -74,24 +109,18 @@ def show_manual_entry() -> None:
                         value=0,
                         step=1,
                         key="manual_speciale_mesi",
+                        help=(
+                            "Quanti mesi usare nella media giornaliera. "
+                            "0 = esclusa del tutto dalla media "
+                            "(resta nei totali)."
+                        ),
                     )
                 )
                 if speciale_mesi > 0:
                     st.caption(
-                        f"Nella media giornaliera conterà "
-                        f"{euro(amount / speciale_mesi)}/mese "
-                        f"per {speciale_mesi} mesi. L'importo intero resta nei totali."
+                        f"Nella media: {euro(amount / speciale_mesi)}/mese "
+                        f"per {speciale_mesi} mesi."
                     )
-                else:
-                    st.caption(
-                        "0 mesi = esclusa del tutto dalla media giornaliera "
-                        "(resta nei totali)."
-                    )
-            else:
-                st.caption(
-                    "Segna spese fuori ritmo e, se vuoi, ripartiscile "
-                    "sui mesi (es. abbonamento annuale su 12)."
-                )
 
         submitted = st.button(
             "Salva movimento",
@@ -114,6 +143,7 @@ def show_manual_entry() -> None:
             notes=notes.strip(),
             speciale=is_special,
             speciale_mesi=speciale_mesi,
+            escludi_metriche=exclude_from_metrics,
         )
 
         st.toast("Movimento salvato")

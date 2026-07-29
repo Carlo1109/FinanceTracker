@@ -901,12 +901,20 @@ def show_dashboard() -> None:
         },
     )
 
+    flow_labels = {
+        "entrate": "Entrate",
+        "uscite": "Uscite",
+        "investimenti": "Investimenti",
+    }
+    for trace in fig2.data:
+        trace.name = flow_labels.get(trace.name, trace.name)
+
     fig2.update_layout(
         height=400,
         margin=dict(l=10, r=20, t=10, b=10),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color=sem.muted, family="Manrope"),
+        font=dict(color=sem.text, family="Manrope", size=13),
         legend_title_text="",
         xaxis_title="",
         yaxis_title="",
@@ -917,12 +925,18 @@ def show_dashboard() -> None:
             y=1.02,
             xanchor="left",
             x=0,
+            font=dict(color=sem.text, family="Manrope", size=13),
         ),
-        xaxis=dict(showgrid=False, zeroline=False),
+        xaxis=dict(
+            showgrid=False,
+            zeroline=False,
+            tickfont=dict(color=sem.muted),
+        ),
         yaxis=dict(
             showgrid=True,
-            gridcolor="rgba(148,163,184,0.12)",
+            gridcolor="rgba(148,163,184,0.18)",
             zeroline=False,
+            tickfont=dict(color=sem.muted),
         ),
     )
 

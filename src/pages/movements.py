@@ -7,6 +7,7 @@ from src.components.cards import (
     EXPENSE_COLOR,
     INCOME_COLOR,
     INVESTMENT_COLOR,
+    MUTED_COLOR,
     render_html,
     render_kpi_card,
     render_section_title,
@@ -20,6 +21,7 @@ from src.components.navigation import switch_to
 from src.services.analytics import (
     INVESTMENT_CATEGORY,
     calculate_financial_metrics,
+    is_transfer_category,
 )
 from src.services.categories import (
     get_category_icon,
@@ -29,6 +31,7 @@ from src.services.movement_service import (
     delete_movement,
     load_movements,
     update_movement_category,
+    update_movement_escludi_metriche,
     update_movement_notes,
     update_movement_speciale,
 )
@@ -36,6 +39,20 @@ from src.utils.export_excel import (
     movements_export_filename,
 )
 from src.utils.formatting import euro, signed_euro
+
+
+_MOVEMENTS_TOAST_KEY = "movements_toast"
+
+
+def _queue_toast(message: str) -> None:
+    """Salva il toast e mostralo dopo il rerun (altrimenti sparisce subito)."""
+    st.session_state[_MOVEMENTS_TOAST_KEY] = message
+
+
+def _show_queued_toast() -> None:
+    message = st.session_state.pop(_MOVEMENTS_TOAST_KEY, None)
+    if message:
+        st.toast(message, duration=4)
 
 
 def clean_description(value: str) -> str:
@@ -69,6 +86,7 @@ def get_categories() -> list[str]:
 def show_movements() -> None:
     st.title("Movimenti")
     st.caption("Cerca, filtra e modifica i movimenti salvati.")
+    _show_queued_toast()
     render_pending_export_dialog()
 
     df = load_movements()
@@ -123,6 +141,7 @@ def show_movements() -> None:
 
     categories = get_categories()
     months = sorted(df["mese"].dropna().unique(), reverse=True)
+    month_options = ["Tutti"] + list(months)
     accounts = sorted(df["account"].dropna().unique().tolist())
 
     render_section_title("Filtri")
@@ -132,7 +151,7 @@ def show_movements() -> None:
         )
 
         with filter_col_1:
-            selected_month = st.selectbox("Mese", months)
+            selected_month = st.selectbox("Mese", month_options)
 
         with filter_col_2:
             selected_account = st.selectbox("Conto", ["Tutti"] + accounts)
@@ -154,7 +173,14 @@ def show_movements() -> None:
                 placeholder="Lidl, PayPal, Trenitalia...",
             )
 
-    filtered_df = df[df["mese"] == selected_month].copy()
+    search_term = (search or "").strip()
+    # Con testo di ricerca: guarda tutti i mesi (la data resta sulla riga).
+    if search_term:
+        filtered_df = df.copy()
+    elif selected_month == "Tutti":
+        filtered_df = df.copy()
+    else:
+        filtered_df = df[df["mese"] == selected_month].copy()
 
     if selected_account != "Tutti":
         filtered_df = filtered_df[
@@ -166,26 +192,26 @@ def show_movements() -> None:
             filtered_df["categoria"] == selected_category
         ].copy()
 
-    if search:
+    if search_term:
         mask = (
             filtered_df["descrizione"]
             .fillna("")
-            .str.contains(search, case=False, na=False)
+            .str.contains(search_term, case=False, na=False)
             | filtered_df["descrizione_completa"]
             .fillna("")
-            .str.contains(search, case=False, na=False)
+            .str.contains(search_term, case=False, na=False)
             | filtered_df["categoria"]
             .fillna("")
-            .str.contains(search, case=False, na=False)
+            .str.contains(search_term, case=False, na=False)
             | filtered_df["account"]
             .fillna("")
-            .str.contains(search, case=False, na=False)
+            .str.contains(search_term, case=False, na=False)
             | filtered_df["notes"]
             .fillna("")
-            .str.contains(search, case=False, na=False)
+            .str.contains(search_term, case=False, na=False)
             | filtered_df["importo"]
             .astype(str)
-            .str.contains(search, case=False, na=False)
+            .str.contains(search_term, case=False, na=False)
         )
         filtered_df = filtered_df[mask].copy()
 
@@ -225,7 +251,15 @@ def show_movements() -> None:
             value_color=liquidity_color,
         )
 
-    st.caption(f"{len(filtered_df)} movimenti trovati")
+    if search_term:
+        st.caption(
+            f"{len(filtered_df)} movimenti trovati "
+            f"(ricerca su tutti i mesi)"
+        )
+    elif selected_month == "Tutti":
+        st.caption(f"{len(filtered_df)} movimenti trovati (tutti i mesi)")
+    else:
+        st.caption(f"{len(filtered_df)} movimenti trovati")
 
     if filtered_df.empty:
         st.warning(
@@ -250,12 +284,20 @@ def show_movements() -> None:
             else "Altro"
         )
         is_investment = category == INVESTMENT_CATEGORY
+        is_transfer = is_transfer_category(category)
         is_special = bool(row.get("speciale", False))
         special_months = int(row.get("speciale_mesi") or 0)
+        exclude_from_metrics = bool(row.get("escludi_metriche", False))
+        movement_id = int(row["id"])
 
         if is_investment:
             amount_color = INVESTMENT_COLOR
             displayed_amount = euro(abs(amount))
+        elif is_transfer:
+            amount_color = MUTED_COLOR
+            displayed_amount = (
+                f"+{euro(amount)}" if amount > 0 else euro(amount)
+            )
         elif amount > 0:
             amount_color = INCOME_COLOR
             displayed_amount = f"+{euro(amount)}"
@@ -269,12 +311,12 @@ def show_movements() -> None:
         full_description = clean_description(row["descrizione_completa"])
         title = full_description if full_description else description
         account = clean_description(row["account"])
-        special_chip = ""
+        meta_chips = ""
         if is_special:
             chip_label = "Speciale"
             if special_months > 0:
                 chip_label = f"Speciale · {special_months} mesi"
-            special_chip = f"""
+            meta_chips += f"""
                                 <span style="
                                     background:rgba(var(--ft-accent-rgb),0.10);
                                     color:var(--ft-muted);
@@ -284,6 +326,18 @@ def show_movements() -> None:
                                     font-weight:700;
                                     border:1px solid var(--ft-border);
                                 ">{html.escape(chip_label)}</span>
+            """
+        if exclude_from_metrics or is_transfer:
+            meta_chips += f"""
+                                <span style="
+                                    background:rgba(148,163,184,0.16);
+                                    color:var(--ft-muted);
+                                    padding:3px 8px;
+                                    border-radius:8px;
+                                    font-size:11px;
+                                    font-weight:700;
+                                    border:1px solid var(--ft-border);
+                                ">Escluso dalle metriche</span>
             """
 
         with styled_panel(kind="movement"):
@@ -319,7 +373,7 @@ def show_movements() -> None:
                                     font-size:11px;
                                     font-weight:750;
                                 ">{html.escape(icon)} {html.escape(category)}</span>
-                                {special_chip}
+                                {meta_chips}
                                 <span>{html.escape(date)}</span>
                                 <span>{html.escape(account)}</span>
                             </div>
@@ -364,77 +418,144 @@ def show_movements() -> None:
                             int(row["id"]),
                             new_category,
                         )
-                        st.toast("Categoria aggiornata")
+                        _queue_toast("Categoria aggiornata")
                         st.rerun()
 
-                    is_expense = float(row["importo"]) < 0 and not is_investment
+                    exclude_key = f"escludi_metriche_{movement_id}"
+                    if exclude_key not in st.session_state:
+                        st.session_state[exclude_key] = exclude_from_metrics
+
+                    if is_transfer:
+                        st.caption(
+                            "I trasferimenti interni restano in lista ma "
+                            "non entrano in entrate, uscite o medie."
+                        )
+                    else:
+                        marked_exclude = st.checkbox(
+                            "Escludere dalle metriche",
+                            key=exclude_key,
+                            help=(
+                                "Il movimento resta in lista ma non conta "
+                                "in entrate, uscite, medie e grafici."
+                            ),
+                        )
+                        if marked_exclude != exclude_from_metrics:
+                            if st.button(
+                                "Salva esclusione metriche",
+                                key=f"save_escludi_{movement_id}",
+                                type="primary",
+                            ):
+                                update_movement_escludi_metriche(
+                                    movement_id,
+                                    marked_exclude,
+                                )
+                                st.session_state.pop(exclude_key, None)
+                                _queue_toast(
+                                    "Esclusione dalle metriche aggiornata"
+                                )
+                                st.rerun()
+
+                    is_expense = (
+                        float(row["importo"]) < 0
+                        and not is_investment
+                        and not is_transfer
+                    )
                     if is_expense:
+                        speciale_key = f"speciale_{movement_id}"
+                        mesi_key = f"speciale_mesi_{movement_id}"
+                        note_key = f"speciale_note_{movement_id}"
+
+                        if speciale_key not in st.session_state:
+                            st.session_state[speciale_key] = is_special
+                        if mesi_key not in st.session_state:
+                            st.session_state[mesi_key] = special_months
+
                         marked_special = st.checkbox(
                             "Spesa speciale",
-                            value=is_special,
-                            key=f"speciale_{row['id']}",
+                            key=speciale_key,
+                            help=(
+                                "Segna spese fuori dalla normalità. "
+                                "Opzionale: ripartiscile sui mesi "
+                                "(es. abbonamento annuale su 12). "
+                                "0 mesi = esclusa dalla media giornaliera; "
+                                "l'importo intero resta nei totali."
+                            ),
                         )
-                        spread_months = 0
+                        spread_months = int(st.session_state.get(mesi_key) or 0)
+                        special_note = str(row.get("notes") or "")
+                        current_notes = special_note
+
                         if marked_special:
                             spread_months = int(
                                 st.number_input(
                                     "Ripartisci su mesi",
                                     min_value=0,
                                     max_value=60,
-                                    value=special_months,
                                     step=1,
-                                    key=f"speciale_mesi_{row['id']}",
+                                    key=mesi_key,
+                                    help=(
+                                        "Quanti mesi usare nella media giornaliera. "
+                                        "0 = esclusa del tutto dalla media "
+                                        "(resta nei totali)."
+                                    ),
                                 )
                             )
                             if spread_months > 0:
                                 monthly = abs(float(row["importo"])) / spread_months
                                 st.caption(
-                                    f"Nella media giornaliera conta "
-                                    f"{euro(monthly)}/mese per {spread_months} mesi "
-                                    f"(dal mese del pagamento). Resta intera nei totali."
-                                )
-                            else:
-                                st.caption(
-                                    "0 mesi = esclusa del tutto dalla media "
-                                    "giornaliera (resta nei totali)."
+                                    f"Nella media: {euro(monthly)}/mese "
+                                    f"per {spread_months} mesi."
                                 )
 
-                            current_notes = str(row.get("notes") or "")
+                            if note_key not in st.session_state:
+                                st.session_state[note_key] = current_notes
                             special_note = st.text_area(
                                 "Nota",
-                                value=current_notes,
-                                key=f"speciale_note_{row['id']}",
+                                key=note_key,
                                 height=68,
                             )
-                            if special_note.strip() != current_notes.strip():
-                                update_movement_notes(
-                                    int(row["id"]),
-                                    special_note,
-                                )
-                                st.toast("Nota aggiornata")
-                                st.rerun()
-                        else:
-                            st.caption(
-                                "Segna spese fuori ritmo e, se vuoi, "
-                                "ripartiscile sui mesi."
-                            )
-                            if row.get("notes"):
-                                st.caption(f"Note: {row['notes']}")
+                        elif current_notes:
+                            st.caption(f"Note: {current_notes}")
 
-                        if (
-                            marked_special != is_special
-                            or (
-                                marked_special
-                                and spread_months != special_months
-                            )
-                        ):
-                            update_movement_speciale(
-                                int(row["id"]),
-                                marked_special,
-                                spread_months,
-                            )
-                            st.toast("Spesa speciale aggiornata")
-                            st.rerun()
+                        speciale_dirty = marked_special != is_special or (
+                            marked_special
+                            and spread_months != special_months
+                        )
+                        show_save = marked_special or speciale_dirty
+
+                        if show_save:
+                            if st.button(
+                                "Salva spesa speciale",
+                                key=f"save_speciale_{movement_id}",
+                                type="primary",
+                            ):
+                                saved_months = (
+                                    spread_months if marked_special else 0
+                                )
+                                update_movement_speciale(
+                                    movement_id,
+                                    marked_special,
+                                    saved_months,
+                                )
+                                if marked_special:
+                                    update_movement_notes(
+                                        movement_id,
+                                        special_note,
+                                    )
+                                for key in (
+                                    speciale_key,
+                                    mesi_key,
+                                    note_key,
+                                ):
+                                    st.session_state.pop(key, None)
+                                _queue_toast("Spesa speciale aggiornata")
+                                st.rerun()
+                    elif not is_transfer and not is_investment:
+                        st.caption(
+                            "Spesa speciale disponibile solo sulle uscite."
+                        )
+                        if row.get("notes"):
+                            st.caption(f"Note: {row['notes']}")
                     elif row.get("notes"):
                         st.caption(f"Note: {row['notes']}")
 
@@ -459,7 +580,7 @@ def show_movements() -> None:
                             ):
                                 delete_movement(int(row["id"]))
                                 st.session_state[confirm_key] = False
-                                st.toast("Movimento eliminato")
+                                _queue_toast("Movimento eliminato")
                                 st.rerun()
 
                         with c_no:
@@ -480,15 +601,25 @@ def show_movements() -> None:
                             st.rerun()
 
     st.markdown("")
+    export_month = (
+        None
+        if selected_month == "Tutti" or search_term
+        else str(selected_month)
+    )
     export_name = movements_export_filename(
-        month=str(selected_month),
+        month=export_month,
         account=(
             selected_account
             if selected_account != "Tutti"
             else None
         ),
     )
-    context = f"Mese {selected_month}"
+    if search_term:
+        context = f"Ricerca «{search_term}»"
+    elif selected_month == "Tutti":
+        context = "Tutti i mesi"
+    else:
+        context = f"Mese {selected_month}"
     if selected_account != "Tutti":
         context += f" · conto {selected_account}"
     if st.button(
@@ -522,6 +653,7 @@ def show_movements() -> None:
                     "account",
                     "speciale",
                     "speciale_mesi",
+                    "escludi_metriche",
                     "notes",
                 ]
             ],

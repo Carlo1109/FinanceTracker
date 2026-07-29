@@ -57,9 +57,10 @@ def apply_theme(
     accent_id = accent_id or get_accent()
     theme, accent = resolve_palette(theme_id, accent_id)
 
-    primary_btn_text = "#04203a" if theme_id == "dark" else "#0b1220"
-    if theme_id == "light" and accent_id in ("amber",):
-        primary_btn_text = "#422006"
+    primary_btn_text = "#04203a" if theme_id == "dark" else "#ffffff"
+    # Sfondi solidi per popover (niente navy Streamlit sotto il trasparente)
+    menu_bg = "#ffffff" if theme_id == "light" else "#111a2e"
+    field_border = "#e2e8f0" if theme_id == "light" else "rgba(148, 163, 184, 0.32)"
 
     _sync_streamlit_native_theme(theme_id)
 
@@ -368,7 +369,10 @@ def apply_theme(
         }}
 
         .stButton > button[kind="primary"],
-        [data-testid="stBaseButton-primary"] {{
+        [data-testid="stBaseButton-primary"],
+        [data-testid="stDownloadButton"] button[kind="primary"],
+        [data-testid="stBaseButton-primaryDownload"],
+        [data-testid="stDownloadButton"] [data-testid="stBaseButton-primary"] {{
             background: linear-gradient(
                 135deg,
                 var(--ft-accent),
@@ -655,34 +659,87 @@ def apply_theme(
             letter-spacing: -0.01em;
         }}
 
-        /* ---- Form widgets (Streamlit / Baseweb) ---- */
-
+        /* ---- Form widgets: stesso bordo chiaro per tutti ---- */
         label[data-testid="stWidgetLabel"] p,
         label[data-testid="stWidgetLabel"] span {{
             color: var(--ft-muted) !important;
         }}
 
+        /* Contenitori Streamlit (qui sta il bordo scuro nativo) */
+        [data-testid="stNumberInputContainer"],
+        [data-testid="stNumberInputContainer"].focused,
+        [data-testid="stTextAreaRootElement"],
+        [data-testid="stTextInputRootElement"],
+        .stApp [data-testid="stSelectbox"] div[data-baseweb="select"] > div,
+        .stApp [data-testid="stMultiSelect"] div[data-baseweb="select"] > div,
+        .stApp div[data-baseweb="select"] > div {{
+            border: 1px solid {field_border} !important;
+            border-color: {field_border} !important;
+            border-top-color: {field_border} !important;
+            border-right-color: {field_border} !important;
+            border-bottom-color: {field_border} !important;
+            border-left-color: {field_border} !important;
+            border-radius: 12px !important;
+            background: {theme.input_bg} !important;
+            background-color: {theme.input_bg} !important;
+            box-shadow: none !important;
+            outline: none !important;
+        }}
+
+        [data-testid="stNumberInputContainer"].focused,
+        [data-testid="stTextAreaRootElement"]:focus-within,
+        [data-testid="stTextInputRootElement"]:focus-within,
+        [data-testid="stTextInputRootElement"]:has(input:focus),
+        [data-testid="stTextAreaRootElement"]:has(textarea:focus),
+        .stApp [data-testid="stSelectbox"] div[data-baseweb="select"] > div:focus-within,
+        .stApp div[data-baseweb="select"] > div:focus-within {{
+            border: 1px solid rgba(var(--ft-accent-rgb), 0.55) !important;
+            border-color: rgba(var(--ft-accent-rgb), 0.55) !important;
+            border-top-color: rgba(var(--ft-accent-rgb), 0.55) !important;
+            border-right-color: rgba(var(--ft-accent-rgb), 0.55) !important;
+            border-bottom-color: rgba(var(--ft-accent-rgb), 0.55) !important;
+            border-left-color: rgba(var(--ft-accent-rgb), 0.55) !important;
+            box-shadow: none !important;
+            outline: none !important;
+        }}
+
+        /* Interno campi: niente secondo bordo (solo input/textarea, non i wrapper) */
         .stApp .stTextInput input,
         .stApp .stNumberInput input,
-        .stApp .stDateInput input,
         .stApp .stTextArea textarea,
-        .stApp .stNumberInput [data-baseweb="input"],
-        .stApp .stTextInput [data-baseweb="base-input"],
-        .stApp .stDateInput [data-baseweb="base-input"],
-        .stApp .stTextArea [data-baseweb="base-input"],
-        .stApp div[data-baseweb="input"],
-        .stApp div[data-baseweb="base-input"],
         .stApp [data-testid="stTextInput"] input,
         .stApp [data-testid="stNumberInput"] input,
-        .stApp [data-testid="stDateInput"] input,
+        .stApp [data-testid="stNumberInputField"],
         .stApp [data-testid="stTextArea"] textarea {{
+            border: none !important;
+            border-width: 0 !important;
+            border-color: transparent !important;
             border-radius: 12px !important;
             font-family: var(--ft-font) !important;
             background-color: {theme.input_bg} !important;
             background: {theme.input_bg} !important;
             color: {theme.text} !important;
-            border-color: {theme.border} !important;
             caret-color: {theme.text} !important;
+            box-shadow: none !important;
+            outline: none !important;
+        }}
+
+        .stApp [data-testid="stNumberInput"] div[data-baseweb="input"],
+        .stApp [data-testid="stNumberInput"] div[data-baseweb="base-input"],
+        .stApp [data-testid="stSelectbox"] div[data-baseweb="select"] > div > div,
+        .stApp [data-testid="stMultiSelect"] div[data-baseweb="select"] > div > div {{
+            border: none !important;
+            border-width: 0 !important;
+            background-color: {theme.input_bg} !important;
+            background: {theme.input_bg} !important;
+            color: {theme.text} !important;
+            box-shadow: none !important;
+        }}
+
+        .stApp [data-testid="stSelectbox"] div[data-baseweb="select"] > div,
+        .stApp [data-testid="stMultiSelect"] div[data-baseweb="select"] > div,
+        .stApp div[data-baseweb="select"] > div {{
+            min-height: 42px;
         }}
 
         .stTextInput input::placeholder,
@@ -697,18 +754,6 @@ def apply_theme(
             border-radius: 12px !important;
         }}
 
-        .stApp [data-testid="stSelectbox"] div[data-baseweb="select"] > div,
-        .stApp [data-testid="stMultiSelect"] div[data-baseweb="select"] > div,
-        .stApp div[data-baseweb="select"] > div,
-        .stApp [data-testid="stSelectbox"] div[data-baseweb="select"] > div > div,
-        .stApp [data-testid="stMultiSelect"] div[data-baseweb="select"] > div > div {{
-            background-color: {theme.input_bg} !important;
-            background: {theme.input_bg} !important;
-            border-color: {theme.border} !important;
-            color: {theme.text} !important;
-            min-height: 42px;
-        }}
-
         .stApp div[data-baseweb="select"] span,
         .stApp div[data-baseweb="select"] div,
         .stApp div[data-baseweb="select"] p,
@@ -719,28 +764,127 @@ def apply_theme(
             fill: {theme.text} !important;
         }}
 
-        /* Menu a tendina select (non i tooltip di help) */
+        /* ---- Select menu: sfondo tema, scelta solo riquadrata ---- */
         ul[role="listbox"],
-        li[role="option"],
         div[data-baseweb="menu"],
         div[data-baseweb="popover"] ul[role="listbox"],
         div[data-baseweb="popover"] div[data-baseweb="menu"] {{
-            background-color: {theme.input_bg} !important;
-            background: {theme.input_bg} !important;
+            background: {menu_bg} !important;
+            background-color: {menu_bg} !important;
             color: {theme.text} !important;
             border-color: {theme.border} !important;
         }}
 
-        li[role="option"]:hover,
-        li[aria-selected="true"] {{
-            background-color: rgba(var(--ft-accent-rgb), 0.14) !important;
+        li[role="option"],
+        li[role="option"] > div,
+        div[data-baseweb="popover"] li[role="option"],
+        div[data-baseweb="popover"] li[role="option"] > div {{
+            background: {menu_bg} !important;
+            background-color: {menu_bg} !important;
+            background-image: none !important;
+            color: {theme.text} !important;
+            box-shadow: none !important;
+            border: 2px solid transparent !important;
         }}
 
-        /* Tooltip help: niente override aggressivi (evita “pallini” strani) */
-        div[role="tooltip"],
-        [data-testid="stTooltipContent"],
-        [data-testid="stTooltipHoverTarget"] {{
+        li[role="option"][aria-selected="true"],
+        li[role="option"][aria-selected="true"] > div,
+        div[data-baseweb="popover"] li[role="option"][aria-selected="true"],
+        div[data-baseweb="popover"] li[role="option"][aria-selected="true"] > div {{
+            background: {menu_bg} !important;
+            background-color: {menu_bg} !important;
+            background-image: none !important;
             color: {theme.text} !important;
+            border: 2px solid {accent.accent} !important;
+            border-radius: 8px !important;
+            box-shadow: none !important;
+        }}
+
+        li[role="option"] * {{
+            color: {theme.text} !important;
+        }}
+
+        .ft-date-label {{
+            color: var(--ft-muted) !important;
+            font-size: 0.875rem !important;
+            font-weight: 500 !important;
+            margin: 0 0 0.35rem 0 !important;
+            font-family: var(--ft-font) !important;
+        }}
+
+        /* Help (?): solo .stTooltipIcon (NON tutti gli stTooltipHoverTarget —
+           Streamlit li usa anche sulle voci dei select per l’overflow). */
+        [data-testid="stTooltipIcon"] {{
+            display: inline-flex !important;
+            align-items: center !important;
+            vertical-align: middle !important;
+            margin-left: 0.25rem !important;
+            opacity: 1 !important;
+        }}
+
+        [data-testid="stTooltipIcon"] [data-testid="stTooltipHoverTarget"] {{
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            color: {theme.muted} !important;
+            opacity: 1 !important;
+            cursor: help !important;
+        }}
+
+        [data-testid="stTooltipIcon"] svg.icon,
+        [data-testid="stTooltipIcon"] svg {{
+            stroke: {theme.muted} !important;
+            fill: none !important;
+            color: {theme.muted} !important;
+            opacity: 1 !important;
+        }}
+
+        [data-testid="stTooltipIcon"]:hover [data-testid="stTooltipHoverTarget"],
+        [data-testid="stTooltipIcon"]:hover svg.icon,
+        [data-testid="stTooltipIcon"]:hover svg {{
+            color: {accent.accent_strong} !important;
+            stroke: {accent.accent_strong} !important;
+        }}
+
+        div[role="tooltip"],
+        div[data-baseweb="tooltip"],
+        [data-testid="stTooltipContent"] {{
+            background: {menu_bg} !important;
+            background-color: {menu_bg} !important;
+            color: {theme.text} !important;
+            border: 1px solid {theme.border} !important;
+            border-radius: 10px !important;
+            box-shadow: var(--ft-shadow) !important;
+            padding: 0.55rem 0.75rem !important;
+        }}
+
+        [data-testid="stTooltipContent"] *,
+        [data-testid="stTooltipContent"] p,
+        [data-testid="stTooltipContent"] span {{
+            background: transparent !important;
+            background-color: transparent !important;
+            color: {theme.text} !important;
+        }}
+
+        /* Select options: testo normale (niente side-effect dei tooltip) */
+        [data-testid="stSelectboxVirtualDropdown"] [data-testid="stTooltipHoverTarget"],
+        ul[role="listbox"] [data-testid="stTooltipHoverTarget"],
+        li[role="option"] [data-testid="stTooltipHoverTarget"] {{
+            width: auto !important;
+            height: auto !important;
+            min-width: 0 !important;
+            max-width: none !important;
+            color: {theme.text} !important;
+            opacity: 1 !important;
+            position: static !important;
+            display: block !important;
+        }}
+
+        [data-testid="stSelectboxVirtualDropdown"] [data-testid="stTooltipHoverTarget"]::after,
+        ul[role="listbox"] [data-testid="stTooltipHoverTarget"]::after,
+        li[role="option"] [data-testid="stTooltipHoverTarget"]::after {{
+            content: none !important;
+            display: none !important;
         }}
 
         /* File uploader */
@@ -780,18 +924,30 @@ def apply_theme(
             background: rgba(var(--ft-accent-rgb), 0.08) !important;
         }}
 
-        /* Alert / info / warning */
-        [data-testid="stAlert"] {{
+        /* Alert / info / warning / toast */
+        [data-testid="stAlert"],
+        [data-testid="stAlert"] > div,
+        [data-testid="stNotification"],
+        [data-testid="stToast"],
+        [data-testid="stToast"] > div,
+        div[data-testid="toastContainer"] [data-testid="stToast"] {{
             border-radius: 14px !important;
             border: 1px solid var(--ft-border) !important;
-            background: var(--ft-panel) !important;
-            color: var(--ft-text) !important;
+            background: {theme.panel} !important;
+            background-color: {theme.input_bg} !important;
+            color: {theme.text} !important;
+            box-shadow: var(--ft-shadow) !important;
         }}
 
         [data-testid="stAlert"] p,
         [data-testid="stAlert"] span,
-        [data-testid="stAlert"] div {{
-            color: var(--ft-text) !important;
+        [data-testid="stAlert"] div,
+        [data-testid="stToast"] p,
+        [data-testid="stToast"] span,
+        [data-testid="stToast"] div,
+        [data-testid="stNotification"] p,
+        [data-testid="stNotification"] span {{
+            color: {theme.text} !important;
         }}
 
         /* Tabs */
@@ -815,16 +971,75 @@ def apply_theme(
             background: var(--ft-border) !important;
         }}
 
+        /* Expander: contenitore chiaro, senza forzare ogni span (rompe i label) */
+        div[data-testid="stExpander"],
+        div[data-testid="stExpander"] details,
+        div[data-testid="stExpander"] > details > summary,
+        [data-testid="stExpanderDetails"],
+        .streamlit-expanderContent,
+        .streamlit-expanderHeader {{
+            background: {theme.input_bg} !important;
+            background-color: {theme.input_bg} !important;
+            border-color: {theme.border} !important;
+        }}
+
         div[data-testid="stExpander"] {{
-            border-radius: 14px;
-            border-color: var(--ft-border);
-            background: var(--ft-panel-soft);
+            border-radius: 14px !important;
+            border: 1px solid {theme.border} !important;
+            overflow: hidden;
         }}
 
         div[data-testid="stExpander"] summary,
-        div[data-testid="stExpander"] p,
-        div[data-testid="stExpander"] span {{
-            color: var(--ft-text) !important;
+        div[data-testid="stExpander"] summary p,
+        div[data-testid="stExpander"] summary span {{
+            color: {theme.text} !important;
+        }}
+
+        div[data-testid="stExpander"] summary svg {{
+            fill: {theme.text} !important;
+            color: {theme.text} !important;
+        }}
+
+        /* Checkbox / radio: solo colore testo (niente override di layout) */
+        .stRadio label,
+        .stCheckbox label,
+        [data-testid="stCheckbox"] label {{
+            color: {theme.text} !important;
+        }}
+
+        [data-testid="stCaptionContainer"],
+        [data-testid="stCaptionContainer"] p {{
+            color: {theme.muted} !important;
+        }}
+
+        /* Number input: solo il campo; label fuori; niente stepper */
+        [data-testid="stNumberInput"] {{
+            background: transparent !important;
+            background-color: transparent !important;
+        }}
+
+        [data-testid="stNumberInput"] label[data-testid="stWidgetLabel"],
+        [data-testid="stNumberInput"] label[data-testid="stWidgetLabel"] p,
+        [data-testid="stNumberInput"] label[data-testid="stWidgetLabel"] span {{
+            background: transparent !important;
+            color: var(--ft-muted) !important;
+        }}
+
+        [data-testid="stNumberInput"] button,
+        .stNumberInput button,
+        [data-testid="stNumberInput"] [data-baseweb="button"],
+        [data-testid="stNumberInput"] [class*="stepper"] button,
+        [data-testid="stNumberInput"] [class*="Stepper"] button {{
+            display: none !important;
+        }}
+
+        /* Divider / hr */
+        hr,
+        [data-testid="stDivider"] {{
+            border: none !important;
+            border-top: 1px solid {theme.border} !important;
+            background: transparent !important;
+            height: 0 !important;
         }}
 
         /* Code / path blocks */
@@ -835,12 +1050,6 @@ def apply_theme(
             color: var(--ft-text) !important;
             border: 1px solid var(--ft-border) !important;
             border-radius: 12px !important;
-        }}
-
-        /* Radio / checkbox */
-        .stRadio label,
-        .stCheckbox label {{
-            color: var(--ft-text) !important;
         }}
 
         /* Icone Streamlit (uploader / material) */

@@ -7,6 +7,43 @@ import calendar
 import pandas as pd
 
 INVESTMENT_CATEGORY = "Investimenti"
+TRANSFER_CATEGORY = "Trasferimenti interni"
+_LEGACY_TRANSFER_CATEGORIES = frozenset(
+    {
+        TRANSFER_CATEGORY,
+        "Trasferimento",
+    }
+)
+
+
+def is_transfer_category(category: object) -> bool:
+    return str(category) in _LEGACY_TRANSFER_CATEGORIES
+
+
+def _excluded_from_metrics_mask(df: pd.DataFrame) -> pd.Series:
+    """Trasferimenti interni e flag Escludere dalle metriche."""
+    if df.empty:
+        return pd.Series(dtype=bool)
+
+    transfer = (
+        df["categoria"].map(is_transfer_category)
+        if "categoria" in df.columns
+        else pd.Series(False, index=df.index)
+    )
+    flagged = (
+        df["escludi_metriche"].fillna(False).astype(bool)
+        if "escludi_metriche" in df.columns
+        else pd.Series(False, index=df.index)
+    )
+    return transfer | flagged
+
+
+def _for_metrics(df: pd.DataFrame) -> pd.DataFrame:
+    """Esclude trasferimenti interni e movimenti con flag dalle metriche."""
+    if df.empty:
+        return df
+    return df.loc[~_excluded_from_metrics_mask(df)].copy()
+
 
 _MONTHS_IT = (
     "gen",
@@ -226,21 +263,31 @@ def calculate_financial_metrics(df: pd.DataFrame) -> dict[str, float]:
             "liquidita": 0.0,
         }
 
-    entrate = float(df.loc[df["importo"] > 0, "importo"].sum())
+    working = _for_metrics(df)
+    if working.empty:
+        return {
+            "entrate": 0.0,
+            "uscite": 0.0,
+            "bilancio": 0.0,
+            "investimenti": 0.0,
+            "liquidita": 0.0,
+        }
+
+    entrate = float(working.loc[working["importo"] > 0, "importo"].sum())
     uscite = float(
         abs(
-            df.loc[
-                (df["importo"] < 0)
-                & (df["categoria"] != INVESTMENT_CATEGORY),
+            working.loc[
+                (working["importo"] < 0)
+                & (working["categoria"] != INVESTMENT_CATEGORY),
                 "importo",
             ].sum()
         )
     )
     investimenti = float(
         abs(
-            df.loc[
-                (df["importo"] < 0)
-                & (df["categoria"] == INVESTMENT_CATEGORY),
+            working.loc[
+                (working["importo"] < 0)
+                & (working["categoria"] == INVESTMENT_CATEGORY),
                 "importo",
             ].sum()
         )
@@ -648,11 +695,13 @@ def get_period_day_count(
 
 
 def expense_frame(df: pd.DataFrame) -> pd.DataFrame:
-    """Uscite operative (esclude investimenti)."""
+    """Uscite operative (esclude investimenti, trasferimenti e flag)."""
     if df.empty:
         return df.iloc[0:0].copy()
-    return df[
-        (df["importo"] < 0) & (df["categoria"] != INVESTMENT_CATEGORY)
+    working = _for_metrics(df)
+    return working[
+        (working["importo"] < 0)
+        & (working["categoria"] != INVESTMENT_CATEGORY)
     ].copy()
 
 
@@ -701,23 +750,26 @@ def monthly_flow_totals(df: pd.DataFrame) -> pd.DataFrame:
             columns=["mese", "entrate", "uscite", "investimenti"]
         )
 
+    eligible = ~_excluded_from_metrics_mask(df)
     return (
         df.assign(
-            entrate=lambda frame: frame["importo"].where(
-                frame["importo"] > 0,
+            entrate=df["importo"].where(
+                (df["importo"] > 0) & eligible,
                 0,
             ),
-            uscite=lambda frame: frame["importo"]
+            uscite=df["importo"]
             .where(
-                (frame["importo"] < 0)
-                & (frame["categoria"] != INVESTMENT_CATEGORY),
+                (df["importo"] < 0)
+                & (df["categoria"] != INVESTMENT_CATEGORY)
+                & eligible,
                 0,
             )
             .abs(),
-            investimenti=lambda frame: frame["importo"]
+            investimenti=df["importo"]
             .where(
-                (frame["importo"] < 0)
-                & (frame["categoria"] == INVESTMENT_CATEGORY),
+                (df["importo"] < 0)
+                & (df["categoria"] == INVESTMENT_CATEGORY)
+                & eligible,
                 0,
             )
             .abs(),

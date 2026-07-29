@@ -120,6 +120,15 @@
       "ETF"
     ]
   },
+  "Trasferimenti interni": {
+    "icon": "🔁",
+    "keywords": [
+      "GIROCONTO",
+      "TRASFERIMENTO",
+      "BONIFICO INTERNO",
+      "TRA CONTI"
+    ]
+  },
   "Stipendio": {
     "icon": "💼",
     "keywords": [

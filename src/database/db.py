@@ -70,6 +70,7 @@ def init_db() -> None:
                 notes TEXT,
                 speciale INTEGER NOT NULL DEFAULT 0,
                 speciale_mesi INTEGER NOT NULL DEFAULT 0,
+                escludi_metriche INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
             """
@@ -128,13 +129,20 @@ def init_db() -> None:
                 """
             )
 
+        if "escludi_metriche" not in column_names:
+            connection.execute(
+                """
+                ALTER TABLE movements
+                ADD COLUMN escludi_metriche INTEGER
+                NOT NULL DEFAULT 0
+                """
+            )
+
         connection.execute(
             """
-            CREATE TABLE IF NOT EXISTS settings (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL,
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
+            UPDATE movements
+            SET category = 'Trasferimenti interni'
+            WHERE category = 'Trasferimento'
             """
         )
 

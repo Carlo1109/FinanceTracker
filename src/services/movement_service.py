@@ -290,9 +290,10 @@ def save_movements(
                         account,
                         notes,
                         speciale,
-                        speciale_mesi
+                        speciale_mesi,
+                        escludi_metriche
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         movement_hash,
@@ -319,6 +320,7 @@ def save_movements(
                         source,
                         account_name,
                         "",
+                        0,
                         0,
                         0,
                     ),
@@ -353,7 +355,8 @@ def load_movements() -> pd.DataFrame:
                 account,
                 notes,
                 speciale,
-                speciale_mesi
+                speciale_mesi,
+                escludi_metriche
             FROM movements
             ORDER BY date DESC
             """,
@@ -384,6 +387,12 @@ def load_movements() -> pd.DataFrame:
         .astype(int)
         .clip(lower=0)
     )
+    df["escludi_metriche"] = (
+        pd.to_numeric(df["escludi_metriche"], errors="coerce")
+        .fillna(0)
+        .astype(int)
+        .astype(bool)
+    )
 
     df = df.sort_values(
         by=["data", "id"],
@@ -405,6 +414,7 @@ def add_manual_movement(
     notes: str = "",
     speciale: bool = False,
     speciale_mesi: int = 0,
+    escludi_metriche: bool = False,
 ) -> None:
     signed_amount = (
         abs(amount)
@@ -436,9 +446,10 @@ def add_manual_movement(
                 account,
                 notes,
                 speciale,
-                speciale_mesi
+                speciale_mesi,
+                escludi_metriche
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 movement_hash,
@@ -458,6 +469,7 @@ def add_manual_movement(
                 notes,
                 1 if speciale else 0,
                 max(0, int(speciale_mesi)) if speciale else 0,
+                1 if escludi_metriche else 0,
             ),
         )
         conn.commit()
@@ -493,6 +505,22 @@ def update_movement_speciale(
             WHERE id = ?
             """,
             (1 if speciale else 0, mesi, movement_id),
+        )
+        conn.commit()
+
+
+def update_movement_escludi_metriche(
+    movement_id: int,
+    escludi_metriche: bool,
+) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE movements
+            SET escludi_metriche = ?
+            WHERE id = ?
+            """,
+            (1 if escludi_metriche else 0, movement_id),
         )
         conn.commit()
 

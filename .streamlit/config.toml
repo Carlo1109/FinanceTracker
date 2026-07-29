@@ -10,7 +10,7 @@ borderColor = "#cbd5e1"
 font = "sans serif"
 baseRadius = "0.75rem"
 buttonRadius = "0.75rem"
-showWidgetBorder = true
+showWidgetBorder = false
 
 [theme.dark]
 primaryColor = "#60a5fa"
@@ -21,4 +21,4 @@ borderColor = "#334155"
 font = "sans serif"
 baseRadius = "0.75rem"
 buttonRadius = "0.75rem"
-showWidgetBorder = true
+showWidgetBorder = false

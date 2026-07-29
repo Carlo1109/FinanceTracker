@@ -27,6 +27,7 @@ DEFAULT_CATEGORY_ICONS = {
     "Casa & Utenze": "🏠",
     "Salute & Benessere": "❤️",
     "Investimenti": "📈",
+    "Trasferimenti interni": "🔁",
     "Stipendio": "💼",
     "Viaggi & Vacanze": "🏖️",
     "Svago & Tempo libero": "🎮",
@@ -197,6 +198,37 @@ def _normalize_category_definitions(
         normalized["Altro"] = {
             "icon": "❓",
             "keywords": [],
+        }
+        changed = True
+
+    if "Trasferimento" in normalized:
+        legacy = normalized.pop("Trasferimento")
+        if "Trasferimenti interni" not in normalized:
+            normalized["Trasferimenti interni"] = legacy
+        else:
+            existing = normalized["Trasferimenti interni"]
+            merged_keywords = list(
+                dict.fromkeys(
+                    list(existing.get("keywords") or [])
+                    + list(legacy.get("keywords") or [])
+                )
+            )
+            existing["keywords"] = merged_keywords
+            if not existing.get("icon") and legacy.get("icon"):
+                existing["icon"] = legacy["icon"]
+            if not existing.get("color") and legacy.get("color"):
+                existing["color"] = legacy["color"]
+        changed = True
+
+    if "Trasferimenti interni" not in normalized:
+        normalized["Trasferimenti interni"] = {
+            "icon": "🔁",
+            "keywords": [
+                "GIROCONTO",
+                "TRASFERIMENTO",
+                "BONIFICO INTERNO",
+                "TRA CONTI",
+            ],
         }
         changed = True
 
