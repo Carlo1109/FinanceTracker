@@ -140,9 +140,11 @@ def init_db() -> None:
 
         connection.execute(
             """
-            UPDATE movements
-            SET category = 'Trasferimenti interni'
-            WHERE category = 'Trasferimento'
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
             """
         )
 

@@ -7,7 +7,7 @@ import html
 import pandas as pd
 import streamlit as st
 
-from src.components.cards import MUTED_COLOR, TEXT_COLOR, render_html
+from src.components.cards import render_html
 from src.utils.export_excel import movements_to_export_bytes
 
 
@@ -66,13 +66,13 @@ def _export_confirm_dialog(
     if context_label:
         context_html = (
             f'<div style="margin-top:8px;font-size:13px;'
-            f'font-weight:650;color:var(--ft-accent);">'
+            f'font-weight:650;color:var(--ft-accent-strong);">'
             f"{html.escape(context_label)}</div>"
         )
 
     render_html(
         f"""
-        <div style="padding:2px 0 8px 0;">
+        <div class="ft-export-dialog" style="padding:2px 0 8px 0;">
           <div class="ft-appearance-chip" style="width:fit-content;">
             <span class="ft-appearance-chip-dot"></span>
             Excel brandizzato
@@ -82,7 +82,7 @@ def _export_confirm_dialog(
               font-family:Fraunces,Georgia,serif;
               font-size:clamp(22px, 2.2vw, 28px);
               font-weight:700;
-              color:{TEXT_COLOR};
+              color:var(--ft-text);
               line-height:1.2;
           ">
             Esporta {count} movimenti
@@ -92,7 +92,7 @@ def _export_confirm_dialog(
               margin-top:10px;
               font-size:13px;
               line-height:1.45;
-              color:{MUTED_COLOR};
+              color:var(--ft-muted);
           ">
             Il file include logo FinanceTracker e
             Personal Finance Manager.
@@ -121,6 +121,7 @@ def _export_confirm_dialog(
         if st.button(
             "Annulla",
             width="stretch",
+            type="secondary",
             key=f"export_dialog_cancel_{dialog_key}",
         ):
             _close_export_dialog()

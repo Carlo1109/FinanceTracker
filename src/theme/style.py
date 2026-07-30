@@ -383,8 +383,60 @@ def apply_theme(
         }}
 
         .stButton > button[kind="secondary"] {{
-            background: transparent;
-            color: var(--ft-text);
+            background: {theme.input_bg} !important;
+            background-color: {theme.input_bg} !important;
+            color: {theme.text} !important;
+            border: 1px solid {theme.border} !important;
+        }}
+
+        .stButton > button[kind="secondary"]:hover {{
+            border-color: rgba(var(--ft-accent-rgb), 0.45) !important;
+            background: rgba(var(--ft-accent-rgb), 0.08) !important;
+        }}
+
+        /* Dialog export / popup Streamlit a tema */
+        [data-testid="stDialog"],
+        div[role="dialog"],
+        .stDialog {{
+            color: {theme.text} !important;
+        }}
+
+        [data-testid="stDialog"] > div,
+        div[role="dialog"] > div,
+        [data-testid="stDialog"] [data-baseweb="modal"],
+        div[data-baseweb="modal"] {{
+            background:
+                radial-gradient(
+                    circle at 12% 0%,
+                    rgba(var(--ft-accent-rgb), 0.12),
+                    transparent 42%
+                ),
+                {theme.panel} !important;
+            background-color: {theme.panel} !important;
+            color: {theme.text} !important;
+            border: 1px solid {theme.border} !important;
+            border-radius: 18px !important;
+            box-shadow: var(--ft-shadow) !important;
+        }}
+
+        [data-testid="stDialog"] h1,
+        [data-testid="stDialog"] h2,
+        [data-testid="stDialog"] h3,
+        [data-testid="stDialog"] p,
+        [data-testid="stDialog"] span,
+        [data-testid="stDialog"] label,
+        div[role="dialog"] h1,
+        div[role="dialog"] h2,
+        div[role="dialog"] p,
+        div[role="dialog"] span {{
+            color: {theme.text} !important;
+        }}
+
+        [data-testid="stDialog"] button[kind="secondary"],
+        div[role="dialog"] button[kind="secondary"] {{
+            background: {theme.input_bg} !important;
+            color: {theme.text} !important;
+            border: 1px solid {theme.border} !important;
         }}
 
         /* Nasconde il marker HTML del sync tema (nessun iframe) */
@@ -1000,6 +1052,66 @@ def apply_theme(
             color: {theme.text} !important;
         }}
 
+        /* Card dashboard generica (spese speciali, empty states, …) */
+        .ft-dashboard-card {{
+            background:
+                radial-gradient(
+                    circle at 12% 0%,
+                    rgba(var(--ft-accent-rgb), 0.12),
+                    transparent 42%
+                ),
+                var(--ft-panel) !important;
+            border: 1px solid var(--ft-border) !important;
+            border-radius: var(--ft-radius) !important;
+            box-shadow: var(--ft-shadow) !important;
+            padding: 18px 16px 20px 16px !important;
+            margin-bottom: 4px !important;
+            animation: ft-fade-up 300ms ease-out;
+        }}
+
+        .ft-specials-details {{
+            background: transparent !important;
+        }}
+
+        .ft-specials-summary {{
+            list-style: none !important;
+            cursor: pointer !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 0.55rem !important;
+            padding: 0.1rem 0.05rem !important;
+            color: var(--ft-text) !important;
+            font-size: 0.98rem !important;
+            font-weight: 650 !important;
+            user-select: none !important;
+        }}
+
+        .ft-specials-summary::-webkit-details-marker {{
+            display: none !important;
+        }}
+
+        .ft-specials-summary::before {{
+            content: "▸" !important;
+            color: var(--ft-muted) !important;
+            font-size: 0.85rem !important;
+            line-height: 1 !important;
+        }}
+
+        .ft-specials-details[open] > .ft-specials-summary::before {{
+            content: "▾" !important;
+        }}
+
+        .ft-specials-summary-label {{
+            color: var(--ft-text) !important;
+        }}
+
+        .ft-specials-hint {{
+            margin: 0.65rem 0 0.25rem 0 !important;
+            font-size: 0.84rem !important;
+            line-height: 1.45 !important;
+            color: var(--ft-muted) !important;
+        }}
+
         /* Checkbox / radio: solo colore testo (niente override di layout) */
         .stRadio label,
         .stCheckbox label,
@@ -1081,7 +1193,13 @@ def apply_theme(
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-distribution-anchor),
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-chart-card-anchor),
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-panel-anchor),
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor) {{
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor),
+        div[class*="st-key-ft_dashboard_chart_card"],
+        div[class*="st-key-ft_dashboard_distribution_card"],
+        div[class*="st-key-ft_dashboard_chart_card"]
+            [data-testid="stVerticalBlockBorderWrapper"],
+        div[class*="st-key-ft_dashboard_distribution_card"]
+            [data-testid="stVerticalBlockBorderWrapper"] {{
             background:
                 radial-gradient(
                     circle at 12% 0%,
@@ -1089,12 +1207,37 @@ def apply_theme(
                     transparent 42%
                 ),
                 var(--ft-panel) !important;
+            background-color: var(--ft-panel) !important;
             border: 1px solid var(--ft-border) !important;
             border-radius: var(--ft-radius) !important;
-            box-shadow: var(--ft-shadow);
+            box-shadow: var(--ft-shadow) !important;
             padding: 18px 16px 20px 16px !important;
             margin-bottom: 4px;
             animation: ft-fade-up 300ms ease-out;
+        }}
+
+        div[class*="st-key-ft_dashboard_chart_card"] > div,
+        div[class*="st-key-ft_dashboard_distribution_card"] > div,
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-chart-card-anchor) > div,
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-distribution-anchor) > div {{
+            background: transparent !important;
+            background-color: transparent !important;
+        }}
+
+        div[class*="st-key-ft_dashboard_chart_card"] [data-testid="stPlotlyChart"],
+        div[class*="st-key-ft_dashboard_chart_card"] .stPlotlyChart,
+        div[class*="st-key-ft_dashboard_chart_card"] .js-plotly-plot,
+        div[class*="st-key-ft_dashboard_chart_card"] .plot-container,
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-chart-card-anchor)
+            [data-testid="stPlotlyChart"],
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-chart-card-anchor)
+            .stPlotlyChart,
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-chart-card-anchor)
+            .js-plotly-plot,
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-distribution-anchor)
+            iframe {{
+            background: transparent !important;
+            background-color: transparent !important;
         }}
 
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor) {{
@@ -1111,12 +1254,18 @@ def apply_theme(
 
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-distribution-anchor)
         [data-testid="stHorizontalBlock"]
+        > div[data-testid="stColumn"]:first-child,
+        div[class*="st-key-ft_dashboard_distribution_card"]
+        [data-testid="stHorizontalBlock"]
         > div[data-testid="stColumn"]:first-child {{
             border-right: 1px solid var(--ft-border);
             padding-right: 12px;
         }}
 
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-distribution-anchor)
+        [data-testid="stHorizontalBlock"]
+        > div[data-testid="stColumn"]:last-child,
+        div[class*="st-key-ft_dashboard_distribution_card"]
         [data-testid="stHorizontalBlock"]
         > div[data-testid="stColumn"]:last-child {{
             padding-left: 8px;

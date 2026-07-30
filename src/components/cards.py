@@ -436,7 +436,7 @@ def render_expense_distribution_card(
 
     ``render_pie`` è una callback senza argomenti (es. iframe Plotly).
     """
-    with st.container(border=True):
+    with st.container(border=True, key="ft_dashboard_distribution_card"):
         render_html(
             '<span class="ft-distribution-anchor" aria-hidden="true"></span>'
         )
@@ -489,7 +489,7 @@ def render_expense_distribution_card(
 
 def render_chart_card(render_chart: Callable[[], None]) -> None:
     """Card semplice che avvolge un grafico (callback senza argomenti)."""
-    with st.container(border=True):
+    with st.container(border=True, key="ft_dashboard_chart_card"):
         render_html(
             '<span class="ft-chart-card-anchor" aria-hidden="true"></span>'
         )

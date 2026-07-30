@@ -8,16 +8,10 @@ import pandas as pd
 
 INVESTMENT_CATEGORY = "Investimenti"
 TRANSFER_CATEGORY = "Trasferimenti interni"
-_LEGACY_TRANSFER_CATEGORIES = frozenset(
-    {
-        TRANSFER_CATEGORY,
-        "Trasferimento",
-    }
-)
 
 
 def is_transfer_category(category: object) -> bool:
-    return str(category) in _LEGACY_TRANSFER_CATEGORIES
+    return str(category) == TRANSFER_CATEGORY
 
 
 def _excluded_from_metrics_mask(df: pd.DataFrame) -> pd.Series:

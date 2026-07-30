@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.3.0
+
+### Funzionalità
+
+- Spese speciali: flag su uscite, ripartizione opzionale su N mesi (media giornaliera) o esclusione totale dalla media; totali di cassa invariati
+- Flag **Escludere dalle metriche**: il movimento resta in lista ma non conta in entrate, uscite, medie e grafici
+- Categoria **Trasferimenti interni** (giroconto / passaggi tra conti): in lista, esclusi dalle metriche
+- Selettore data tematico (giorno / mese / anno) al posto del calendario nativo Streamlit
+- Dashboard: sezione Spese speciali espandibile (`N Spese speciali · Totale …`) in card a tema
+- Export Excel: colonna esclusione dalle metriche; popup di conferma allineato al tema
+
+### Interfaccia
+
+- Tema chiaro/scuro e card dashboard più coerenti (KPI, distribuzione, andamento, empty state)
+- Tooltip help (`?`) leggibili; niente note fisse sotto Spesa speciale / Escludere dalle metriche
+- Movimenti: filtro mese **Tutti**, chip stato (speciale / escluso dalle metriche)
+- Impostazioni: tasto “Scarica prima i movimenti” più evidente; dialog export a tema
+- Pulsanti secondary con sfondo/bordo visibili (si capisce che sono cliccabili)
+
+### Correzioni
+
+- Metriche e grafici ignorano trasferimenti interni e movimenti con flag esclusione
+- CSS help Streamlit non rompe più le voci dei menu a tendina
+- Grafici Plotly senza tema bianco Streamlit forzato (`theme=None` sul line chart)
+
 ## v1.2.0
 
 ### Funzionalità
@@ -85,4 +110,3 @@ Prima release pubblica.
 - Applicazione Windows
 - Database locale
 - Nessun cloud
-

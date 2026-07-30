@@ -21,7 +21,6 @@ from src.components.cards import (
     render_info_card,
     render_kpi_card,
     render_section_title,
-    styled_panel,
 )
 from src.components.navigation import switch_to
 from src.services.analytics import (
@@ -625,152 +624,182 @@ def show_dashboard() -> None:
         analysis_start,
         analysis_end,
     )
-    render_section_title("Spese speciali")
     if special_overview.empty:
-        st.caption(
-            "Nessuna spesa speciale nel periodo. "
-            "Puoi segnalarle in Movimenti → Dettagli."
+        render_section_title("Spese speciali")
+        render_html(
+            """
+            <div class="ft-dashboard-card">
+              <div class="ft-specials-hint" style="margin:0;">
+                Nessuna spesa speciale nel periodo.
+                Puoi segnalarle in Movimenti → Dettagli.
+              </div>
+            </div>
+            """
         )
     else:
-        st.caption(
-            "Nei totali del mese restano come le hai pagate. "
-            "Nella media giornaliera puoi escluderle "
-            "oppure spalmarle sui mesi scelti."
-        )
-        with styled_panel():
-            rows_html: list[str] = []
-            for index, item in special_overview.iterrows():
-                date_label = pd.Timestamp(item["data"]).strftime("%d/%m/%Y")
-                title = html.escape(str(item["descrizione"] or "Senza descrizione"))
-                category = html.escape(str(item["categoria"] or ""))
-                account = html.escape(str(item["account"] or ""))
-                mesi_range = html.escape(str(item["mesi_range"] or "—"))
-                amount_label = html.escape(euro(float(item["importo"])))
-                quota = item["quota_mese"]
-                mode_chip = html.escape(str(item["modalita"] or ""))
+        special_count = len(special_overview)
+        special_total = float(special_overview["importo"].sum())
+        render_section_title("Spese speciali")
+        rows_html: list[str] = []
+        for index, item in special_overview.iterrows():
+            date_label = pd.Timestamp(item["data"]).strftime("%d/%m/%Y")
+            title = html.escape(
+                str(item["descrizione"] or "Senza descrizione")
+            )
+            category = html.escape(str(item["categoria"] or ""))
+            account = html.escape(str(item["account"] or ""))
+            mesi_range = html.escape(str(item["mesi_range"] or "—"))
+            amount_label = html.escape(euro(float(item["importo"])))
+            quota = item["quota_mese"]
+            mode_chip = html.escape(str(item["modalita"] or ""))
 
-                if pd.notna(quota):
-                    quota_block = f"""
-                        <div style="
-                            margin-top:8px;
-                            font-size:12px;
-                            color:var(--ft-muted);
-                        ">
-                          Quota mensile
-                          <span style="
-                              color:var(--ft-accent-strong);
-                              font-weight:700;
-                          ">{html.escape(euro(float(quota)))}</span>
-                        </div>
-                    """
-                    range_block = f"""
-                        <div style="
-                            display:inline-flex;
-                            align-items:center;
-                            gap:6px;
-                            margin-top:8px;
-                            padding:4px 10px;
-                            border-radius:999px;
-                            background:rgba(var(--ft-accent-rgb),0.10);
-                            border:1px solid rgba(var(--ft-accent-rgb),0.22);
-                            color:var(--ft-accent-strong);
-                            font-size:11px;
-                            font-weight:700;
-                            letter-spacing:0.01em;
-                        ">
-                          {mesi_range}
-                        </div>
-                    """
-                else:
-                    quota_block = ""
-                    range_block = """
-                        <div style="
-                            margin-top:8px;
-                            font-size:12px;
-                            color:var(--ft-muted);
-                        ">Nessuna ripartizione</div>
-                    """
-
-                note_text = str(item.get("notes") or "").strip()
-                note_block = ""
-                if note_text:
-                    note_block = f"""
-                        <div style="
-                            margin-top:10px;
-                            font-size:13px;
-                            line-height:1.45;
-                            color:var(--ft-muted);
-                            font-style:italic;
-                        ">{html.escape(note_text)}</div>
-                    """
-
-                border = (
-                    "border-bottom:1px solid var(--ft-border);"
-                    if int(index) < len(special_overview) - 1
-                    else ""
-                )
-                rows_html.append(
-                    f"""
+            if pd.notna(quota):
+                quota_block = f"""
                     <div style="
-                        display:flex;
-                        justify-content:space-between;
-                        gap:18px;
-                        padding:16px 2px;
-                        {border}
-                        flex-wrap:wrap;
+                        margin-top:8px;
+                        font-size:12px;
+                        color:var(--ft-muted);
                     ">
-                      <div style="min-width:min(100%, 280px);flex:1;">
-                        <div style="
-                            font-size:15px;
-                            font-weight:700;
-                            color:var(--ft-text);
-                            line-height:1.35;
-                        ">{title}</div>
-                        <div style="
-                            margin-top:8px;
-                            display:flex;
-                            flex-wrap:wrap;
-                            gap:8px;
-                            align-items:center;
-                            font-size:12px;
-                            color:var(--ft-muted);
-                        ">
-                          <span style="
-                              background:rgba(var(--ft-accent-rgb),0.14);
-                              color:var(--ft-accent-strong);
-                              padding:3px 8px;
-                              border-radius:8px;
-                              font-size:11px;
-                              font-weight:750;
-                          ">{html.escape(get_category_icon(str(item['categoria'])))} {category}</span>
-                          <span>{html.escape(date_label)}</span>
-                          <span>{account}</span>
-                          <span style="
-                              padding:3px 8px;
-                              border-radius:8px;
-                              border:1px solid var(--ft-border);
-                              background:var(--ft-panel-soft);
-                              font-weight:650;
-                          ">{mode_chip}</span>
-                        </div>
-                        {range_block}
-                        {quota_block}
-                        {note_block}
-                      </div>
-                      <div style="
-                          text-align:right;
-                          font-family:Fraunces,Georgia,serif;
-                          font-size:22px;
+                      Quota mensile
+                      <span style="
+                          color:var(--ft-accent-strong);
                           font-weight:700;
-                          color:var(--ft-danger);
-                          white-space:nowrap;
-                          padding-top:2px;
-                      ">{amount_label}</div>
+                      ">{html.escape(euro(float(quota)))}</span>
                     </div>
-                    """
-                )
+                """
+                range_block = f"""
+                    <div style="
+                        display:inline-flex;
+                        align-items:center;
+                        gap:6px;
+                        margin-top:8px;
+                        padding:4px 10px;
+                        border-radius:999px;
+                        background:rgba(var(--ft-accent-rgb),0.10);
+                        border:1px solid rgba(var(--ft-accent-rgb),0.22);
+                        color:var(--ft-accent-strong);
+                        font-size:11px;
+                        font-weight:700;
+                        letter-spacing:0.01em;
+                    ">
+                      {mesi_range}
+                    </div>
+                """
+            else:
+                quota_block = ""
+                range_block = """
+                    <div style="
+                        margin-top:8px;
+                        font-size:12px;
+                        color:var(--ft-muted);
+                    ">Nessuna ripartizione</div>
+                """
 
-            render_html("".join(rows_html))
+            note_text = str(item.get("notes") or "").strip()
+            note_block = ""
+            if note_text:
+                note_block = f"""
+                    <div style="
+                        margin-top:10px;
+                        font-size:13px;
+                        line-height:1.45;
+                        color:var(--ft-muted);
+                        font-style:italic;
+                    ">{html.escape(note_text)}</div>
+                """
+
+            border = (
+                "border-bottom:1px solid var(--ft-border);"
+                if int(index) < len(special_overview) - 1
+                else ""
+            )
+            rows_html.append(
+                f"""
+                <div style="
+                    display:flex;
+                    justify-content:space-between;
+                    gap:18px;
+                    padding:16px 2px;
+                    {border}
+                    flex-wrap:wrap;
+                ">
+                  <div style="min-width:min(100%, 280px);flex:1;">
+                    <div style="
+                        font-size:15px;
+                        font-weight:700;
+                        color:var(--ft-text);
+                        line-height:1.35;
+                    ">{title}</div>
+                    <div style="
+                        margin-top:8px;
+                        display:flex;
+                        flex-wrap:wrap;
+                        gap:8px;
+                        align-items:center;
+                        font-size:12px;
+                        color:var(--ft-muted);
+                    ">
+                      <span style="
+                          background:rgba(var(--ft-accent-rgb),0.14);
+                          color:var(--ft-accent-strong);
+                          padding:3px 8px;
+                          border-radius:8px;
+                          font-size:11px;
+                          font-weight:750;
+                      ">{html.escape(get_category_icon(str(item['categoria'])))} {category}</span>
+                      <span>{html.escape(date_label)}</span>
+                      <span>{account}</span>
+                      <span style="
+                          padding:3px 8px;
+                          border-radius:8px;
+                          border:1px solid var(--ft-border);
+                          background:var(--ft-panel-soft);
+                          font-weight:650;
+                      ">{mode_chip}</span>
+                    </div>
+                    {range_block}
+                    {quota_block}
+                    {note_block}
+                  </div>
+                  <div style="
+                      text-align:right;
+                      font-family:Fraunces,Georgia,serif;
+                      font-size:22px;
+                      font-weight:700;
+                      color:var(--ft-danger);
+                      white-space:nowrap;
+                      padding-top:2px;
+                  ">{amount_label}</div>
+                </div>
+                """
+            )
+
+        special_noun = (
+            "Spesa speciale" if special_count == 1 else "Spese speciali"
+        )
+        summary_label = (
+            f"{special_count} {special_noun} · "
+            f"Totale {euro(special_total)}"
+        )
+        st.html(
+            f"""
+            <div class="ft-dashboard-card">
+              <details class="ft-specials-details">
+                <summary class="ft-specials-summary">
+                  <span class="ft-specials-summary-label">
+                    {html.escape(summary_label)}
+                  </span>
+                </summary>
+                <div class="ft-specials-hint">
+                  Nei totali del mese restano come le hai pagate.
+                  Nella media giornaliera puoi escluderle
+                  oppure spalmarle sui mesi scelti.
+                </div>
+                {"".join(rows_html)}
+              </details>
+            </div>
+            """
+        )
 
     render_section_title("Dove sono andati i soldi")
 
@@ -778,7 +807,15 @@ def show_dashboard() -> None:
     sem = resolve_semantic()
 
     if category_df.empty:
-        st.info("Nessuna uscita da mostrare per questo periodo.")
+        render_html(
+            """
+            <div class="ft-dashboard-card">
+              <div class="ft-specials-hint" style="margin:0;">
+                Nessuna uscita da mostrare per questo periodo.
+              </div>
+            </div>
+            """
+        )
     else:
         category_df = category_df.copy()
         category_df["label"] = category_df["categoria"].apply(
@@ -944,6 +981,7 @@ def show_dashboard() -> None:
         lambda: st.plotly_chart(
             fig2,
             width="stretch",
+            theme=None,
             config={"displayModeBar": False},
         )
     )

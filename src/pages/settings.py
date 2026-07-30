@@ -438,6 +438,7 @@ def show_settings() -> None:
                         if st.button(
                             f"Scarica prima i {movements_count} movimenti (Excel)",
                             width="stretch",
+                            type="primary",
                             key=f"export_before_delete_open_{account}",
                         ):
                             open_export_confirm_dialog(
