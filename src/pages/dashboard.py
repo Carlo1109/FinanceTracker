@@ -912,24 +912,64 @@ def show_dashboard() -> None:
 
     render_section_title("Andamento mensile")
 
-    monthly_df = monthly_flow_totals(filtered_df)
+    monthly_df = monthly_flow_totals(filtered_df).copy()
+    monthly_df["mese"] = monthly_df["mese"].astype(str)
+
+    italian_months = {
+        1: "Gen",
+        2: "Feb",
+        3: "Mar",
+        4: "Apr",
+        5: "Mag",
+        6: "Giu",
+        7: "Lug",
+        8: "Ago",
+        9: "Set",
+        10: "Ott",
+        11: "Nov",
+        12: "Dic",
+    }
+
+    monthly_df["_mese_data"] = pd.to_datetime(
+        monthly_df["mese"] + "-01",
+        format="%Y-%m-%d",
+        errors="coerce",
+    )
+
+    monthly_df = monthly_df.sort_values(
+        "_mese_data",
+        kind="stable",
+    )
+
+    monthly_df["mese_label"] = monthly_df["_mese_data"].apply(
+        lambda value: (
+            f"{italian_months[value.month]} {value.year}"
+            if pd.notna(value)
+            else ""
+        )
+    )
+
+    month_order = monthly_df["mese_label"].tolist()
 
     fig2 = px.line(
         monthly_df,
-        x="mese",
+        x="mese_label",
         y=[
             "entrate",
             "uscite",
             "investimenti",
         ],
         markers=True,
+        category_orders={
+            "mese_label": month_order,
+        },
         color_discrete_map={
             "entrate": sem.income,
             "uscite": sem.expense,
             "investimenti": sem.investment,
         },
         labels={
-            "mese": "",
+            "mese_label": "",
             "value": "€",
             "variable": "",
             "entrate": "Entrate",
@@ -943,37 +983,76 @@ def show_dashboard() -> None:
         "uscite": "Uscite",
         "investimenti": "Investimenti",
     }
+
     for trace in fig2.data:
         trace.name = flow_labels.get(trace.name, trace.name)
+        trace.hovertemplate = "%{y:,.2f} €<extra></extra>"
 
     fig2.update_layout(
         height=400,
-        margin=dict(l=10, r=20, t=10, b=10),
+        margin=dict(l=16, r=20, t=18, b=34),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color=sem.text, family="Manrope", size=13),
+        font=dict(
+            color=sem.text,
+            family="Manrope",
+            size=13,
+        ),
         legend_title_text="",
         xaxis_title="",
         yaxis_title="",
         hovermode="x unified",
+        hoverlabel=dict(
+            bgcolor=sem.hover_bg,
+            bordercolor=sem.info,
+            font=dict(
+                color=sem.text,
+                family="Manrope",
+                size=13,
+            ),
+            namelength=-1,
+        ),
         legend=dict(
             orientation="h",
             yanchor="bottom",
             y=1.02,
             xanchor="left",
             x=0,
-            font=dict(color=sem.text, family="Manrope", size=13),
+            font=dict(
+                color=sem.text,
+                family="Manrope",
+                size=13,
+            ),
         ),
         xaxis=dict(
+            type="category",
+            categoryorder="array",
+            categoryarray=month_order,
+            tickmode="array",
+            tickvals=month_order,
+            ticktext=month_order,
             showgrid=False,
             zeroline=False,
-            tickfont=dict(color=sem.muted),
+            automargin=True,
+            tickangle=0,
+            tickfont=dict(
+                color=sem.muted,
+                family="Manrope",
+                size=12,
+            ),
         ),
         yaxis=dict(
             showgrid=True,
             gridcolor="rgba(148,163,184,0.18)",
             zeroline=False,
-            tickfont=dict(color=sem.muted),
+            automargin=True,
+            tickfont=dict(
+                color=sem.muted,
+                family="Manrope",
+                size=12,
+            ),
+            tickformat=",.0f",
+            ticksuffix=" €",
         ),
     )
 
@@ -982,6 +1061,9 @@ def show_dashboard() -> None:
             fig2,
             width="stretch",
             theme=None,
-            config={"displayModeBar": False},
+            config={
+                "displayModeBar": False,
+                "responsive": True,
+            },
         )
     )
