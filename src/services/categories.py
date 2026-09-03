@@ -29,6 +29,7 @@ DEFAULT_CATEGORY_ICONS = {
     "Investimenti": "📈",
     "Trasferimenti interni": "🔁",
     "Stipendio": "💼",
+    "Rimborsi": "↩️",
     "Viaggi & Vacanze": "🏖️",
     "Svago & Tempo libero": "🎮",
     "Abbonamenti": "📺",
@@ -496,6 +497,157 @@ def delete_category(category: str) -> tuple[bool, int]:
     save_category_definitions(definitions)
 
     return True, reassigned_movements
+
+
+_KEYWORD_NOISE = {
+    "SUMUP",
+    "PAGAMENTO",
+    "PAGAMENTI",
+    "TRAMITE",
+    "POS",
+    "CARTA",
+    "CARTE",
+    "ADDEBITO",
+    "ACCREDITO",
+    "BONIFICO",
+    "SEPA",
+    "SCT",
+    "SDD",
+    "TRN",
+    "OPERAZIONE",
+    "PRELIEVO",
+    "BANCOMAT",
+    "CONTANTE",
+    "EURO",
+    "EUR",
+    "IMPORTO",
+    "PAYPAL",
+    "VOSTRO",
+    "FAVORE",
+    "PRESSO",
+    "NOSTRO",
+    "DEBITO",
+    "CREDITO",
+    "CASH",
+    "CARD",
+    "PAYMENT",
+    "TRANSFER",
+    "TRANSACTION",
+    "DA",
+    "DI",
+    "DEL",
+    "DELLA",
+    "DELLO",
+    "DEI",
+    "DELLE",
+    "IL",
+    "LO",
+    "LA",
+    "UN",
+    "UNA",
+    "THE",
+    "AND",
+    "PER",
+    "CON",
+    "SUL",
+    "SULLA",
+    "VIA",
+    "PIAZZA",
+    "VS",
+    "NS",
+    "CC",
+    "NR",
+    "NUM",
+    "N",
+}
+
+
+def _keyword_tokens(text: str) -> list[str]:
+    normalized = re.sub(r"[^0-9A-ZÀ-Ü]+", " ", str(text).upper())
+    tokens: list[str] = []
+    for raw in normalized.split():
+        token = raw.strip()
+        if len(token) < 4:
+            continue
+        if token in _KEYWORD_NOISE:
+            continue
+        if token.isdigit():
+            continue
+        if sum(ch.isdigit() for ch in token) > len(token) / 2:
+            continue
+        tokens.append(token)
+    return tokens
+
+
+def suggest_keyword_from_text(
+    text: str,
+    category: str,
+    definitions: dict[str, dict[str, Any]] | None = None,
+) -> str | None:
+    """
+    Propone una keyword da una descrizione ricategorizzata.
+
+    Evita Altro, keyword già presenti e token generici da estratto conto.
+    Se un token singolo è già di un'altra categoria, prova una frase
+    più specifica (es. AMAZON EU invece di AMAZON).
+    """
+    category = str(category).strip()
+    if not category or category == "Altro":
+        return None
+
+    if definitions is None:
+        definitions = load_category_definitions()
+
+    if category not in definitions:
+        return None
+
+    if categorize(text, definitions) == category:
+        return None
+
+    tokens = _keyword_tokens(text)
+    if not tokens:
+        return None
+
+    target_keywords = {
+        str(keyword).strip().upper()
+        for keyword in definitions[category]["keywords"]
+    }
+    other_keywords = {
+        str(keyword).strip().upper()
+        for name, data in definitions.items()
+        if name != category
+        for keyword in data.get("keywords", [])
+    }
+
+    first = tokens[0]
+    phrases: list[str] = []
+    if len(tokens) >= 3:
+        phrases.append(" ".join(tokens[:3]))
+    if len(tokens) >= 2:
+        phrases.append(" ".join(tokens[:2]))
+
+    if first in other_keywords:
+        candidates = phrases + [first]
+    else:
+        candidates = [first] + phrases
+
+    longest = max(tokens, key=len)
+    if longest not in candidates:
+        candidates.append(longest)
+
+    fallback: str | None = None
+    for candidate in candidates:
+        if len(candidate) > 40:
+            continue
+        if candidate in target_keywords:
+            continue
+        if candidate in other_keywords and " " not in candidate:
+            if fallback is None:
+                fallback = candidate
+            continue
+        return candidate
+
+    return fallback
 
 
 def categorize(

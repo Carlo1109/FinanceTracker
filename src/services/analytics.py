@@ -707,6 +707,42 @@ def savings_rate(metrics: dict[str, float]) -> float | None:
     return float(metrics["bilancio"]) / entrate * 100
 
 
+def income_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Entrate operative (esclude trasferimenti e flag)."""
+    if df.empty:
+        return df.iloc[0:0].copy()
+    working = _for_metrics(df)
+    return working[working["importo"] > 0].copy()
+
+
+def top_income_category(
+    df: pd.DataFrame,
+) -> tuple[str, float] | None:
+    incomes = income_frame(df)
+    if incomes.empty:
+        return None
+    ranked = (
+        incomes.groupby("categoria")["importo"]
+        .sum()
+        .sort_values(ascending=False)
+    )
+    if ranked.empty:
+        return None
+    return str(ranked.index[0]), float(ranked.iloc[0])
+
+
+def category_income_breakdown(df: pd.DataFrame) -> pd.DataFrame:
+    incomes = income_frame(df)
+    if incomes.empty:
+        return pd.DataFrame(columns=["categoria", "importo"])
+    return (
+        incomes.groupby("categoria", as_index=False)["importo"]
+        .sum()
+        .sort_values("importo", ascending=False)
+        .reset_index(drop=True)
+    )
+
+
 def top_expense_category(
     df: pd.DataFrame,
 ) -> tuple[str, float] | None:

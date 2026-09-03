@@ -135,6 +135,16 @@
       "STIPENDIO"
     ]
   },
+  "Rimborsi": {
+    "icon": "↩️",
+    "keywords": [
+      "RIMBORSO",
+      "RIMBORSI",
+      "REFUND",
+      "STORNO",
+      "RESO"
+    ]
+  },
   "Viaggi & Vacanze": {
     "icon": "🏖️",
     "keywords": [

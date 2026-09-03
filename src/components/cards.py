@@ -430,13 +430,14 @@ def render_expense_distribution_card(
     total_label: str,
     render_pie: Callable[[], None],
     list_max_height: int = 360,
+    key: str = "ft_dashboard_distribution_card",
 ) -> None:
     """
     Card unica con torta a sinistra e lista scorrevole a destra.
 
     ``render_pie`` è una callback senza argomenti (es. iframe Plotly).
     """
-    with st.container(border=True, key="ft_dashboard_distribution_card"):
+    with st.container(border=True, key=key):
         render_html(
             '<span class="ft-distribution-anchor" aria-hidden="true"></span>'
         )

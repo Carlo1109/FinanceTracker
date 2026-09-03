@@ -1,4 +1,5 @@
 import html
+from datetime import date
 
 import pandas as pd
 import streamlit as st
@@ -24,16 +25,17 @@ from src.services.analytics import (
     is_transfer_category,
 )
 from src.services.categories import (
+    add_keyword_to_category,
     get_category_icon,
     get_category_names,
+    suggest_keyword_from_text,
 )
 from src.services.movement_service import (
     delete_movement,
     load_movements,
-    update_movement_category,
-    update_movement_escludi_metriche,
-    update_movement_notes,
-    update_movement_speciale,
+    recalculate_automatic_categories,
+    split_movement,
+    update_movement,
 )
 from src.utils.export_excel import (
     movements_export_filename,
@@ -42,6 +44,9 @@ from src.utils.formatting import euro, signed_euro
 
 
 _MOVEMENTS_TOAST_KEY = "movements_toast"
+_KEYWORD_SUGGEST_KEY = "keyword_suggest"
+_KEYWORD_EDIT_KEY = "keyword_suggest_edit"
+_KEYWORD_SCROLL_KEY = "keyword_suggest_scroll"
 
 
 def _queue_toast(message: str) -> None:
@@ -53,6 +58,136 @@ def _show_queued_toast() -> None:
     message = st.session_state.pop(_MOVEMENTS_TOAST_KEY, None)
     if message:
         st.toast(message, duration=4)
+
+
+def _clear_movement_widget_state(movement_id: int) -> None:
+    suffix = f"_{movement_id}"
+    infix = f"_{movement_id}_"
+    for key in list(st.session_state.keys()):
+        if key.endswith(suffix) or infix in str(key):
+            st.session_state.pop(key, None)
+
+
+def _queue_keyword_suggestion(
+    description: str,
+    category: str,
+) -> None:
+    suggested = suggest_keyword_from_text(description, category)
+    if not suggested:
+        return
+    st.session_state[_KEYWORD_SUGGEST_KEY] = {
+        "keyword": suggested,
+        "category": category,
+        "sample": description,
+    }
+    st.session_state[_KEYWORD_EDIT_KEY] = suggested
+    st.session_state[_KEYWORD_SCROLL_KEY] = True
+
+
+def _scroll_page_to_top() -> None:
+    """Riporta in cima dopo il salvataggio (Streamlit resta sullo scroll)."""
+    st.html(
+        """
+        <div id="ft-keyword-suggest-anchor" aria-hidden="true"></div>
+        <script>
+        (function () {
+          function scrollUp() {
+            const win = window.top || window.parent || window;
+            const doc = win.document;
+            const nodes = [
+              doc.querySelector('[data-testid="stMain"]'),
+              doc.querySelector('[data-testid="stAppViewContainer"]'),
+              doc.querySelector('section.main'),
+              doc.scrollingElement,
+              doc.documentElement,
+              doc.body
+            ];
+            for (const node of nodes) {
+              if (!node) continue;
+              try {
+                if (typeof node.scrollTo === "function") {
+                  node.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+                } else {
+                  node.scrollTop = 0;
+                }
+              } catch (error) {}
+            }
+            try { win.scrollTo({ top: 0, left: 0, behavior: "smooth" }); } catch (error) {}
+            const anchor = doc.getElementById("ft-keyword-suggest-anchor");
+            if (anchor && typeof anchor.scrollIntoView === "function") {
+              anchor.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+          }
+          scrollUp();
+          setTimeout(scrollUp, 80);
+          setTimeout(scrollUp, 280);
+          setTimeout(scrollUp, 600);
+        })();
+        </script>
+        """,
+        width="content",
+        unsafe_allow_javascript=True,
+    )
+
+
+def _render_keyword_suggestion() -> None:
+    suggestion = st.session_state.get(_KEYWORD_SUGGEST_KEY)
+    if not suggestion:
+        return
+
+    keyword = str(suggestion.get("keyword") or "")
+    category = str(suggestion.get("category") or "")
+    if not keyword or not category:
+        st.session_state.pop(_KEYWORD_SUGGEST_KEY, None)
+        st.session_state.pop(_KEYWORD_EDIT_KEY, None)
+        return
+
+    if _KEYWORD_EDIT_KEY not in st.session_state:
+        st.session_state[_KEYWORD_EDIT_KEY] = keyword
+
+    if st.session_state.pop(_KEYWORD_SCROLL_KEY, False):
+        _scroll_page_to_top()
+
+    st.info(
+        f"Vuoi aggiungere una parola chiave a "
+        f"**{get_category_icon(category)} {category}**? "
+        "Puoi modificare il testo prima di confermare. "
+        "Poi ricalcolo le categorie automatiche."
+    )
+    edited_keyword = st.text_input(
+        "Parola chiave",
+        key=_KEYWORD_EDIT_KEY,
+    )
+    add_col, skip_col, _ = st.columns([1.4, 1.2, 3])
+    with add_col:
+        if st.button(
+            "Aggiungi e ricalcola",
+            type="primary",
+            key="keyword_suggest_yes",
+        ):
+            chosen = str(edited_keyword or "").strip()
+            if not chosen:
+                st.error("Inserisci una parola chiave.")
+                return
+            added = add_keyword_to_category(category, chosen)
+            updated = recalculate_automatic_categories()
+            st.session_state.pop(_KEYWORD_SUGGEST_KEY, None)
+            st.session_state.pop(_KEYWORD_EDIT_KEY, None)
+            if added:
+                _queue_toast(
+                    f"Keyword «{chosen.upper()}» aggiunta a {category}. "
+                    f"Ricalcolati {updated} movimenti."
+                )
+            else:
+                _queue_toast(
+                    f"Keyword già presente. Ricalcolati {updated} movimenti."
+                )
+            st.rerun()
+    with skip_col:
+        if st.button("No, grazie", key="keyword_suggest_no"):
+            st.session_state.pop(_KEYWORD_SUGGEST_KEY, None)
+            st.session_state.pop(_KEYWORD_EDIT_KEY, None)
+            st.rerun()
 
 
 def clean_description(value: str) -> str:
@@ -83,10 +218,303 @@ def get_categories() -> list[str]:
     return get_category_names()
 
 
+def _movement_date(row: pd.Series) -> date:
+    parsed = pd.to_datetime(row.get("data"), errors="coerce", dayfirst=True)
+    if pd.isna(parsed):
+        return date.today()
+    return parsed.date()
+
+
+def _render_movement_details(
+    *,
+    row: pd.Series,
+    movement_id: int,
+    category: str,
+    categories: list[str],
+    title: str,
+    description: str,
+    amount: float,
+    is_special: bool,
+    special_months: int,
+    exclude_from_metrics: bool,
+    is_investment: bool,
+    is_transfer: bool,
+) -> None:
+    original_category = str(row["categoria"])
+    desc_key = f"edit_desc_{movement_id}"
+    notes_key = f"edit_notes_{movement_id}"
+    exclude_key = f"escludi_metriche_{movement_id}"
+    speciale_key = f"speciale_{movement_id}"
+    mesi_key = f"speciale_mesi_{movement_id}"
+    split_open_key = f"split_open_{movement_id}"
+
+    if desc_key not in st.session_state:
+        st.session_state[desc_key] = title
+    if notes_key not in st.session_state:
+        st.session_state[notes_key] = str(row.get("notes") or "")
+    if exclude_key not in st.session_state:
+        st.session_state[exclude_key] = exclude_from_metrics
+    if speciale_key not in st.session_state:
+        st.session_state[speciale_key] = is_special
+    if mesi_key not in st.session_state:
+        st.session_state[mesi_key] = special_months
+
+    new_description = st.text_input(
+        "Descrizione",
+        key=desc_key,
+    )
+    new_category = st.selectbox(
+        "Categoria",
+        categories,
+        index=categories.index(category),
+        format_func=lambda name: f"{get_category_icon(name)} {name}",
+        key=f"category_{movement_id}",
+    )
+    new_notes = st.text_area(
+        "Note",
+        key=notes_key,
+        height=68,
+        placeholder="Opzionale",
+    )
+
+    if is_transfer_category(new_category):
+        marked_exclude = True
+        st.caption(
+            "I trasferimenti interni restano in lista ma "
+            "non entrano in entrate, uscite o medie."
+        )
+    else:
+        marked_exclude = st.checkbox(
+            "Escludere dalle metriche",
+            key=exclude_key,
+            help=(
+                "Il movimento resta in lista ma non conta "
+                "in entrate, uscite, medie e grafici."
+            ),
+        )
+
+    movement_type = "Entrata" if amount > 0 else "Uscita"
+    marked_special = False
+    spread_months = 0
+    is_expense_type = (
+        movement_type == "Uscita"
+        and not is_transfer_category(new_category)
+        and new_category != INVESTMENT_CATEGORY
+    )
+    if is_expense_type:
+        marked_special = st.checkbox(
+            "Spesa speciale",
+            key=speciale_key,
+            help=(
+                "Segna spese fuori dalla normalità. "
+                "Opzionale: ripartiscile sui mesi "
+                "(es. abbonamento annuale su 12). "
+                "0 mesi = esclusa dalla media giornaliera; "
+                "l'importo intero resta nei totali."
+            ),
+        )
+        if marked_special:
+            spread_months = int(
+                st.number_input(
+                    "Ripartisci su mesi",
+                    min_value=0,
+                    max_value=60,
+                    step=1,
+                    key=mesi_key,
+                    help=(
+                        "Quanti mesi usare nella media giornaliera. "
+                        "0 = esclusa del tutto dalla media "
+                        "(resta nei totali)."
+                    ),
+                )
+            )
+            if spread_months > 0:
+                st.caption(
+                    f"Nella media: {euro(abs(amount) / spread_months)}/mese "
+                    f"per {spread_months} mesi."
+                )
+    elif not is_transfer and not is_investment:
+        st.caption("Spesa speciale disponibile solo sulle uscite.")
+
+    movement_date = _movement_date(row)
+    edited_amount = abs(float(amount))
+    edited_account = str(row.get("account") or "Altro")
+
+    save_col, delete_col = st.columns([1.6, 1.2])
+    with save_col:
+        saved = st.button(
+            "Salva modifiche",
+            type="primary",
+            key=f"save_movement_{movement_id}",
+            width="stretch",
+        )
+    with delete_col:
+        confirm_key = f"confirm_delete_{movement_id}"
+        if st.session_state.get(confirm_key):
+            st.warning("Eliminare questo movimento?")
+            yes_col, no_col = st.columns(2)
+            with yes_col:
+                if st.button("Sì", key=f"delete_yes_{movement_id}", width="stretch"):
+                    delete_movement(movement_id)
+                    _clear_movement_widget_state(movement_id)
+                    _queue_toast("Movimento eliminato")
+                    st.rerun()
+            with no_col:
+                if st.button("No", key=f"delete_no_{movement_id}", width="stretch"):
+                    st.session_state[confirm_key] = False
+                    st.rerun()
+        elif st.button("🗑️ Elimina", key=f"delete_{movement_id}", width="stretch"):
+            st.session_state[confirm_key] = True
+            st.rerun()
+
+    if saved:
+        if not str(new_description or "").strip():
+            st.error("Inserisci una descrizione.")
+        else:
+            update_movement(
+                movement_id,
+                movement_date=movement_date,
+                description=str(new_description).strip(),
+                amount=edited_amount,
+                category=new_category,
+                movement_type=movement_type,
+                account=edited_account,
+                notes=str(new_notes or ""),
+                speciale=marked_special,
+                speciale_mesi=spread_months,
+                escludi_metriche=marked_exclude,
+            )
+            if new_category != original_category:
+                _queue_keyword_suggestion(
+                    str(new_description).strip() or description,
+                    new_category,
+                )
+            _clear_movement_widget_state(movement_id)
+            _queue_toast("Movimento aggiornato")
+            st.rerun()
+
+    if short_description := description:
+        if short_description != title:
+            st.caption(short_description)
+
+    if st.session_state.get(split_open_key):
+        _render_split_form(
+            movement_id=movement_id,
+            category=category,
+            categories=categories,
+            amount=amount,
+        )
+    elif st.button("Dividi movimento", key=f"split_open_btn_{movement_id}"):
+        original_abs = round(abs(float(amount)), 2)
+        st.session_state[split_open_key] = True
+        st.session_state[f"split_n_{movement_id}"] = 2
+        first = round(original_abs / 2, 2)
+        second = round(original_abs - first, 2)
+        st.session_state[f"split_amt_{movement_id}_0"] = first
+        st.session_state[f"split_amt_{movement_id}_1"] = second
+        st.session_state[f"split_cat_{movement_id}_0"] = category
+        st.session_state[f"split_cat_{movement_id}_1"] = category
+        st.rerun()
+
+
+def _render_split_form(
+    *,
+    movement_id: int,
+    category: str,
+    categories: list[str],
+    amount: float,
+) -> None:
+    original_abs = round(abs(float(amount)), 2)
+    st.markdown("**Dividi in più categorie**")
+    st.caption(
+        f"L'importo originale è {euro(original_abs)}. "
+        "La somma delle parti deve coincidere."
+    )
+    parts_count = int(
+        st.number_input(
+            "Numero di parti",
+            min_value=2,
+            max_value=4,
+            step=1,
+            key=f"split_n_{movement_id}",
+        )
+    )
+
+    parts: list[tuple[float, str]] = []
+    assigned = 0.0
+    for index in range(parts_count):
+        amount_key = f"split_amt_{movement_id}_{index}"
+        category_key = f"split_cat_{movement_id}_{index}"
+        if amount_key not in st.session_state:
+            remaining_slots = parts_count - index
+            leftover = max(original_abs - assigned, 0.0)
+            share = (
+                round(leftover / remaining_slots, 2)
+                if leftover > 0
+                else 0.01
+            )
+            st.session_state[amount_key] = max(share, 0.01)
+        if category_key not in st.session_state:
+            st.session_state[category_key] = category
+
+        part_col, cat_col = st.columns([1, 1.4])
+        with part_col:
+            part_amount = float(
+                st.number_input(
+                    f"Importo {index + 1}",
+                    min_value=0.01,
+                    step=0.01,
+                    format="%.2f",
+                    key=amount_key,
+                )
+            )
+        with cat_col:
+            part_category = st.selectbox(
+                f"Categoria {index + 1}",
+                categories,
+                format_func=lambda name: f"{get_category_icon(name)} {name}",
+                key=category_key,
+            )
+        parts.append((part_amount, part_category))
+        assigned += part_amount
+
+    assigned = round(assigned, 2)
+    remaining = round(original_abs - assigned, 2)
+    if abs(remaining) <= 0.01:
+        st.caption("Somma corretta.")
+    elif remaining > 0:
+        st.caption(f"Mancano {euro(remaining)} da assegnare.")
+    else:
+        st.caption(f"{euro(abs(remaining))} in eccesso.")
+
+    confirm_col, cancel_col, _ = st.columns([1.3, 1.2, 2])
+    with confirm_col:
+        if st.button(
+            "Conferma divisione",
+            type="primary",
+            key=f"split_confirm_{movement_id}",
+        ):
+            try:
+                created = split_movement(movement_id, parts)
+            except ValueError as error:
+                st.error(str(error))
+            else:
+                _clear_movement_widget_state(movement_id)
+                _queue_toast(
+                    f"Movimento diviso in {created + 1} parti"
+                )
+                st.rerun()
+    with cancel_col:
+        if st.button("Annulla divisione", key=f"split_cancel_{movement_id}"):
+            st.session_state[f"split_open_{movement_id}"] = False
+            st.rerun()
+
+
 def show_movements() -> None:
     st.title("Movimenti")
     st.caption("Cerca, filtra e modifica i movimenti salvati.")
     _show_queued_toast()
+    _render_keyword_suggestion()
     render_pending_export_dialog()
 
     df = load_movements()
@@ -400,205 +828,20 @@ def show_movements() -> None:
                 )
 
             with st.expander("Dettagli"):
-                edit_col_1, edit_col_2 = st.columns([2, 1])
-
-                with edit_col_1:
-                    new_category = st.selectbox(
-                        "Categoria",
-                        categories,
-                        index=categories.index(category),
-                        format_func=lambda name: (
-                            f"{get_category_icon(name)} {name}"
-                        ),
-                        key=f"category_{row['id']}",
-                    )
-
-                    if new_category != row["categoria"]:
-                        update_movement_category(
-                            int(row["id"]),
-                            new_category,
-                        )
-                        _queue_toast("Categoria aggiornata")
-                        st.rerun()
-
-                    exclude_key = f"escludi_metriche_{movement_id}"
-                    if exclude_key not in st.session_state:
-                        st.session_state[exclude_key] = exclude_from_metrics
-
-                    if is_transfer:
-                        st.caption(
-                            "I trasferimenti interni restano in lista ma "
-                            "non entrano in entrate, uscite o medie."
-                        )
-                    else:
-                        marked_exclude = st.checkbox(
-                            "Escludere dalle metriche",
-                            key=exclude_key,
-                            help=(
-                                "Il movimento resta in lista ma non conta "
-                                "in entrate, uscite, medie e grafici."
-                            ),
-                        )
-                        if marked_exclude != exclude_from_metrics:
-                            if st.button(
-                                "Salva esclusione metriche",
-                                key=f"save_escludi_{movement_id}",
-                                type="primary",
-                            ):
-                                update_movement_escludi_metriche(
-                                    movement_id,
-                                    marked_exclude,
-                                )
-                                st.session_state.pop(exclude_key, None)
-                                _queue_toast(
-                                    "Esclusione dalle metriche aggiornata"
-                                )
-                                st.rerun()
-
-                    is_expense = (
-                        float(row["importo"]) < 0
-                        and not is_investment
-                        and not is_transfer
-                    )
-                    if is_expense:
-                        speciale_key = f"speciale_{movement_id}"
-                        mesi_key = f"speciale_mesi_{movement_id}"
-                        note_key = f"speciale_note_{movement_id}"
-
-                        if speciale_key not in st.session_state:
-                            st.session_state[speciale_key] = is_special
-                        if mesi_key not in st.session_state:
-                            st.session_state[mesi_key] = special_months
-
-                        marked_special = st.checkbox(
-                            "Spesa speciale",
-                            key=speciale_key,
-                            help=(
-                                "Segna spese fuori dalla normalità. "
-                                "Opzionale: ripartiscile sui mesi "
-                                "(es. abbonamento annuale su 12). "
-                                "0 mesi = esclusa dalla media giornaliera; "
-                                "l'importo intero resta nei totali."
-                            ),
-                        )
-                        spread_months = int(st.session_state.get(mesi_key) or 0)
-                        special_note = str(row.get("notes") or "")
-                        current_notes = special_note
-
-                        if marked_special:
-                            spread_months = int(
-                                st.number_input(
-                                    "Ripartisci su mesi",
-                                    min_value=0,
-                                    max_value=60,
-                                    step=1,
-                                    key=mesi_key,
-                                    help=(
-                                        "Quanti mesi usare nella media giornaliera. "
-                                        "0 = esclusa del tutto dalla media "
-                                        "(resta nei totali)."
-                                    ),
-                                )
-                            )
-                            if spread_months > 0:
-                                monthly = abs(float(row["importo"])) / spread_months
-                                st.caption(
-                                    f"Nella media: {euro(monthly)}/mese "
-                                    f"per {spread_months} mesi."
-                                )
-
-                            if note_key not in st.session_state:
-                                st.session_state[note_key] = current_notes
-                            special_note = st.text_area(
-                                "Nota",
-                                key=note_key,
-                                height=68,
-                            )
-                        elif current_notes:
-                            st.caption(f"Note: {current_notes}")
-
-                        speciale_dirty = marked_special != is_special or (
-                            marked_special
-                            and spread_months != special_months
-                        )
-                        show_save = marked_special or speciale_dirty
-
-                        if show_save:
-                            if st.button(
-                                "Salva spesa speciale",
-                                key=f"save_speciale_{movement_id}",
-                                type="primary",
-                            ):
-                                saved_months = (
-                                    spread_months if marked_special else 0
-                                )
-                                update_movement_speciale(
-                                    movement_id,
-                                    marked_special,
-                                    saved_months,
-                                )
-                                if marked_special:
-                                    update_movement_notes(
-                                        movement_id,
-                                        special_note,
-                                    )
-                                for key in (
-                                    speciale_key,
-                                    mesi_key,
-                                    note_key,
-                                ):
-                                    st.session_state.pop(key, None)
-                                _queue_toast("Spesa speciale aggiornata")
-                                st.rerun()
-                    elif not is_transfer and not is_investment:
-                        st.caption(
-                            "Spesa speciale disponibile solo sulle uscite."
-                        )
-                        if row.get("notes"):
-                            st.caption(f"Note: {row['notes']}")
-                    elif row.get("notes"):
-                        st.caption(f"Note: {row['notes']}")
-
-                    st.caption(description)
-
-                with edit_col_2:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    confirm_key = f"confirm_delete_{row['id']}"
-
-                    if st.session_state.get(confirm_key):
-                        st.warning(
-                            "Eliminare questo movimento? "
-                            "L'operazione non si può annullare."
-                        )
-                        c_yes, c_no = st.columns(2)
-
-                        with c_yes:
-                            if st.button(
-                                "Sì",
-                                key=f"delete_yes_{row['id']}",
-                                width="stretch",
-                            ):
-                                delete_movement(int(row["id"]))
-                                st.session_state[confirm_key] = False
-                                _queue_toast("Movimento eliminato")
-                                st.rerun()
-
-                        with c_no:
-                            if st.button(
-                                "No",
-                                key=f"delete_no_{row['id']}",
-                                width="stretch",
-                            ):
-                                st.session_state[confirm_key] = False
-                                st.rerun()
-                    else:
-                        if st.button(
-                            "🗑️ Elimina",
-                            key=f"delete_{row['id']}",
-                            width="stretch",
-                        ):
-                            st.session_state[confirm_key] = True
-                            st.rerun()
+                _render_movement_details(
+                    row=row,
+                    movement_id=movement_id,
+                    category=category,
+                    categories=categories,
+                    title=title,
+                    description=description,
+                    amount=amount,
+                    is_special=is_special,
+                    special_months=special_months,
+                    exclude_from_metrics=exclude_from_metrics,
+                    is_investment=is_investment,
+                    is_transfer=is_transfer,
+                )
 
     st.markdown("")
     export_month = (

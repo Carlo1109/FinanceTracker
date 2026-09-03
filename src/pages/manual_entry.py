@@ -9,7 +9,11 @@ from src.services.analytics import (
     is_transfer_category,
 )
 from src.services.categories import get_category_icon, get_category_names
-from src.services.movement_service import add_manual_movement
+from src.services.movement_service import (
+    account_choices,
+    add_manual_movement,
+    load_movements,
+)
 from src.utils.formatting import euro
 
 
@@ -47,9 +51,15 @@ def show_manual_entry() -> None:
             )
 
         with account_col:
+            discovered = []
+            movements = load_movements()
+            if not movements.empty:
+                discovered = (
+                    movements["account"].dropna().astype(str).tolist()
+                )
             account = st.selectbox(
                 "Conto",
-                ["Fineco", "Revolut", "PostePay", "Contanti", "PayPal", "Altro"],
+                account_choices(*discovered),
             )
 
         with category_col:

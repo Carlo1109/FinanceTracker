@@ -28,6 +28,7 @@ from src.services.analytics import (
     calculate_financial_metrics,
     calculate_period_days,
     category_expense_breakdown,
+    category_income_breakdown,
     format_comparison_caption,
     get_current_period_bounds,
     get_daily_expense_comparison,
@@ -42,6 +43,7 @@ from src.services.analytics import (
     special_expense_summary,
     special_expenses_overview,
     top_expense_category,
+    top_income_category,
 )
 from src.services.categories import get_category_icon, load_category_definitions
 from src.services.movement_service import load_movements
@@ -80,6 +82,7 @@ def render_category_pie_chart(
     fig: go.Figure,
     *,
     height: int = 420,
+    root_id: str = "ft-pie-root",
 ) -> None:
     """Donut in iframe con hover luminoso (WebKit-friendly via Plotly.restyle)."""
     trace = fig.data[0] if fig.data else None
@@ -134,7 +137,7 @@ def render_category_pie_chart(
             overflow: hidden;
           }}
         </style>
-        <div id="ft-pie-root" style="
+        <div id="{root_id}" style="
           width:100%;
           height:100%;
           filter: drop-shadow(0 8px 14px rgba(0,0,0,0.22));
@@ -146,6 +149,7 @@ def render_category_pie_chart(
           const BASE = {base_json};
           const BRIGHT = {bright_json};
           const DIM = {dim_json};
+          const ROOT = {json.dumps(root_id)};
 
           function slicePaths(gd) {{
             let paths = gd.querySelectorAll('.pielayer g.slice path');
@@ -199,7 +203,7 @@ def render_category_pie_chart(
           }}
 
           function tryBind(left) {{
-            const plots = document.querySelectorAll('#ft-pie-root .js-plotly-plot');
+            const plots = document.querySelectorAll('#' + ROOT + ' .js-plotly-plot');
             const gd = plots[plots.length - 1];
             if (gd && typeof Plotly !== 'undefined' && gd.data) {{
               bind(gd);
@@ -218,6 +222,126 @@ def render_category_pie_chart(
         width="stretch",
     )
 
+
+
+def _render_category_breakdown_section(
+    category_df: pd.DataFrame,
+    *,
+    empty_message: str,
+    center_caption: str,
+    card_key: str,
+    pie_root_id: str,
+) -> None:
+    if category_df.empty:
+        render_html(
+            f"""
+            <div class="ft-dashboard-card">
+              <div class="ft-specials-hint" style="margin:0;">
+                {html.escape(empty_message)}
+              </div>
+            </div>
+            """
+        )
+        return
+
+    category_df = category_df.copy()
+    category_df["label"] = category_df["categoria"].apply(
+        lambda category: f"{get_category_icon(category)} {category}"
+    )
+    total_amount = float(category_df["importo"].sum())
+    category_definitions = load_category_definitions()
+    pie_colors = get_category_colors(
+        category_df["categoria"].astype(str).tolist(),
+        category_definitions,
+    )
+    sem = resolve_semantic()
+
+    fig = go.Figure(
+        data=[
+            go.Pie(
+                labels=category_df["label"],
+                values=category_df["importo"],
+                hole=0.68,
+                sort=False,
+                direction="clockwise",
+                textinfo="none",
+                hovertemplate=(
+                    "<b>%{label}</b><br>"
+                    "%{value:.2f} €<br>"
+                    "%{percent}<extra></extra>"
+                ),
+                marker=dict(
+                    colors=pie_colors,
+                    line=dict(
+                        color=sem.pie_outline,
+                        width=2,
+                    ),
+                ),
+                hoverlabel=dict(
+                    bgcolor=sem.hover_bg,
+                    bordercolor=sem.info,
+                    font=dict(
+                        size=13,
+                        color=sem.text,
+                        family="Manrope",
+                    ),
+                ),
+            )
+        ]
+    )
+
+    fig.update_layout(
+        height=400,
+        margin=dict(l=0, r=0, t=0, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font_color=sem.text,
+        showlegend=False,
+        annotations=[
+            dict(
+                text=(
+                    f"<b>{euro(total_amount)}</b><br>"
+                    f"<span style='font-size:12px;color:{sem.muted}'>"
+                    f"{html.escape(center_caption)}"
+                    "</span>"
+                ),
+                x=0.5,
+                y=0.5,
+                font=dict(
+                    size=18,
+                    color=sem.text,
+                    family="Manrope",
+                ),
+                showarrow=False,
+            )
+        ],
+    )
+
+    breakdown_rows = []
+    for _, item in category_df.iterrows():
+        percentage = float(item["importo"]) / total_amount * 100
+        category = str(item["categoria"])
+        breakdown_rows.append(
+            {
+                "icon": get_category_icon(category),
+                "name": category,
+                "amount": euro(float(item["importo"])),
+                "percent": percentage,
+                "color": pie_colors[len(breakdown_rows)],
+            }
+        )
+
+    render_expense_distribution_card(
+        breakdown_rows,
+        total_label=euro(total_amount),
+        render_pie=lambda: render_category_pie_chart(
+            fig,
+            height=420,
+            root_id=pie_root_id,
+        ),
+        list_max_height=360,
+        key=card_key,
+    )
 
 
 def show_dashboard() -> None:
@@ -512,6 +636,13 @@ def show_dashboard() -> None:
     else:
         top_category, top_category_amount = top
 
+    top_income = top_income_category(filtered_df)
+    if top_income is None:
+        top_income_category_name = "Nessuna"
+        top_income_amount = 0.0
+    else:
+        top_income_category_name, top_income_amount = top_income
+
     balance_color = BALANCE_COLOR if bilancio >= 0 else EXPENSE_COLOR
     liquidity_color = LIQUIDITY_COLOR if liquidita >= 0 else EXPENSE_COLOR
 
@@ -593,16 +724,26 @@ def show_dashboard() -> None:
 
     st.markdown("")
 
-    s1, s2, s3 = st.columns(3)
+    s1, s2, s3, s4 = st.columns(4)
 
     with s1:
         render_info_card(
-            "Categoria principale",
+            "Spesa principale",
             f"{get_category_icon(top_category)} {top_category}",
             euro(top_category_amount),
         )
 
     with s2:
+        render_info_card(
+            "Fonte principale",
+            (
+                f"{get_category_icon(top_income_category_name)} "
+                f"{top_income_category_name}"
+            ),
+            euro(top_income_amount),
+        )
+
+    with s3:
         render_info_card(
             title="Spesa media giornaliera",
             value=euro(avg_daily_expense),
@@ -611,7 +752,7 @@ def show_dashboard() -> None:
             footer=daily_footer,
         )
 
-    with s3:
+    with s4:
         render_info_card(
             title="Tasso di risparmio",
             value=savings_label,
@@ -802,115 +943,26 @@ def show_dashboard() -> None:
         )
 
     render_section_title("Dove sono andati i soldi")
+    _render_category_breakdown_section(
+        category_expense_breakdown(filtered_df),
+        empty_message="Nessuna uscita da mostrare per questo periodo.",
+        center_caption="Totale uscite",
+        card_key="ft_dashboard_expense_distribution",
+        pie_root_id="ft-pie-expenses",
+    )
 
-    category_df = category_expense_breakdown(filtered_df)
-    sem = resolve_semantic()
-
-    if category_df.empty:
-        render_html(
-            """
-            <div class="ft-dashboard-card">
-              <div class="ft-specials-hint" style="margin:0;">
-                Nessuna uscita da mostrare per questo periodo.
-              </div>
-            </div>
-            """
-        )
-    else:
-        category_df = category_df.copy()
-        category_df["label"] = category_df["categoria"].apply(
-            lambda category: f"{get_category_icon(category)} {category}"
-        )
-        total_expenses = float(category_df["importo"].sum())
-        category_definitions = load_category_definitions()
-        pie_colors = get_category_colors(
-            category_df["categoria"].astype(str).tolist(),
-            category_definitions,
-        )
-
-        fig = go.Figure(
-            data=[
-                go.Pie(
-                    labels=category_df["label"],
-                    values=category_df["importo"],
-                    hole=0.68,
-                    sort=False,
-                    direction="clockwise",
-                    textinfo="none",
-                    hovertemplate=(
-                        "<b>%{label}</b><br>"
-                        "%{value:.2f} €<br>"
-                        "%{percent}<extra></extra>"
-                    ),
-                    marker=dict(
-                        colors=pie_colors,
-                        line=dict(
-                            color=sem.pie_outline,
-                            width=2,
-                        ),
-                    ),
-                    hoverlabel=dict(
-                        bgcolor=sem.hover_bg,
-                        bordercolor=sem.info,
-                        font=dict(
-                            size=13,
-                            color=sem.text,
-                            family="Manrope",
-                        ),
-                    ),
-                )
-            ]
-        )
-
-        fig.update_layout(
-            height=400,
-            margin=dict(l=0, r=0, t=0, b=0),
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font_color=sem.text,
-            showlegend=False,
-            annotations=[
-                dict(
-                    text=(
-                        f"<b>{euro(total_expenses)}</b><br>"
-                        f"<span style='font-size:12px;color:{sem.muted}'>"
-                        "Totale uscite"
-                        "</span>"
-                    ),
-                    x=0.5,
-                    y=0.5,
-                    font=dict(
-                        size=18,
-                        color=sem.text,
-                        family="Manrope",
-                    ),
-                    showarrow=False,
-                )
-            ],
-        )
-
-        breakdown_rows = []
-        for _, item in category_df.iterrows():
-            percentage = float(item["importo"]) / total_expenses * 100
-            category = str(item["categoria"])
-            breakdown_rows.append(
-                {
-                    "icon": get_category_icon(category),
-                    "name": category,
-                    "amount": euro(float(item["importo"])),
-                    "percent": percentage,
-                    "color": pie_colors[len(breakdown_rows)],
-                }
-            )
-
-        render_expense_distribution_card(
-            breakdown_rows,
-            total_label=euro(total_expenses),
-            render_pie=lambda: render_category_pie_chart(fig, height=420),
-            list_max_height=360,
-        )
+    render_section_title("Da dove arrivano i soldi")
+    _render_category_breakdown_section(
+        category_income_breakdown(filtered_df),
+        empty_message="Nessuna entrata da mostrare per questo periodo.",
+        center_caption="Totale entrate",
+        card_key="ft_dashboard_income_distribution",
+        pie_root_id="ft-pie-income",
+    )
 
     render_section_title("Andamento mensile")
+
+    sem = resolve_semantic()
 
     monthly_df = monthly_flow_totals(filtered_df).copy()
     monthly_df["mese"] = monthly_df["mese"].astype(str)

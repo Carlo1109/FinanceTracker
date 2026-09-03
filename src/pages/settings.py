@@ -1,4 +1,5 @@
 import html
+import json
 from pathlib import Path
 
 import streamlit as st
@@ -189,6 +190,54 @@ def _render_accent_swatch(accent_id: str, *, selected: bool, theme_id: str) -> N
           </div>
         </div>
         """
+    )
+
+
+def _render_copyable_path(path: str, *, key: str) -> None:
+    path_text = str(path)
+    block_id = f"ft-copy-{key}"
+    st.html(
+        f"""
+        <div class="ft-copy-path" id="{html.escape(block_id)}">
+          <code class="ft-copy-path-value">{html.escape(path_text)}</code>
+          <button type="button" class="ft-copy-path-btn">Copia</button>
+        </div>
+        <script>
+        (function () {{
+          const root = document.getElementById({json.dumps(block_id)});
+          if (!root) return;
+          const btn = root.querySelector(".ft-copy-path-btn");
+          const text = {json.dumps(path_text)};
+          if (!btn || btn._ftCopyBound) return;
+          btn._ftCopyBound = true;
+          btn.addEventListener("click", async function () {{
+            let copied = false;
+            try {{
+              await navigator.clipboard.writeText(text);
+              copied = true;
+            }} catch (error) {{
+              const input = document.createElement("textarea");
+              input.value = text;
+              input.setAttribute("readonly", "");
+              input.style.position = "fixed";
+              input.style.left = "-9999px";
+              document.body.appendChild(input);
+              input.select();
+              copied = document.execCommand("copy");
+              input.remove();
+            }}
+            if (!copied) return;
+            btn.textContent = "Copiato";
+            btn.classList.add("is-copied");
+            setTimeout(function () {{
+              btn.textContent = "Copia";
+              btn.classList.remove("is-copied");
+            }}, 1400);
+          }});
+        }})();
+        </script>
+        """,
+        unsafe_allow_javascript=True,
     )
 
 
@@ -900,7 +949,7 @@ def show_settings() -> None:
         with col_db:
             with styled_panel():
                 _settings_section_header("Database", chip="SQLite")
-                st.code(str(db_path))
+                _render_copyable_path(str(db_path), key="db")
                 st.caption(
                     "Contiene i movimenti e le categorie assegnate."
                 )
@@ -908,7 +957,7 @@ def show_settings() -> None:
         with col_config:
             with styled_panel():
                 _settings_section_header("Configurazione categorie", chip="JSON")
-                st.code(str(config_path))
+                _render_copyable_path(str(config_path), key="categories")
                 st.caption(
                     "Contiene icone e regole automatiche "
                     "personalizzate."

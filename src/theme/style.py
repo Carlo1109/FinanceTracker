@@ -1162,6 +1162,67 @@ def apply_theme(
             color: var(--ft-text) !important;
             border: 1px solid var(--ft-border) !important;
             border-radius: 12px !important;
+            user-select: text !important;
+        }}
+
+        /* La toolbar globale è nascosta (fullscreen immagini).
+           Su st.code serve il pulsante Copia. */
+        [data-testid="stCode"] [data-testid="stElementToolbar"],
+        [data-testid="stCode"] [data-testid="stElementToolbarButton"],
+        [data-testid="stCode"] [data-testid="stElementToolbarButtonContainer"] {{
+            display: flex !important;
+            visibility: visible !important;
+            pointer-events: auto !important;
+            opacity: 1 !important;
+        }}
+
+        .ft-copy-path {{
+            display: flex;
+            align-items: stretch;
+            gap: 8px;
+            margin: 10px 0 8px 0;
+        }}
+
+        .ft-copy-path-value {{
+            flex: 1;
+            min-width: 0;
+            margin: 0;
+            padding: 10px 12px;
+            border-radius: 12px;
+            border: 1px solid var(--ft-border);
+            background: rgba(var(--ft-accent-rgb), 0.06);
+            color: var(--ft-text);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 12px;
+            line-height: 1.45;
+            word-break: break-all;
+            user-select: text;
+            -webkit-user-select: text;
+        }}
+
+        .ft-copy-path-btn {{
+            flex-shrink: 0;
+            align-self: center;
+            min-height: 38px;
+            padding: 0 14px;
+            border-radius: 12px;
+            border: 1px solid var(--ft-border);
+            background: var(--ft-panel);
+            color: var(--ft-text);
+            font-family: var(--ft-font);
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+        }}
+
+        .ft-copy-path-btn:hover {{
+            border-color: rgba(var(--ft-accent-rgb), 0.45);
+            color: var(--ft-accent-strong);
+        }}
+
+        .ft-copy-path-btn.is-copied {{
+            border-color: rgba(var(--ft-accent-rgb), 0.45);
+            color: var(--ft-accent-strong);
         }}
 
         /* Icone Streamlit (uploader / material) */
@@ -1196,9 +1257,15 @@ def apply_theme(
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor),
         div[class*="st-key-ft_dashboard_chart_card"],
         div[class*="st-key-ft_dashboard_distribution_card"],
+        div[class*="st-key-ft_dashboard_expense_distribution"],
+        div[class*="st-key-ft_dashboard_income_distribution"],
         div[class*="st-key-ft_dashboard_chart_card"]
             [data-testid="stVerticalBlockBorderWrapper"],
         div[class*="st-key-ft_dashboard_distribution_card"]
+            [data-testid="stVerticalBlockBorderWrapper"],
+        div[class*="st-key-ft_dashboard_expense_distribution"]
+            [data-testid="stVerticalBlockBorderWrapper"],
+        div[class*="st-key-ft_dashboard_income_distribution"]
             [data-testid="stVerticalBlockBorderWrapper"] {{
             background:
                 radial-gradient(
@@ -1218,6 +1285,8 @@ def apply_theme(
 
         div[class*="st-key-ft_dashboard_chart_card"] > div,
         div[class*="st-key-ft_dashboard_distribution_card"] > div,
+        div[class*="st-key-ft_dashboard_expense_distribution"] > div,
+        div[class*="st-key-ft_dashboard_income_distribution"] > div,
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-chart-card-anchor) > div,
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-distribution-anchor) > div {{
             background: transparent !important;
@@ -1257,6 +1326,12 @@ def apply_theme(
         > div[data-testid="stColumn"]:first-child,
         div[class*="st-key-ft_dashboard_distribution_card"]
         [data-testid="stHorizontalBlock"]
+        > div[data-testid="stColumn"]:first-child,
+        div[class*="st-key-ft_dashboard_expense_distribution"]
+        [data-testid="stHorizontalBlock"]
+        > div[data-testid="stColumn"]:first-child,
+        div[class*="st-key-ft_dashboard_income_distribution"]
+        [data-testid="stHorizontalBlock"]
         > div[data-testid="stColumn"]:first-child {{
             border-right: 1px solid var(--ft-border);
             padding-right: 12px;
@@ -1266,6 +1341,12 @@ def apply_theme(
         [data-testid="stHorizontalBlock"]
         > div[data-testid="stColumn"]:last-child,
         div[class*="st-key-ft_dashboard_distribution_card"]
+        [data-testid="stHorizontalBlock"]
+        > div[data-testid="stColumn"]:last-child,
+        div[class*="st-key-ft_dashboard_expense_distribution"]
+        [data-testid="stHorizontalBlock"]
+        > div[data-testid="stColumn"]:last-child,
+        div[class*="st-key-ft_dashboard_income_distribution"]
         [data-testid="stHorizontalBlock"]
         > div[data-testid="stColumn"]:last-child {{
             padding-left: 8px;

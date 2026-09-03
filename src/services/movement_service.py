@@ -7,7 +7,31 @@ from typing import Any
 import pandas as pd
 
 from src.database.db import get_connection
+from src.services.analytics import INVESTMENT_CATEGORY
 from src.services.categories import categorize
+
+KNOWN_ACCOUNTS = [
+    "Fineco",
+    "Revolut",
+    "PostePay",
+    "Contanti",
+    "PayPal",
+    "Altro",
+]
+
+
+def account_choices(*extra: str) -> list[str]:
+    """Conti noti + eventuali conti già presenti nei dati."""
+    seen: list[str] = []
+    for name in [*extra, *KNOWN_ACCOUNTS]:
+        cleaned = str(name or "").strip()
+        if cleaned and cleaned not in seen:
+            seen.append(cleaned)
+    return seen
+
+
+def _money(value: float) -> float:
+    return round(float(value), 2)
 
 
 def _clean_text_value(value: Any) -> str:
@@ -473,6 +497,239 @@ def add_manual_movement(
             ),
         )
         conn.commit()
+
+
+def get_movement(movement_id: int) -> dict[str, Any] | None:
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT
+                id,
+                date,
+                operation_date,
+                value_date,
+                month,
+                description,
+                full_description,
+                category,
+                category_source,
+                movement_type,
+                amount,
+                status,
+                source,
+                account,
+                notes,
+                speciale,
+                speciale_mesi,
+                escludi_metriche
+            FROM movements
+            WHERE id = ?
+            """,
+            (movement_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    return dict(row)
+
+
+def update_movement(
+    movement_id: int,
+    *,
+    movement_date: date,
+    description: str,
+    amount: float,
+    category: str,
+    movement_type: str,
+    account: str,
+    notes: str = "",
+    full_description: str | None = None,
+    speciale: bool = False,
+    speciale_mesi: int = 0,
+    escludi_metriche: bool = False,
+) -> None:
+    """Aggiorna i campi modificabili di un movimento. L'hash resta invariato."""
+    signed_amount = (
+        abs(amount)
+        if movement_type == "Entrata"
+        else -abs(amount)
+    )
+    is_expense = movement_type == "Uscita" and category != INVESTMENT_CATEGORY
+    if not is_expense:
+        speciale = False
+        speciale_mesi = 0
+
+    description = description.strip()
+    resolved_full = (
+        description
+        if full_description is None
+        else str(full_description).strip() or description
+    )
+    notes = notes.strip()
+    account = account.strip() or "Altro"
+    month = movement_date.strftime("%Y-%m")
+    date_string = movement_date.isoformat()
+
+    current = get_movement(movement_id)
+    category_source = "manual"
+    if current is not None and str(current.get("category") or "") == category:
+        category_source = (
+            str(current.get("category_source") or "manual") or "manual"
+        )
+
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE movements
+            SET date = ?,
+                month = ?,
+                description = ?,
+                full_description = ?,
+                category = ?,
+                category_source = ?,
+                movement_type = ?,
+                amount = ?,
+                account = ?,
+                notes = ?,
+                speciale = ?,
+                speciale_mesi = ?,
+                escludi_metriche = ?
+            WHERE id = ?
+            """,
+            (
+                date_string,
+                month,
+                description,
+                resolved_full,
+                category,
+                category_source,
+                movement_type,
+                _money(signed_amount),
+                account,
+                notes,
+                1 if speciale else 0,
+                max(0, int(speciale_mesi)) if speciale else 0,
+                1 if escludi_metriche else 0,
+                movement_id,
+            ),
+        )
+        conn.commit()
+
+
+def split_movement(
+    movement_id: int,
+    parts: list[tuple[float, str]],
+) -> int:
+    """
+    Divide un movimento in più quote.
+
+    La prima quota aggiorna la riga originale (hash invariato, così
+    un re-import non duplica). Le altre diventano nuovi movimenti.
+    Restituisce quante nuove righe sono state create.
+    """
+    if len(parts) < 2:
+        raise ValueError("Servono almeno due parti.")
+
+    original = get_movement(movement_id)
+    if original is None:
+        raise ValueError("Movimento non trovato.")
+
+    cleaned: list[tuple[float, str]] = []
+    for raw_amount, raw_category in parts:
+        amount = _money(abs(float(raw_amount)))
+        category = str(raw_category).strip() or "Altro"
+        if amount <= 0:
+            raise ValueError("Ogni parte deve avere un importo maggiore di zero.")
+        cleaned.append((amount, category))
+
+    original_abs = _money(abs(float(original["amount"])))
+    parts_total = _money(sum(amount for amount, _ in cleaned))
+    if abs(parts_total - original_abs) > 0.011:
+        raise ValueError(
+            "La somma delle parti deve coincidere con l'importo originale."
+        )
+
+    original_amount = float(original["amount"])
+    movement_type = (
+        "Entrata" if original_amount >= 0 else "Uscita"
+    )
+    sign = 1 if original_amount >= 0 else -1
+
+    parsed_date = _parse_date_value(original["date"])
+    if pd.isna(parsed_date):
+        raise ValueError("Data originale non valida.")
+
+    first_amount, first_category = cleaned[0]
+    original_description = _clean_text_value(original.get("description"))
+    original_full = _clean_text_value(original.get("full_description"))
+    update_movement(
+        movement_id,
+        movement_date=parsed_date.date(),
+        description=original_description or original_full,
+        full_description=original_full or original_description,
+        amount=first_amount,
+        category=first_category,
+        movement_type=movement_type,
+        account=_clean_text_value(original.get("account")) or "Altro",
+        notes=_clean_text_value(original.get("notes")),
+        speciale=bool(original.get("speciale")),
+        speciale_mesi=int(original.get("speciale_mesi") or 0),
+        escludi_metriche=bool(original.get("escludi_metriche")),
+    )
+
+    created = 0
+    with get_connection() as conn:
+        for amount, category in cleaned[1:]:
+            signed_amount = _money(sign * amount)
+            conn.execute(
+                """
+                INSERT INTO movements (
+                    movement_hash,
+                    date,
+                    operation_date,
+                    value_date,
+                    month,
+                    description,
+                    full_description,
+                    category,
+                    category_source,
+                    movement_type,
+                    amount,
+                    status,
+                    source,
+                    account,
+                    notes,
+                    speciale,
+                    speciale_mesi,
+                    escludi_metriche
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    f"split-{uuid.uuid4()}",
+                    original.get("date") or "",
+                    original.get("operation_date") or "",
+                    original.get("value_date") or "",
+                    original.get("month") or "",
+                    _clean_text_value(original.get("description")),
+                    _clean_text_value(original.get("full_description"))
+                    or _clean_text_value(original.get("description")),
+                    category,
+                    "manual",
+                    movement_type,
+                    signed_amount,
+                    _clean_text_value(original.get("status")),
+                    _clean_text_value(original.get("source")) or "Manuale",
+                    _clean_text_value(original.get("account")) or "Altro",
+                    "",
+                    0,
+                    0,
+                    1 if original.get("escludi_metriche") else 0,
+                ),
+            )
+            created += 1
+        conn.commit()
+
+    return created
 
 
 def update_movement_category(

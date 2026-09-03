@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.4.0
+
+### Funzionalità
+
+- Dashboard: donut **Da dove arrivano i soldi** (entrate per categoria) e card Fonte principale
+- Categoria **Rimborsi** (keyword RIMBORSO / STORNO / RESO / REFUND)
+- Movimenti: modifica descrizione, categoria, note e flag da un unico Salva
+- **Dividi movimento** in 2–4 quote (categorie diverse; l’hash di import resta sulla prima riga)
+- Dopo un cambio categoria: suggerimento di parola chiave (testo modificabile); **Aggiungi e ricalcola** aggiorna le automatiche
+- Impostazioni → Dati: percorsi database e categorie copiabili
+
+### Interfaccia
+
+- Sfondo dei donut allineato al grafico andamento mensile
+- Colore Rimborsi distinto da Stipendio
+- Dopo Salva, se c’è un suggerimento keyword la pagina torna in cima
+
 ## v1.3.0
 
 ### Funzionalità

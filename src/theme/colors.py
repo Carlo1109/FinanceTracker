@@ -64,6 +64,7 @@ CATEGORY_COLORS: dict[str, str] = {
     "Investimenti": "#f59e0b",
     "Trasferimenti interni": "#94a3b8",
     "Stipendio": "#4ade80",
+    "Rimborsi": "#c084fc",
     "Viaggi & Vacanze": "#22d3ee",
     "Svago & Tempo libero": "#a78bfa",
     "Abbonamenti": "#93c5fd",
@@ -108,6 +109,16 @@ def ensure_unique_category_colors(
     for category_name, data in definitions.items():
         category_data = dict(data)
         raw_color = str(category_data.get("color", "")).strip()
+
+        if raw_color:
+            normalized = _normalize_hex(raw_color)
+            # Rimborsi era troppo vicino al verde di Stipendio.
+            if (
+                category_name == "Rimborsi"
+                and normalized == _normalize_hex("#86efac")
+            ):
+                raw_color = ""
+                changed = True
 
         if raw_color:
             normalized = _normalize_hex(raw_color)
