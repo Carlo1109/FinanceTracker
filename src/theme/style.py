@@ -58,6 +58,11 @@ def apply_theme(
     theme, accent = resolve_palette(theme_id, accent_id)
 
     primary_btn_text = "#04203a" if theme_id == "dark" else "#ffffff"
+    dialog_overlay = (
+        "rgba(15, 23, 42, 0.34)"
+        if theme_id == "light"
+        else "rgba(7, 11, 20, 0.58)"
+    )
     # Sfondi solidi per popover (niente navy Streamlit sotto il trasparente)
     menu_bg = "#ffffff" if theme_id == "light" else "#111a2e"
     field_border = "#e2e8f0" if theme_id == "light" else "rgba(148, 163, 184, 0.32)"
@@ -394,17 +399,33 @@ def apply_theme(
             background: rgba(var(--ft-accent-rgb), 0.08) !important;
         }}
 
-        /* Dialog export / popup Streamlit a tema */
+        /* Dialog: overlay semitrasparente, card a tema */
         [data-testid="stDialog"],
-        div[role="dialog"],
         .stDialog {{
             color: {theme.text} !important;
+            background: transparent !important;
+            background-color: transparent !important;
+        }}
+
+        [data-testid="stDialog"]::backdrop,
+        .stDialog::backdrop,
+        dialog::backdrop {{
+            background: {dialog_overlay} !important;
+            backdrop-filter: blur(7px);
+            -webkit-backdrop-filter: blur(7px);
         }}
 
         [data-testid="stDialog"] > div,
-        div[role="dialog"] > div,
-        [data-testid="stDialog"] [data-baseweb="modal"],
+        .stDialog > div,
         div[data-baseweb="modal"] {{
+            background: {dialog_overlay} !important;
+            background-color: {dialog_overlay} !important;
+            backdrop-filter: blur(7px);
+            -webkit-backdrop-filter: blur(7px);
+        }}
+
+        [data-testid="stDialog"] [role="dialog"],
+        div[role="dialog"] {{
             background:
                 radial-gradient(
                     circle at 12% 0%,
@@ -417,6 +438,10 @@ def apply_theme(
             border: 1px solid {theme.border} !important;
             border-radius: 18px !important;
             box-shadow: var(--ft-shadow) !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            max-height: 86vh !important;
+            overflow-y: auto !important;
         }}
 
         [data-testid="stDialog"] h1,
@@ -1005,6 +1030,8 @@ def apply_theme(
         /* Tabs */
         button[data-baseweb="tab"] {{
             color: var(--ft-muted) !important;
+            font-weight: 700 !important;
+            letter-spacing: -0.01em !important;
         }}
 
         button[data-baseweb="tab"][aria-selected="true"] {{
@@ -1255,6 +1282,7 @@ def apply_theme(
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-chart-card-anchor),
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-panel-anchor),
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor),
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor),
         div[class*="st-key-ft_dashboard_chart_card"],
         div[class*="st-key-ft_dashboard_distribution_card"],
         div[class*="st-key-ft_dashboard_expense_distribution"],
@@ -1310,15 +1338,269 @@ def apply_theme(
         }}
 
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor) {{
-            padding: 14px 14px 12px 14px !important;
-            margin-bottom: 10px;
-            background:
-                radial-gradient(
-                    circle at 8% 0%,
-                    rgba(var(--ft-accent-rgb), 0.08),
-                    transparent 40%
-                ),
-                var(--ft-panel) !important;
+            padding: 9px 12px 9px 13px !important;
+            margin-bottom: 6px !important;
+            border-radius: 14px !important;
+            background: var(--ft-panel) !important;
+            box-shadow: none !important;
+        }}
+
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-tone.is-income) {{
+            box-shadow: inset 3px 0 0 var(--ft-income) !important;
+        }}
+
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-tone.is-expense) {{
+            box-shadow: inset 3px 0 0 var(--ft-danger) !important;
+        }}
+
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-tone.is-investment) {{
+            box-shadow: inset 3px 0 0 var(--ft-investment) !important;
+        }}
+
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-tone.is-transfer) {{
+            box-shadow: inset 3px 0 0 var(--ft-muted) !important;
+        }}
+
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor)
+        [data-testid="stVerticalBlock"] {{
+            gap: 0 !important;
+        }}
+
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor)
+        [data-testid="stHorizontalBlock"] {{
+            gap: 10px !important;
+        }}
+
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor)
+        [data-testid="stElementContainer"],
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor)
+        [data-testid="stMarkdownContainer"] {{
+            margin: 0 !important;
+            padding: 0 !important;
+        }}
+
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor)
+        [data-testid="stElementContainer"]:has(.ft-movement-anchor):not(:has(.ft-movement-card)) {{
+            display: none !important;
+        }}
+
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor)
+        div[class*="st-key-open_edit_"] {{
+            margin-top: 0 !important;
+        }}
+
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor)
+        div[class*="st-key-open_edit_"] button,
+        div[class*="st-key-movements_show_more"] button {{
+            min-height: 28px !important;
+            padding: 0 11px !important;
+            border-radius: 999px !important;
+            border: 1px solid rgba(var(--ft-accent-rgb), 0.34) !important;
+            background: rgba(var(--ft-accent-rgb), 0.10) !important;
+            color: var(--ft-accent-strong) !important;
+            font-size: 11px !important;
+            font-weight: 750 !important;
+            letter-spacing: 0.01em !important;
+            box-shadow: none !important;
+        }}
+
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor)
+        div[class*="st-key-open_edit_"] button:hover,
+        div[class*="st-key-movements_show_more"] button:hover {{
+            background: rgba(var(--ft-accent-rgb), 0.18) !important;
+            border-color: rgba(var(--ft-accent-rgb), 0.50) !important;
+            transform: none !important;
+        }}
+
+        .ft-movement-card {{
+            min-width: 0;
+        }}
+
+        .ft-movement-title {{
+            font-size: 16px;
+            font-weight: 650;
+            letter-spacing: -0.015em;
+            line-height: 1.3;
+            color: var(--ft-text);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }}
+
+        .ft-movement-meta {{
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 5px 7px;
+            margin-top: 4px;
+            font-size: 11.5px;
+            font-weight: 600;
+            color: var(--ft-muted);
+            line-height: 1.3;
+        }}
+
+        .ft-movement-dot {{
+            opacity: 0.55;
+        }}
+
+        .ft-movement-cat {{
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 1px 7px 1px 6px;
+            border-radius: 999px;
+            background: rgba(var(--ft-cat-rgb), 0.16);
+            color: var(--ft-text);
+            font-size: 11px;
+            font-weight: 750;
+        }}
+
+        .ft-movement-cat-dot {{
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: rgb(var(--ft-cat-rgb));
+            flex: 0 0 6px;
+        }}
+
+        .ft-movement-flag {{
+            display: inline-flex;
+            align-items: center;
+            padding: 1px 7px;
+            border-radius: 999px;
+            border: 1px solid var(--ft-border);
+            background: rgba(var(--ft-accent-rgb), 0.08);
+            color: var(--ft-muted);
+            font-size: 10.5px;
+            font-weight: 750;
+        }}
+
+        .ft-movement-flag.is-muted {{
+            background: rgba(148, 163, 184, 0.14);
+        }}
+
+        .ft-movement-amount {{
+            text-align: right;
+            font-family: var(--ft-display);
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            line-height: 1.15;
+            white-space: nowrap;
+        }}
+
+        .ft-movement-amount.is-income {{
+            color: var(--ft-income);
+        }}
+
+        .ft-movement-amount.is-expense {{
+            color: var(--ft-danger);
+        }}
+
+        .ft-movement-amount.is-investment {{
+            color: var(--ft-investment);
+        }}
+
+        .ft-movement-amount.is-transfer {{
+            color: var(--ft-muted);
+        }}
+
+        .ft-movement-empty {{
+            margin-top: 8px;
+            padding: 18px 16px;
+            border-radius: 14px;
+            border: 1px dashed var(--ft-border);
+            background: var(--ft-panel);
+            color: var(--ft-muted);
+            font-size: 14px;
+            font-weight: 600;
+        }}
+
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor) {{
+            padding: 9px 12px 9px 13px !important;
+            margin-bottom: 6px !important;
+            border-radius: 14px !important;
+            background: var(--ft-panel) !important;
+            box-shadow: none !important;
+        }}
+
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor)
+        [data-testid="stVerticalBlock"] {{
+            gap: 0 !important;
+        }}
+
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor)
+        [data-testid="stHorizontalBlock"] {{
+            gap: 10px !important;
+        }}
+
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor)
+        [data-testid="stElementContainer"],
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor)
+        [data-testid="stMarkdownContainer"] {{
+            margin: 0 !important;
+            padding: 0 !important;
+        }}
+
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor)
+        [data-testid="stElementContainer"]:has(.ft-settings-anchor):not(:has(.ft-settings-row)) {{
+            display: none !important;
+        }}
+
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor)
+        div[class*="st-key-open_cat_"] button,
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor)
+        div[class*="st-key-export_account_"] button,
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor)
+        div[class*="st-key-delete_account_"] button,
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor)
+        div[class*="st-key-recalculate_categories"] button {{
+            min-height: 28px !important;
+            padding: 0 11px !important;
+            border-radius: 999px !important;
+            border: 1px solid rgba(var(--ft-accent-rgb), 0.34) !important;
+            background: rgba(var(--ft-accent-rgb), 0.10) !important;
+            color: var(--ft-accent-strong) !important;
+            font-size: 11px !important;
+            font-weight: 750 !important;
+            box-shadow: none !important;
+        }}
+
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor)
+        div[class*="st-key-delete_account_"] button {{
+            border-color: rgba(248, 113, 113, 0.40) !important;
+            background: rgba(248, 113, 113, 0.10) !important;
+            color: var(--ft-danger) !important;
+        }}
+
+        .ft-settings-row {{
+            min-width: 0;
+        }}
+
+        .ft-settings-account {{
+            font-size: 17px;
+            font-weight: 700;
+        }}
+
+        .ft-keyword-chip {{
+            display: inline-flex;
+            align-items: center;
+            padding: 5px 10px;
+            border-radius: 999px;
+            background: rgba(var(--ft-accent-rgb), 0.12);
+            border: 1px solid rgba(var(--ft-accent-rgb), 0.28);
+            color: var(--ft-accent-strong);
+            font-size: 0.84rem;
+            font-weight: 650;
+            letter-spacing: 0.02em;
+        }}
+
+        div[role="dialog"] div[class*="st-key-settings_new_category_icon_"] button,
+        div[role="dialog"] div[class*="st-key-category_icon_"] button {{
+            min-height: 38px !important;
+            padding: 0 !important;
+            font-size: 18px !important;
+            border-radius: 10px !important;
         }}
 
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-distribution-anchor)
@@ -1364,19 +1646,6 @@ def apply_theme(
         .ft-category-scroll::-webkit-scrollbar-thumb {{
             background: var(--ft-scrollbar);
             border-radius: 8px;
-        }}
-
-        .ft-movement-row {{
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 16px;
-            padding: 12px 4px;
-            border-bottom: 1px solid var(--ft-border);
-        }}
-
-        .ft-movement-row:last-child {{
-            border-bottom: none;
         }}
 
         .ft-brand-finance {{

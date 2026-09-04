@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.4.1
+
+### Funzionalità
+
+- Movimenti: modifica in popup (stesso stile di export e parole chiave)
+- Dopo Salva, suggerimento keyword anche se la categoria non è cambiata (solo se c’è qualcosa di nuovo da imparare)
+- Lista: **Mostra altri** (40 alla volta) al posto di montare tutte le card
+
+### Interfaccia
+
+- Card movimenti più snelle: barra di tono, chip categoria, flag Nota / Speciale / Escluso
+- Overlay dei dialog semitrasparente; form di modifica a tutta larghezza
+- Filtro senza risultati: empty state al posto del warning Streamlit
+- Impostazioni: liste a card (conti e categorie), modifica categoria / nuova categoria / rimuovi conto in popup; niente expander
+
 ## v1.4.0
 
 ### Funzionalità

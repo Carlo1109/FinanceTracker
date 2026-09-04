@@ -9,10 +9,6 @@ from src.components.export_dialog import (
     render_pending_export_dialog,
 )
 from src.components.cards import (
-    EXPENSE_COLOR,
-    INCOME_COLOR,
-    MUTED_COLOR,
-    TEXT_COLOR,
     render_html,
     styled_panel,
 )
@@ -23,7 +19,6 @@ from src.services.categories import (
     add_category,
     add_keyword_to_category,
     delete_category,
-    get_category_icon,
     load_category_definitions,
     remove_keyword_from_category,
     update_category_icon,
@@ -40,6 +35,7 @@ from src.services.movement_service import (
     load_movements,
     recalculate_automatic_categories,
 )
+from src.theme.colors import get_category_color
 from src.theme.tokens import ACCENTS, THEMES, resolve_palette
 from src.theme.style import apply_theme
 from src.utils.export_excel import movements_export_filename
@@ -83,6 +79,12 @@ CATEGORY_ICONS = [
 ]
 
 CATEGORY_ICONS = list(dict.fromkeys(CATEGORY_ICONS))
+
+_OPEN_CATEGORY_KEY = "settings_open_category"
+_NEW_CATEGORY_KEY = "settings_new_category_open"
+_OPEN_ACCOUNT_KEY = "settings_open_account"
+_ICON_GRID_KEY = "settings_icon_grid_open"
+_DELETE_CATEGORY_KEY = "settings_confirm_delete_category"
 
 
 def _apply_appearance(theme_id: str, accent_id: str) -> None:
@@ -327,23 +329,351 @@ def render_icon_grid(
     return st.session_state[state_key]
 
 
+def _category_rgb(color: str) -> str:
+    raw = str(color).removeprefix("#")
+    if len(raw) != 6:
+        return "var(--ft-accent-rgb)"
+    return (
+        f"{int(raw[0:2], 16)}, "
+        f"{int(raw[2:4], 16)}, "
+        f"{int(raw[4:6], 16)}"
+    )
+
+
+def _close_category_dialog() -> None:
+    name = st.session_state.pop(_OPEN_CATEGORY_KEY, None)
+    st.session_state.pop(_ICON_GRID_KEY, None)
+    st.session_state.pop(_DELETE_CATEGORY_KEY, None)
+    if name:
+        st.session_state.pop(f"category_icon_{name}", None)
+        st.session_state.pop(f"settings_add_kw_{name}", None)
+
+
+def _close_new_category_dialog() -> None:
+    st.session_state.pop(_NEW_CATEGORY_KEY, None)
+
+
+def _close_account_dialog() -> None:
+    st.session_state.pop(_OPEN_ACCOUNT_KEY, None)
+
+
+def _render_pending_settings_dialogs(df, categories: dict) -> None:
+    if st.session_state.get(_NEW_CATEGORY_KEY):
+        _new_category_dialog()
+        return
+    open_category = st.session_state.get(_OPEN_CATEGORY_KEY)
+    if open_category:
+        _category_edit_dialog(str(open_category), df, categories)
+        return
+    open_account = st.session_state.get(_OPEN_ACCOUNT_KEY)
+    if open_account:
+        _account_delete_dialog(str(open_account), df)
+        return
+
+
+@st.dialog("Nuova categoria", width="large", on_dismiss=_close_new_category_dialog)
+def _new_category_dialog() -> None:
+    render_html(
+        """
+        <div class="ft-export-dialog" style="padding:2px 0 8px 0;">
+          <div class="ft-appearance-chip" style="width:fit-content;">
+            <span class="ft-appearance-chip-dot"></span>
+            Personalizzata
+          </div>
+          <div style="
+              margin-top:12px;
+              font-family:Fraunces,Georgia,serif;
+              font-size:clamp(22px, 2.2vw, 28px);
+              font-weight:700;
+              color:var(--ft-text);
+              line-height:1.2;
+          ">Crea una categoria</div>
+        </div>
+        """
+    )
+    new_category = st.text_input(
+        "Nome",
+        placeholder="Es. Animali, Regali, Formazione...",
+        key="settings_new_category",
+    )
+    new_category_icon = render_icon_grid(
+        "settings_new_category_icon",
+        "🛒",
+        columns_count=8,
+    )
+    st.caption(
+        f"Anteprima: {new_category_icon} "
+        f"{(new_category or '').strip() or 'Nuova categoria'}"
+    )
+    if st.button("Crea categoria", type="primary", width="stretch"):
+        created = add_category(new_category, new_category_icon)
+        if created:
+            st.session_state["category_feedback"] = (
+                "success",
+                f'Categoria "{new_category.strip()}" creata '
+                f"con l'icona {new_category_icon}.",
+            )
+            _close_new_category_dialog()
+        else:
+            st.session_state["category_feedback"] = (
+                "warning",
+                "Il nome è vuoto oppure la categoria esiste già.",
+            )
+        st.rerun()
+
+
+@st.dialog("Categoria", width="large", on_dismiss=_close_category_dialog)
+def _category_edit_dialog(category: str, df, categories: dict) -> None:
+    data = categories.get(category)
+    if not data:
+        st.warning("Categoria non trovata.")
+        return
+
+    icon = str(data["icon"])
+    keywords = list(data["keywords"])
+    used = (
+        int((df["categoria"] == category).sum())
+        if df is not None and not df.empty
+        else 0
+    )
+    cat_rgb = _category_rgb(get_category_color(category, categories))
+
+    render_html(
+        f"""
+        <div class="ft-export-dialog" style="padding:2px 0 10px 0;">
+          <div class="ft-appearance-chip" style="
+              width:fit-content;
+              --ft-cat-rgb:{cat_rgb};
+              background:rgba(var(--ft-cat-rgb),0.16);
+              color:var(--ft-text);
+          ">
+            <span class="ft-movement-cat-dot"></span>
+            {html.escape(icon)} {html.escape(category)}
+          </div>
+          <div style="
+              margin-top:10px;
+              font-size:13px;
+              color:var(--ft-muted);
+              font-weight:650;
+          ">{used} movimenti · {len(keywords)} parole chiave</div>
+        </div>
+        """
+    )
+
+    if st.session_state.get(_ICON_GRID_KEY):
+        selected_icon = render_icon_grid(
+            f"category_icon_{category}",
+            icon,
+            columns_count=8,
+        )
+        save_col, cancel_col = st.columns(2)
+        with save_col:
+            if st.button("Salva icona", type="primary", width="stretch"):
+                updated = update_category_icon(category, selected_icon)
+                st.session_state.pop(_ICON_GRID_KEY, None)
+                if updated:
+                    st.session_state["icon_feedback"] = (
+                        "success",
+                        f'Icona di "{category}" aggiornata a {selected_icon}.',
+                    )
+                st.rerun()
+        with cancel_col:
+            if st.button("Annulla", width="stretch"):
+                st.session_state.pop(_ICON_GRID_KEY, None)
+                st.rerun()
+        return
+
+    if st.button("Cambia icona", width="stretch", type="secondary"):
+        st.session_state[_ICON_GRID_KEY] = True
+        st.session_state[f"category_icon_{category}"] = icon
+        st.rerun()
+
+    new_keyword = st.text_input(
+        "Nuova parola chiave",
+        placeholder="Es. BENNET, TIGOTÀ, AUTOGRILL...",
+        key=f"settings_add_kw_{category}",
+    )
+    if st.button("Aggiungi parola chiave", width="stretch", type="primary"):
+        added = add_keyword_to_category(category, new_keyword)
+        if added:
+            st.session_state["keyword_feedback"] = (
+                "success",
+                f'Parola chiave "{new_keyword.strip().upper()}" '
+                f'aggiunta a "{category}".',
+            )
+            st.session_state[f"settings_add_kw_{category}"] = ""
+        else:
+            st.session_state["keyword_feedback"] = (
+                "warning",
+                "La parola chiave è vuota oppure è già presente.",
+            )
+        st.rerun()
+
+    if not keywords:
+        st.caption("Nessuna parola chiave associata.")
+    else:
+        for keyword in keywords:
+            chip_col, delete_col = st.columns([5, 1])
+            with chip_col:
+                render_html(
+                    f"""
+                    <div class="ft-keyword-chip">
+                      {html.escape(keyword)}
+                    </div>
+                    """
+                )
+            with delete_col:
+                if st.button(
+                    "✕",
+                    key=f"delete_keyword_{category}_{keyword}",
+                    width="stretch",
+                ):
+                    removed = remove_keyword_from_category(category, keyword)
+                    if removed:
+                        st.session_state["keyword_delete_feedback"] = (
+                            "success",
+                            f'Parola chiave "{keyword}" '
+                            f'eliminata da "{category}".',
+                        )
+                    st.rerun()
+
+    if category == "Altro":
+        st.caption('La categoria "Altro" non può essere eliminata.')
+        return
+
+    if st.session_state.get(_DELETE_CATEGORY_KEY):
+        st.warning(
+            f"{used} movimenti saranno spostati in «Altro»."
+        )
+        yes_col, no_col = st.columns(2)
+        with yes_col:
+            if st.button("Elimina", type="primary", width="stretch"):
+                deleted, reassigned = delete_category(category)
+                _close_category_dialog()
+                if deleted:
+                    st.session_state["category_delete_feedback"] = (
+                        "success",
+                        f'Categoria "{category}" eliminata. '
+                        f"{reassigned} movimenti spostati in 'Altro'.",
+                    )
+                else:
+                    st.session_state["category_delete_feedback"] = (
+                        "error",
+                        "Non è stato possibile eliminare la categoria.",
+                    )
+                st.rerun()
+        with no_col:
+            if st.button("Annulla eliminazione", width="stretch"):
+                st.session_state.pop(_DELETE_CATEGORY_KEY, None)
+                st.rerun()
+    elif st.button("Elimina categoria", width="stretch"):
+        st.session_state[_DELETE_CATEGORY_KEY] = True
+        st.rerun()
+
+
+@st.dialog("Rimuovi conto", on_dismiss=_close_account_dialog)
+def _account_delete_dialog(account: str, df) -> None:
+    account_df = df[df["account"] == account] if df is not None else df
+    movements_count = 0 if account_df is None or account_df.empty else len(account_df)
+    render_html(
+        f"""
+        <div class="ft-export-dialog" style="padding:2px 0 8px 0;">
+          <div class="ft-appearance-chip" style="width:fit-content;">
+            <span class="ft-appearance-chip-dot"></span>
+            Irreversibile
+          </div>
+          <div style="
+              margin-top:12px;
+              font-family:Fraunces,Georgia,serif;
+              font-size:clamp(22px, 2.2vw, 28px);
+              font-weight:700;
+              color:var(--ft-text);
+              line-height:1.2;
+          ">{html.escape(account)}</div>
+          <div style="
+              margin-top:8px;
+              font-size:13px;
+              line-height:1.45;
+              color:var(--ft-muted);
+          ">
+            Elimina {movements_count} movimenti di questo conto.
+            Esporta prima se ti serve una copia.
+          </div>
+        </div>
+        """
+    )
+    if movements_count and st.button(
+        f"Scarica prima i {movements_count} movimenti",
+        width="stretch",
+        type="secondary",
+    ):
+        open_export_confirm_dialog(
+            account_df,
+            file_name=movements_export_filename(
+                prefix="conto",
+                account=account,
+            ),
+            context_label=f"Conto {account}",
+            dialog_key=f"before_delete_{account}",
+        )
+        _close_account_dialog()
+        st.rerun()
+
+    typed = st.text_input(
+        f'Digita "{account}" per confermare',
+        key=f"type_delete_account_{account}",
+        placeholder=account,
+    )
+    can_delete = typed.strip() == account
+    if can_delete:
+        st.caption("Nome corretto — puoi eliminare il conto.")
+    else:
+        st.caption(f'Scrivi esattamente "{account}" per attivare l\'eliminazione.')
+
+    yes_col, no_col = st.columns(2)
+    with yes_col:
+        if st.button(
+            "Elimina conto",
+            width="stretch",
+            type="primary" if can_delete else "secondary",
+            disabled=not can_delete,
+        ):
+            deleted = delete_account(account)
+            _close_account_dialog()
+            st.session_state["account_delete_feedback"] = (
+                "success",
+                f'Conto "{account}" rimosso. {deleted} movimenti eliminati.',
+            )
+            st.rerun()
+    with no_col:
+        if st.button("Annulla", width="stretch"):
+            _close_account_dialog()
+            st.rerun()
+
+
 def show_settings() -> None:
     st.title("Impostazioni")
-    st.caption("Gestisci configurazioni, dati e informazioni dell'app.")
+    st.caption("Aspetto, conti, categorie e dati — tutto su questo PC.")
     render_pending_export_dialog()
 
     df = load_movements()
     categories = load_category_definitions()
+    _render_pending_settings_dialogs(df, categories)
+
+    show_feedback("account_delete_feedback")
+    show_feedback("category_feedback")
+    show_feedback("keyword_feedback")
+    show_feedback("keyword_delete_feedback")
+    show_feedback("icon_feedback")
+    show_feedback("category_delete_feedback")
+    show_feedback("recalculate_feedback")
 
     tab_appearance, tab_accounts, tab_categories, tab_data, tab_info = st.tabs(
-        ["🎨 Aspetto", "💳 Conti", "🏷️ Categorie", "💾 Dati", "ℹ️ Info"]
+        ["Aspetto", "Conti", "Categorie", "Dati", "Info"]
     )
 
     with tab_appearance:
-        st.markdown("### Aspetto")
-        st.caption(
-            "Scegli atmosfera e colori: restano salvati su questo PC."
-        )
+        st.caption("Tema e colori restano salvati su questo PC.")
 
         current_theme = get_theme_mode()
         current_accent = get_accent()
@@ -396,99 +726,58 @@ def show_settings() -> None:
                         _apply_appearance(current_theme, accent_id)
 
     with tab_accounts:
-        st.markdown("### Conti collegati")
         st.caption(
-            "Rimuovere un conto cancella definitivamente dal database "
-            "tutti i suoi movimenti. Utile per pulizia o per reimportare."
+            "Rimuovere un conto cancella i suoi movimenti dal database."
         )
-        show_feedback("account_delete_feedback")
 
         if df.empty:
-            st.info(
-                "Nessun conto trovato. Aggiungi o importa movimenti "
-                "per vedere i conti."
+            render_html(
+                """
+                <div class="ft-movement-empty">
+                    Nessun conto. Importa o aggiungi un movimento.
+                </div>
+                """
             )
         else:
-            accounts = sorted(
-                df["account"].dropna().unique().tolist()
-            )
-
+            accounts = sorted(df["account"].dropna().unique().tolist())
             for account in accounts:
                 account_df = df[df["account"] == account]
                 movements_count = len(account_df)
                 total = float(account_df["importo"].sum())
-                confirm_key = f"confirm_delete_account_{account}"
-                balance_color = (
-                    INCOME_COLOR if total >= 0 else EXPENSE_COLOR
-                )
-                safe_account = html.escape(str(account))
-
-                with styled_panel():
-                    render_html(
-                        f"""
-                        <div style="
-                            display:flex;
-                            justify-content:space-between;
-                            align-items:flex-start;
-                            gap:16px;
-                            flex-wrap:wrap;
-                            margin-bottom:4px;
-                        ">
-                          <div>
-                            <div class="ft-appearance-chip" style="
-                                width:fit-content;
-                                margin-bottom:10px;
-                            ">
-                              <span class="ft-appearance-chip-dot"></span>
-                              Conto
-                            </div>
-                            <div style="
-                                font-family:Fraunces,Georgia,serif;
-                                font-size:clamp(26px, 2.4vw, 32px);
-                                font-weight:700;
-                                color:{TEXT_COLOR};
-                                line-height:1.1;
-                                letter-spacing:-0.02em;
-                            ">{safe_account}</div>
-                            <div style="
-                                margin-top:6px;
-                                font-size:13px;
-                                color:{MUTED_COLOR};
-                                font-weight:650;
-                            ">{movements_count} movimenti</div>
-                          </div>
-                          <div style="text-align:right;">
-                            <div style="
-                                font-size:11px;
-                                font-weight:650;
-                                letter-spacing:0.08em;
-                                text-transform:uppercase;
-                                color:{MUTED_COLOR};
-                            ">Saldo movimenti</div>
-                            <div style="
-                                margin-top:6px;
-                                font-family:Fraunces,Georgia,serif;
-                                font-size:clamp(24px, 2.2vw, 30px);
-                                font-weight:700;
-                                color:{balance_color};
-                                line-height:1.1;
-                            ">{euro(total)}</div>
-                          </div>
-                        </div>
-                        """
+                tone = "income" if total >= 0 else "expense"
+                with styled_panel(kind="settings"):
+                    body_col, amount_col, export_col, action_col = st.columns(
+                        [3.4, 1.3, 1.1, 1.15],
+                        vertical_alignment="center",
                     )
-
-                    if st.session_state.get(confirm_key):
-                        st.warning(
-                            f"Stai per eliminare **{movements_count}** movimenti "
-                            f"del conto **{account}**. Operazione irreversibile "
-                            "(salvo un backup)."
+                    with body_col:
+                        render_html(
+                            f"""
+                            <div class="ft-settings-row">
+                              <span class="ft-movement-tone is-{tone}" hidden></span>
+                              <div class="ft-movement-title ft-settings-account">
+                                {html.escape(str(account))}
+                              </div>
+                              <div class="ft-movement-meta">
+                                {movements_count} movimenti
+                              </div>
+                            </div>
+                            """
                         )
+                    with amount_col:
+                        render_html(
+                            f"""
+                            <div class="ft-movement-amount is-{tone}">
+                              {euro(total)}
+                            </div>
+                            """
+                        )
+                    with export_col:
                         if st.button(
-                            f"Scarica prima i {movements_count} movimenti (Excel)",
+                            "Esporta",
+                            type="secondary",
+                            key=f"export_account_open_{account}",
                             width="stretch",
-                            type="primary",
-                            key=f"export_before_delete_open_{account}",
                         ):
                             open_export_confirm_dialog(
                                 account_df,
@@ -497,448 +786,110 @@ def show_settings() -> None:
                                     account=account,
                                 ),
                                 context_label=f"Conto {account}",
-                                dialog_key=f"before_delete_{account}",
+                                dialog_key=f"account_{account}",
                             )
                             st.rerun()
-
-                        typed = st.text_input(
-                            f'Digita "{account}" per confermare',
-                            key=f"type_delete_account_{account}",
-                            placeholder=account,
-                        )
-                        can_delete = typed.strip() == account
-                        if can_delete:
-                            st.caption("Nome corretto — puoi eliminare il conto.")
-                        else:
-                            st.caption(
-                                f'Il pulsante si attiva solo digitando esattamente '
-                                f'"{account}".'
-                            )
-
-                        yes_col, no_col = st.columns(2)
-                        with yes_col:
-                            if st.button(
-                                "Elimina conto",
-                                key=f"delete_account_yes_{account}",
-                                width="stretch",
-                                type="primary" if can_delete else "secondary",
-                                disabled=not can_delete,
-                            ):
-                                deleted = delete_account(account)
-                                st.session_state[confirm_key] = False
-                                st.session_state["account_delete_feedback"] = (
-                                    "success",
-                                    f'Conto "{account}" rimosso. '
-                                    f"{deleted} movimenti eliminati.",
-                                )
-                                st.rerun()
-
-                        with no_col:
-                            if st.button(
-                                "Annulla",
-                                key=f"delete_account_no_{account}",
-                                width="stretch",
-                            ):
-                                st.session_state[confirm_key] = False
-                                st.rerun()
-                    else:
-                        action_col, export_col = st.columns([1.4, 1])
-                        with action_col:
-                            if st.button(
-                                "🗑️ Rimuovi conto",
-                                key=f"delete_account_{account}",
-                                width="stretch",
-                            ):
-                                st.session_state[confirm_key] = True
-                                st.rerun()
-                        with export_col:
-                            if st.button(
-                                "Esporta Excel",
-                                type="secondary",
-                                key=f"export_account_open_{account}",
-                                width="stretch",
-                            ):
-                                open_export_confirm_dialog(
-                                    account_df,
-                                    file_name=movements_export_filename(
-                                        prefix="conto",
-                                        account=account,
-                                    ),
-                                    context_label=f"Conto {account}",
-                                    dialog_key=f"account_{account}",
-                                )
-                                st.rerun()
+                    with action_col:
+                        if st.button(
+                            "Rimuovi",
+                            key=f"delete_account_{account}",
+                            width="stretch",
+                        ):
+                            st.session_state[_OPEN_ACCOUNT_KEY] = account
+                            st.rerun()
 
     with tab_categories:
-        st.markdown("### Categorie")
         st.caption(
-            "Crea categorie personalizzate, scegli l'icona e gestisci "
-            "le parole chiave usate dalla categorizzazione automatica."
+            "Icone e parole chiave per la categorizzazione automatica."
         )
-
-        category_names = list(categories.keys())
-
-        show_feedback("category_feedback")
-        show_feedback("keyword_feedback")
-        show_feedback("keyword_delete_feedback")
-        show_feedback("icon_feedback")
-        show_feedback("category_delete_feedback")
-        show_feedback("recalculate_feedback")
-
-        with styled_panel():
-            _settings_section_header("Crea nuova categoria", chip="Nuova")
-
-            create_col_1, create_col_2 = st.columns([2, 1])
-
-            with create_col_1:
-                new_category = st.text_input(
-                    "Nome categoria",
-                    placeholder="Es. Animali, Regali, Formazione...",
-                    key="settings_new_category",
-                )
-
-            with create_col_2:
-                render_html(
-                    f"""
-                    <div style="
-                        font-size:12px;
-                        font-weight:650;
-                        color:var(--ft-muted);
-                        letter-spacing:0.06em;
-                        text-transform:uppercase;
-                        margin-bottom:6px;
-                    ">Icona</div>
-                    <div style="
-                        font-size:44px;
-                        text-align:center;
-                        padding:8px 0;
-                        border-radius:14px;
-                        background:rgba(var(--ft-accent-rgb),0.10);
-                        border:1px solid var(--ft-border);
-                    ">
-                        {st.session_state.get(
-                            "settings_new_category_icon",
-                            "🛒",
-                        )}
-                    </div>
-                    """
-                )
-
-            with st.expander(
-                "🎨 Scegli icona",
-                expanded=False,
-            ):
-                new_category_icon = render_icon_grid(
-                    "settings_new_category_icon",
-                    "🛒",
-                    columns_count=10,
-                )
-
-            st.caption(
-                f"Anteprima: {new_category_icon} "
-                f"{new_category.strip() or 'Nuova categoria'}"
-            )
-
+        actions, _ = st.columns([1.2, 2.8])
+        with actions:
             if st.button(
-                "Crea categoria",
-                key="create_new_category",
-                width="stretch",
+                "Nuova categoria",
                 type="primary",
+                width="stretch",
+                key="open_new_category",
             ):
-                created = add_category(
-                    new_category,
-                    new_category_icon,
-                )
-
-                if created:
-                    st.session_state["category_feedback"] = (
-                        "success",
-                        f'Categoria "{new_category.strip()}" creata '
-                        f"con l'icona {new_category_icon}.",
-                    )
-                else:
-                    st.session_state["category_feedback"] = (
-                        "warning",
-                        "Il nome è vuoto oppure la categoria esiste già.",
-                    )
-
+                st.session_state[_NEW_CATEGORY_KEY] = True
                 st.rerun()
 
-        with styled_panel():
-            _settings_section_header("Aggiungi parola chiave", chip="Regole")
-
-            keyword_col_1, keyword_col_2 = st.columns([1, 2])
-
-            with keyword_col_1:
-                selected_category = st.selectbox(
-                    "Categoria",
-                    category_names,
-                    format_func=lambda name: (
-                        f"{get_category_icon(name)} {name}"
-                    ),
-                    key="settings_keyword_category",
-                )
-
-            with keyword_col_2:
-                new_keyword = st.text_input(
-                    "Parola chiave",
-                    placeholder="Es. BENNET, TIGOTÀ, AUTOGRILL...",
-                    key="settings_new_keyword",
-                )
-
-            if st.button(
-                "Aggiungi parola chiave",
-                key="add_category_keyword",
-                width="stretch",
-                type="primary",
-            ):
-                added = add_keyword_to_category(
-                    selected_category,
-                    new_keyword,
-                )
-
-                if added:
-                    st.session_state["keyword_feedback"] = (
-                        "success",
-                        f'Parola chiave "{new_keyword.strip().upper()}" '
-                        f'aggiunta a "{selected_category}".',
-                    )
-                else:
-                    st.session_state["keyword_feedback"] = (
-                        "warning",
-                        "La parola chiave è vuota oppure è già presente.",
-                    )
-
-                st.rerun()
-
-        st.markdown("### Regole attuali")
-        st.caption(f"{len(categories)} categorie configurate")
-
+        st.caption(f"{len(categories)} categorie")
         for category, category_data in categories.items():
             icon = str(category_data["icon"])
             keywords = list(category_data["keywords"])
-
-            with st.expander(
-                f"{icon} {category} · {len(keywords)} parole chiave"
-            ):
-                st.markdown(f"### {icon} {category}")
-
-                buttons_col_1, buttons_col_2 = st.columns(2)
-
-                edit_icon_key = "editing_icon_category"
-
-                with buttons_col_1:
-                    if st.session_state.get(edit_icon_key) != category:
-                        if st.button(
-                            "🎨 Cambia icona",
-                            key=f"edit_icon_{category}",
-                            width="stretch",
-                        ):
-                            st.session_state[edit_icon_key] = category
-                            st.session_state[f"category_icon_{category}"] = icon
-                            st.rerun()
-
-                with buttons_col_2:
-                    if category == "Altro":
-                        st.info('La categoria "Altro" non può essere eliminata.')
-                    else:
-                        confirm_key = f"confirm_delete_category_{category}"
-
-                        if st.session_state.get(confirm_key):
-                            category_count = int(
-                                (df["categoria"] == category).sum()
-                            ) if not df.empty else 0
-                            st.warning(
-                                f'**{category_count}** movimenti saranno '
-                                'spostati in "Altro".'
-                            )
-
-                            yes_col, no_col = st.columns(2)
-
-                            with yes_col:
-                                if st.button(
-                                    "Elimina",
-                                    key=f"delete_category_yes_{category}",
-                                    width="stretch",
-                                    type="primary",
-                                ):
-                                    deleted, reassigned = delete_category(category)
-                                    st.session_state[confirm_key] = False
-
-                                    if deleted:
-                                        st.session_state["category_delete_feedback"] = (
-                                            "success",
-                                            f'Categoria "{category}" eliminata. '
-                                            f"{reassigned} movimenti spostati in 'Altro'.",
-                                        )
-                                    else:
-                                        st.session_state["category_delete_feedback"] = (
-                                            "error",
-                                            "Non è stato possibile eliminare la categoria.",
-                                        )
-
-                                    st.rerun()
-
-                            with no_col:
-                                if st.button(
-                                    "Annulla",
-                                    key=f"delete_category_no_{category}",
-                                    width="stretch",
-                                ):
-                                    st.session_state[confirm_key] = False
-                                    st.rerun()
-                        else:
-                            if st.button(
-                                "🗑️ Elimina categoria",
-                                key=f"delete_category_{category}",
-                                width="stretch",
-                            ):
-                                st.session_state[confirm_key] = True
-                                st.rerun()
-
-                if st.session_state.get(edit_icon_key) == category:
-                    st.divider()
-
-                    selected_icon = render_icon_grid(
-                        f"category_icon_{category}",
-                        icon,
-                        columns_count=10,
-                    )
-
-                    st.caption(
-                        f"Anteprima nuova icona: {selected_icon} {category}"
-                    )
-
-                    save_col, cancel_col = st.columns(2)
-
-                    with save_col:
-                        if st.button(
-                            "💾 Salva icona",
-                            key=f"save_icon_{category}",
-                            width="stretch",
-                            type="primary",
-                        ):
-                            updated = update_category_icon(
-                                category,
-                                selected_icon,
-                            )
-
-                            st.session_state.pop(edit_icon_key, None)
-                            st.session_state.pop(
-                                f"category_icon_{category}",
-                                None,
-                            )
-
-                            if updated:
-                                st.session_state["icon_feedback"] = (
-                                    "success",
-                                    f'Icona di "{category}" aggiornata a {selected_icon}.',
-                                )
-                            else:
-                                st.session_state["icon_feedback"] = (
-                                    "warning",
-                                    "Nessuna modifica da salvare.",
-                                )
-
-                            st.rerun()
-
-                    with cancel_col:
-                        if st.button(
-                            "Annulla",
-                            key=f"cancel_icon_{category}",
-                            width="stretch",
-                        ):
-                            st.session_state.pop(edit_icon_key, None)
-                            st.session_state.pop(
-                                f"category_icon_{category}",
-                                None,
-                            )
-                            st.rerun()
-
-                st.markdown("##### Parole chiave")
-
-                if not keywords:
-                    st.caption("Nessuna parola chiave associata.")
-                else:
-                    for keyword in keywords:
-                        keyword_col, delete_col = st.columns([5, 1])
-
-                        with keyword_col:
-                            render_html(
-                                f"""
-                                <div style="
-                                    display:inline-flex;
-                                    align-items:center;
-                                    padding:6px 12px;
-                                    border-radius:999px;
-                                    background:rgba(var(--ft-accent-rgb),0.12);
-                                    border:1px solid rgba(var(--ft-accent-rgb),0.28);
-                                    color:var(--ft-accent-strong);
-                                    font-size:0.86rem;
-                                    font-weight:650;
-                                    letter-spacing:0.02em;
-                                ">{html.escape(keyword)}</div>
-                                """
-                            )
-
-                        with delete_col:
-                            if st.button(
-                                "🗑️",
-                                key=(
-                                    f"delete_keyword_"
-                                    f"{category}_{keyword}"
-                                ),
-                                width="stretch",
-                            ):
-                                removed = remove_keyword_from_category(
-                                    category,
-                                    keyword,
-                                )
-
-                                if removed:
-                                    st.session_state[
-                                        "keyword_delete_feedback"
-                                    ] = (
-                                        "success",
-                                        f'Parola chiave "{keyword}" '
-                                        f'eliminata da "{category}".',
-                                    )
-                                else:
-                                    st.session_state[
-                                        "keyword_delete_feedback"
-                                    ] = (
-                                        "warning",
-                                        "Non è stato possibile eliminare "
-                                        "la parola chiave.",
-                                    )
-
-                                st.rerun()
-
-        with styled_panel():
-            _settings_section_header(
-                "Ricalcolo automatico",
-                chip="Sync",
+            used = (
+                int((df["categoria"] == category).sum())
+                if not df.empty
+                else 0
             )
-            st.caption(
-                "Riapplica le regole alle descrizioni dei movimenti "
-                "già importati."
+            cat_rgb = _category_rgb(
+                get_category_color(category, categories)
             )
-            if st.button(
-                "🔄 Aggiorna categorie automatiche",
-                width="stretch",
-                type="primary",
-            ):
-                updated = recalculate_automatic_categories()
-
-                st.session_state["recalculate_feedback"] = (
-                    "success",
-                    f"Categorie aggiornate. Movimenti modificati: {updated}.",
+            with styled_panel(kind="settings"):
+                body_col, action_col = st.columns(
+                    [4.6, 1.15],
+                    vertical_alignment="center",
                 )
+                with body_col:
+                    render_html(
+                        f"""
+                        <div class="ft-settings-row"
+                             style="--ft-cat-rgb:{cat_rgb};">
+                          <div class="ft-movement-title">
+                            {html.escape(icon)} {html.escape(category)}
+                          </div>
+                          <div class="ft-movement-meta">
+                            <span class="ft-movement-cat">
+                              <span class="ft-movement-cat-dot"></span>
+                              {len(keywords)} regole
+                            </span>
+                            <span>{used} movimenti</span>
+                          </div>
+                        </div>
+                        """
+                    )
+                with action_col:
+                    if st.button(
+                        "Apri",
+                        key=f"open_cat_{category}",
+                        width="stretch",
+                        type="secondary",
+                    ):
+                        st.session_state[_OPEN_CATEGORY_KEY] = category
+                        st.rerun()
 
-                st.rerun()
+        with styled_panel(kind="settings"):
+            rec_col, btn_col = st.columns(
+                [3.4, 1.6],
+                vertical_alignment="center",
+            )
+            with rec_col:
+                render_html(
+                    """
+                    <div class="ft-settings-row">
+                      <div class="ft-movement-title">Ricalcolo automatico</div>
+                      <div class="ft-movement-meta">
+                        Riapplica le regole alle descrizioni già importate.
+                      </div>
+                    </div>
+                    """
+                )
+            with btn_col:
+                if st.button(
+                    "Aggiorna",
+                    width="stretch",
+                    type="primary",
+                    key="recalculate_categories",
+                ):
+                    updated = recalculate_automatic_categories()
+                    st.session_state["recalculate_feedback"] = (
+                        "success",
+                        f"Categorie aggiornate. "
+                        f"Movimenti modificati: {updated}.",
+                    )
+                    st.rerun()
 
     with tab_data:
-        st.markdown("### Dati")
         st.caption("Percorsi locali e backup di sicurezza.")
 
         db_path = DB_PATH.resolve()
@@ -1011,11 +962,10 @@ def show_settings() -> None:
                         type="primary",
                     )
 
-            st.markdown("#### Ripristina backup")
             st.caption(
-                "Sostituisce database e categorie con quelli del file zip. "
-                "Se la cartella sembra vuota, passa a 'Tutti i file' "
-                "nel dialog oppure trascina lo zip qui."
+                "Ripristino: sostituisce database e categorie. "
+                "Se la cartella sembra vuota, scegli «Tutti i file» "
+                "oppure trascina lo zip qui."
             )
 
             uploaded_backup = st.file_uploader(
@@ -1045,10 +995,8 @@ def show_settings() -> None:
                         st.error(message)
 
     with tab_info:
-        st.markdown("### FinanceTracker")
         st.caption(
-            "App desktop offline: i tuoi dati restano sul computer, "
-            "senza account e senza cloud."
+            "App desktop offline: dati sul computer, senza account e senza cloud."
         )
 
         with styled_panel():

@@ -8,7 +8,6 @@ from src.components.cards import (
     EXPENSE_COLOR,
     INCOME_COLOR,
     INVESTMENT_COLOR,
-    MUTED_COLOR,
     render_html,
     render_kpi_card,
     render_section_title,
@@ -28,8 +27,10 @@ from src.services.categories import (
     add_keyword_to_category,
     get_category_icon,
     get_category_names,
+    load_category_definitions,
     suggest_keyword_from_text,
 )
+from src.theme.colors import get_category_color
 from src.services.movement_service import (
     delete_movement,
     load_movements,
@@ -46,7 +47,10 @@ from src.utils.formatting import euro, signed_euro
 _MOVEMENTS_TOAST_KEY = "movements_toast"
 _KEYWORD_SUGGEST_KEY = "keyword_suggest"
 _KEYWORD_EDIT_KEY = "keyword_suggest_edit"
-_KEYWORD_SCROLL_KEY = "keyword_suggest_scroll"
+_OPEN_MOVEMENT_KEY = "open_movement_id"
+_LIST_LIMIT_KEY = "movements_list_limit"
+_LIST_FILTER_KEY = "movements_list_filter"
+_LIST_PAGE_SIZE = 40
 
 
 def _queue_toast(message: str) -> None:
@@ -68,6 +72,33 @@ def _clear_movement_widget_state(movement_id: int) -> None:
             st.session_state.pop(key, None)
 
 
+def _resolve_list_limit(filter_signature: tuple) -> int:
+    if st.session_state.get(_LIST_FILTER_KEY) != filter_signature:
+        st.session_state[_LIST_FILTER_KEY] = filter_signature
+        st.session_state[_LIST_LIMIT_KEY] = _LIST_PAGE_SIZE
+    return int(st.session_state.get(_LIST_LIMIT_KEY) or _LIST_PAGE_SIZE)
+
+
+def _open_movement_dialog(movement_id: int) -> None:
+    current = st.session_state.get(_OPEN_MOVEMENT_KEY)
+    if current is not None and int(current) != movement_id:
+        _clear_movement_widget_state(int(current))
+    st.session_state[_OPEN_MOVEMENT_KEY] = movement_id
+
+
+def _close_movement_dialog() -> None:
+    current = st.session_state.pop(_OPEN_MOVEMENT_KEY, None)
+    if current is not None:
+        _clear_movement_widget_state(int(current))
+
+
+def _render_pending_movement_dialog(categories: list[str]) -> None:
+    movement_id = st.session_state.get(_OPEN_MOVEMENT_KEY)
+    if movement_id is None:
+        return
+    _movement_edit_dialog(int(movement_id), categories)
+
+
 def _queue_keyword_suggestion(
     description: str,
     category: str,
@@ -81,53 +112,11 @@ def _queue_keyword_suggestion(
         "sample": description,
     }
     st.session_state[_KEYWORD_EDIT_KEY] = suggested
-    st.session_state[_KEYWORD_SCROLL_KEY] = True
 
 
-def _scroll_page_to_top() -> None:
-    """Riporta in cima dopo il salvataggio (Streamlit resta sullo scroll)."""
-    st.html(
-        """
-        <div id="ft-keyword-suggest-anchor" aria-hidden="true"></div>
-        <script>
-        (function () {
-          function scrollUp() {
-            const win = window.top || window.parent || window;
-            const doc = win.document;
-            const nodes = [
-              doc.querySelector('[data-testid="stMain"]'),
-              doc.querySelector('[data-testid="stAppViewContainer"]'),
-              doc.querySelector('section.main'),
-              doc.scrollingElement,
-              doc.documentElement,
-              doc.body
-            ];
-            for (const node of nodes) {
-              if (!node) continue;
-              try {
-                if (typeof node.scrollTo === "function") {
-                  node.scrollTo({ top: 0, left: 0, behavior: "smooth" });
-                } else {
-                  node.scrollTop = 0;
-                }
-              } catch (error) {}
-            }
-            try { win.scrollTo({ top: 0, left: 0, behavior: "smooth" }); } catch (error) {}
-            const anchor = doc.getElementById("ft-keyword-suggest-anchor");
-            if (anchor && typeof anchor.scrollIntoView === "function") {
-              anchor.scrollIntoView({ behavior: "smooth", block: "start" });
-            }
-          }
-          scrollUp();
-          setTimeout(scrollUp, 80);
-          setTimeout(scrollUp, 280);
-          setTimeout(scrollUp, 600);
-        })();
-        </script>
-        """,
-        width="content",
-        unsafe_allow_javascript=True,
-    )
+def _close_keyword_dialog() -> None:
+    st.session_state.pop(_KEYWORD_SUGGEST_KEY, None)
+    st.session_state.pop(_KEYWORD_EDIT_KEY, None)
 
 
 def _render_keyword_suggestion() -> None:
@@ -137,32 +126,78 @@ def _render_keyword_suggestion() -> None:
 
     keyword = str(suggestion.get("keyword") or "")
     category = str(suggestion.get("category") or "")
+    sample = str(suggestion.get("sample") or "").strip()
     if not keyword or not category:
-        st.session_state.pop(_KEYWORD_SUGGEST_KEY, None)
-        st.session_state.pop(_KEYWORD_EDIT_KEY, None)
+        _close_keyword_dialog()
         return
 
     if _KEYWORD_EDIT_KEY not in st.session_state:
         st.session_state[_KEYWORD_EDIT_KEY] = keyword
 
-    if st.session_state.pop(_KEYWORD_SCROLL_KEY, False):
-        _scroll_page_to_top()
-
-    st.info(
-        f"Vuoi aggiungere una parola chiave a "
-        f"**{get_category_icon(category)} {category}**? "
-        "Puoi modificare il testo prima di confermare. "
-        "Poi ricalcolo le categorie automatiche."
+    _keyword_suggest_dialog(
+        keyword=keyword,
+        category=category,
+        sample=sample,
     )
+
+
+@st.dialog("Parola chiave", on_dismiss=_close_keyword_dialog)
+def _keyword_suggest_dialog(
+    *,
+    keyword: str,
+    category: str,
+    sample: str,
+) -> None:
+    icon = get_category_icon(category)
+    sample_html = ""
+    if sample:
+        sample_html = (
+            f'<div style="margin-top:10px;font-size:13px;'
+            f'font-weight:650;color:var(--ft-accent-strong);">'
+            f"{html.escape(sample)}</div>"
+        )
+
+    render_html(
+        f"""
+        <div class="ft-export-dialog" style="padding:2px 0 8px 0;">
+          <div class="ft-appearance-chip" style="width:fit-content;">
+            <span class="ft-appearance-chip-dot"></span>
+            {html.escape(icon)} {html.escape(category)}
+          </div>
+          <div style="
+              margin-top:14px;
+              font-family:Fraunces,Georgia,serif;
+              font-size:clamp(22px, 2.2vw, 28px);
+              font-weight:700;
+              color:var(--ft-text);
+              line-height:1.2;
+          ">
+            Aggiungere questa regola?
+          </div>
+          {sample_html}
+          <div style="
+              margin-top:10px;
+              font-size:13px;
+              line-height:1.45;
+              color:var(--ft-muted);
+          ">
+            Puoi modificare il testo. Confermando ricalcolo
+            le categorie automatiche.
+          </div>
+        </div>
+        """
+    )
+
     edited_keyword = st.text_input(
         "Parola chiave",
         key=_KEYWORD_EDIT_KEY,
     )
-    add_col, skip_col, _ = st.columns([1.4, 1.2, 3])
+    add_col, skip_col = st.columns(2)
     with add_col:
         if st.button(
             "Aggiungi e ricalcola",
             type="primary",
+            width="stretch",
             key="keyword_suggest_yes",
         ):
             chosen = str(edited_keyword or "").strip()
@@ -171,8 +206,7 @@ def _render_keyword_suggestion() -> None:
                 return
             added = add_keyword_to_category(category, chosen)
             updated = recalculate_automatic_categories()
-            st.session_state.pop(_KEYWORD_SUGGEST_KEY, None)
-            st.session_state.pop(_KEYWORD_EDIT_KEY, None)
+            _close_keyword_dialog()
             if added:
                 _queue_toast(
                     f"Keyword «{chosen.upper()}» aggiunta a {category}. "
@@ -184,9 +218,13 @@ def _render_keyword_suggestion() -> None:
                 )
             st.rerun()
     with skip_col:
-        if st.button("No, grazie", key="keyword_suggest_no"):
-            st.session_state.pop(_KEYWORD_SUGGEST_KEY, None)
-            st.session_state.pop(_KEYWORD_EDIT_KEY, None)
+        if st.button(
+            "No, grazie",
+            type="secondary",
+            width="stretch",
+            key="keyword_suggest_no",
+        ):
+            _close_keyword_dialog()
             st.rerun()
 
 
@@ -216,6 +254,86 @@ def format_date(value) -> str:
 
 def get_categories() -> list[str]:
     return get_category_names()
+
+
+def _category_rgb(color: str) -> str:
+    raw = str(color).removeprefix("#")
+    if len(raw) != 6:
+        return "var(--ft-accent-rgb)"
+    return (
+        f"{int(raw[0:2], 16)}, "
+        f"{int(raw[2:4], 16)}, "
+        f"{int(raw[4:6], 16)}"
+    )
+
+
+@st.dialog(
+    "Modifica movimento",
+    width="large",
+    on_dismiss=_close_movement_dialog,
+)
+def _movement_edit_dialog(movement_id: int, categories: list[str]) -> None:
+    df = load_movements()
+    match = df[df["id"] == movement_id]
+    if match.empty:
+        st.warning("Movimento non trovato.")
+        return
+
+    row = match.iloc[0]
+    amount = float(row["importo"])
+    category = (
+        str(row["categoria"])
+        if row["categoria"] in categories
+        else "Altro"
+    )
+    description = clean_description(row["descrizione"])
+    full_description = clean_description(row["descrizione_completa"])
+    title = full_description if full_description else description
+    icon = get_category_icon(category)
+    if category == INVESTMENT_CATEGORY:
+        amount_label = euro(abs(amount))
+    elif amount > 0:
+        amount_label = f"+{euro(amount)}"
+    else:
+        amount_label = euro(amount)
+
+    render_html(
+        f"""
+        <div class="ft-export-dialog" style="padding:2px 0 10px 0;">
+          <div class="ft-appearance-chip" style="width:fit-content;">
+            <span class="ft-appearance-chip-dot"></span>
+            {html.escape(icon)} {html.escape(category)}
+          </div>
+          <div style="
+              margin-top:12px;
+              font-family:Fraunces,Georgia,serif;
+              font-size:clamp(20px, 2vw, 26px);
+              font-weight:700;
+              color:var(--ft-text);
+              line-height:1.25;
+          ">{html.escape(title or "Senza descrizione")}</div>
+          <div style="
+              margin-top:6px;
+              font-size:13px;
+              color:var(--ft-muted);
+          ">{html.escape(amount_label)}</div>
+        </div>
+        """
+    )
+    _render_movement_details(
+        row=row,
+        movement_id=movement_id,
+        category=category,
+        categories=categories,
+        title=title,
+        description=description,
+        amount=amount,
+        is_special=bool(row.get("speciale", False)),
+        special_months=int(row.get("speciale_mesi") or 0),
+        exclude_from_metrics=bool(row.get("escludi_metriche", False)),
+        is_investment=category == INVESTMENT_CATEGORY,
+        is_transfer=is_transfer_category(category),
+    )
 
 
 def _movement_date(row: pd.Series) -> date:
@@ -356,7 +474,7 @@ def _render_movement_details(
             with yes_col:
                 if st.button("Sì", key=f"delete_yes_{movement_id}", width="stretch"):
                     delete_movement(movement_id)
-                    _clear_movement_widget_state(movement_id)
+                    _close_movement_dialog()
                     _queue_toast("Movimento eliminato")
                     st.rerun()
             with no_col:
@@ -384,12 +502,11 @@ def _render_movement_details(
                 speciale_mesi=spread_months,
                 escludi_metriche=marked_exclude,
             )
-            if new_category != original_category:
-                _queue_keyword_suggestion(
-                    str(new_description).strip() or description,
-                    new_category,
-                )
-            _clear_movement_widget_state(movement_id)
+            _queue_keyword_suggestion(
+                str(new_description).strip() or description,
+                new_category,
+            )
+            _close_movement_dialog()
             _queue_toast("Movimento aggiornato")
             st.rerun()
 
@@ -499,7 +616,7 @@ def _render_split_form(
             except ValueError as error:
                 st.error(str(error))
             else:
-                _clear_movement_widget_state(movement_id)
+                _close_movement_dialog()
                 _queue_toast(
                     f"Movimento diviso in {created + 1} parti"
                 )
@@ -568,6 +685,7 @@ def show_movements() -> None:
         return
 
     categories = get_categories()
+    _render_pending_movement_dialog(categories)
     months = sorted(df["mese"].dropna().unique(), reverse=True)
     month_options = ["Tutti"] + list(months)
     accounts = sorted(df["account"].dropna().unique().tolist())
@@ -679,19 +797,22 @@ def show_movements() -> None:
             value_color=liquidity_color,
         )
 
+    total_found = len(filtered_df)
     if search_term:
-        st.caption(
-            f"{len(filtered_df)} movimenti trovati "
-            f"(ricerca su tutti i mesi)"
-        )
+        found_suffix = " (ricerca su tutti i mesi)"
     elif selected_month == "Tutti":
-        st.caption(f"{len(filtered_df)} movimenti trovati (tutti i mesi)")
+        found_suffix = " (tutti i mesi)"
     else:
-        st.caption(f"{len(filtered_df)} movimenti trovati")
+        found_suffix = ""
 
     if filtered_df.empty:
-        st.warning(
-            "Nessun movimento trovato con i filtri selezionati (0 risultati)."
+        st.caption(f"0 movimenti trovati{found_suffix}")
+        render_html(
+            """
+            <div class="ft-movement-empty">
+                Nessun movimento con questi filtri.
+            </div>
+            """
         )
         return
 
@@ -703,8 +824,26 @@ def show_movements() -> None:
         na_position="last",
         kind="stable",
     )
+    list_limit = _resolve_list_limit(
+        (
+            selected_month,
+            selected_account,
+            selected_category,
+            search_term,
+        )
+    )
+    visible_df = filtered_df.head(list_limit)
+    hidden_count = max(total_found - len(visible_df), 0)
+    if hidden_count:
+        st.caption(
+            f"Mostrati {len(visible_df)} di {total_found} movimenti"
+            f"{found_suffix}"
+        )
+    else:
+        st.caption(f"{total_found} movimenti trovati{found_suffix}")
 
-    for _, row in filtered_df.iterrows():
+    category_defs = load_category_definitions()
+    for _, row in visible_df.iterrows():
         amount = float(row["importo"])
         category = (
             str(row["categoria"])
@@ -719,18 +858,18 @@ def show_movements() -> None:
         movement_id = int(row["id"])
 
         if is_investment:
-            amount_color = INVESTMENT_COLOR
+            tone = "investment"
             displayed_amount = euro(abs(amount))
         elif is_transfer:
-            amount_color = MUTED_COLOR
+            tone = "transfer"
             displayed_amount = (
                 f"+{euro(amount)}" if amount > 0 else euro(amount)
             )
         elif amount > 0:
-            amount_color = INCOME_COLOR
+            tone = "income"
             displayed_amount = f"+{euro(amount)}"
         else:
-            amount_color = EXPENSE_COLOR
+            tone = "expense"
             displayed_amount = euro(amount)
 
         icon = get_category_icon(category)
@@ -739,109 +878,85 @@ def show_movements() -> None:
         full_description = clean_description(row["descrizione_completa"])
         title = full_description if full_description else description
         account = clean_description(row["account"])
-        meta_chips = ""
+        category_rgb = _category_rgb(
+            get_category_color(category, category_defs)
+        )
+        flags = ""
         if is_special:
-            chip_label = "Speciale"
+            flag_label = "Speciale"
             if special_months > 0:
-                chip_label = f"Speciale · {special_months} mesi"
-            meta_chips += f"""
-                                <span style="
-                                    background:rgba(var(--ft-accent-rgb),0.10);
-                                    color:var(--ft-muted);
-                                    padding:3px 8px;
-                                    border-radius:8px;
-                                    font-size:11px;
-                                    font-weight:700;
-                                    border:1px solid var(--ft-border);
-                                ">{html.escape(chip_label)}</span>
-            """
+                flag_label = f"Speciale · {special_months} mesi"
+            flags += (
+                f'<span class="ft-movement-flag">'
+                f"{html.escape(flag_label)}</span>"
+            )
         if exclude_from_metrics or is_transfer:
-            meta_chips += f"""
-                                <span style="
-                                    background:rgba(148,163,184,0.16);
-                                    color:var(--ft-muted);
-                                    padding:3px 8px;
-                                    border-radius:8px;
-                                    font-size:11px;
-                                    font-weight:700;
-                                    border:1px solid var(--ft-border);
-                                ">Escluso dalle metriche</span>
-            """
+            flags += (
+                '<span class="ft-movement-flag is-muted">Escluso</span>'
+            )
+        if str(row.get("notes") or "").strip():
+            flags += '<span class="ft-movement-flag">Nota</span>'
 
         with styled_panel(kind="movement"):
-            top_left, top_right = st.columns([4.2, 1.2])
+            body_col, amount_col, action_col = st.columns(
+                [4.2, 1.35, 1.05],
+                vertical_alignment="center",
+            )
 
-            with top_left:
+            with body_col:
                 render_html(
                     f"""
-                    <div class="ft-movement-row" style="border-bottom:none;padding:2px 0;">
-                        <div>
-                            <div style="
-                                font-size:15px;
-                                font-weight:700;
-                                color:var(--ft-text);
-                                line-height:1.35;
-                            ">
-                                {html.escape(title)}
-                            </div>
-                            <div style="
-                                margin-top:6px;
-                                font-size:12px;
-                                color:var(--ft-muted);
-                                display:flex;
-                                align-items:center;
-                                flex-wrap:wrap;
-                                gap:8px;
-                            ">
-                                <span style="
-                                    background:rgba(var(--ft-accent-rgb),0.14);
-                                    color:var(--ft-accent-strong);
-                                    padding:3px 8px;
-                                    border-radius:8px;
-                                    font-size:11px;
-                                    font-weight:750;
-                                ">{html.escape(icon)} {html.escape(category)}</span>
-                                {meta_chips}
-                                <span>{html.escape(date)}</span>
-                                <span>{html.escape(account)}</span>
-                            </div>
+                    <div class="ft-movement-card"
+                         style="--ft-cat-rgb:{category_rgb};">
+                        <span class="ft-movement-tone is-{tone}" hidden></span>
+                        <div class="ft-movement-title">
+                            {html.escape(title or "Senza descrizione")}
+                        </div>
+                        <div class="ft-movement-meta">
+                            <span class="ft-movement-cat">
+                                <span class="ft-movement-cat-dot"></span>
+                                {html.escape(icon)} {html.escape(category)}
+                            </span>
+                            {flags}
+                            <span>{html.escape(date)}</span>
+                            <span class="ft-movement-dot">·</span>
+                            <span>{html.escape(account)}</span>
                         </div>
                     </div>
                     """
                 )
 
-            with top_right:
+            with amount_col:
                 render_html(
                     f"""
-                    <div style="
-                        text-align:right;
-                        font-family:Fraunces,Georgia,serif;
-                        font-size:22px;
-                        font-weight:700;
-                        color:{amount_color};
-                        padding-top:2px;
-                        white-space:nowrap;
-                    ">
+                    <div class="ft-movement-amount is-{tone}">
                         {html.escape(displayed_amount)}
                     </div>
                     """
                 )
 
-            with st.expander("Dettagli"):
-                _render_movement_details(
-                    row=row,
-                    movement_id=movement_id,
-                    category=category,
-                    categories=categories,
-                    title=title,
-                    description=description,
-                    amount=amount,
-                    is_special=is_special,
-                    special_months=special_months,
-                    exclude_from_metrics=exclude_from_metrics,
-                    is_investment=is_investment,
-                    is_transfer=is_transfer,
-                )
+            with action_col:
+                if st.button(
+                    "Modifica",
+                    key=f"open_edit_{movement_id}",
+                    width="stretch",
+                    type="secondary",
+                ):
+                    _open_movement_dialog(movement_id)
+                    st.rerun()
+
+    if hidden_count:
+        more = min(_LIST_PAGE_SIZE, hidden_count)
+        _, more_col, _ = st.columns([1, 1.4, 1])
+        with more_col:
+            if st.button(
+                f"Mostra altri {more}",
+                type="secondary",
+                key="movements_show_more",
+                width="stretch",
+            ):
+                st.session_state[_LIST_LIMIT_KEY] = list_limit + more
+                st.rerun()
 
     st.markdown("")
     export_month = (
