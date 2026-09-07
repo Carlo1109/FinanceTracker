@@ -5,6 +5,8 @@ FinanceTracker è un'app desktop sviluppata in Python per gestire le proprie fin
 ## ✨ Funzionalità
 
 - 📊 Dashboard con KPI, confronti periodo e grafici
+- 🏦 Liquidità reale per conto (trasferimenti e saldo iniziale inclusi)
+- 🔎 Filtri per più conti e intervallo personalizzato
 - 🥧 Distribuzione spese e andamento mensile
 - ⭐ Spese speciali (ripartizione su mesi o esclusione dalla media giornaliera)
 - 🚫 Esclusione movimenti dalle metriche (restano in lista)

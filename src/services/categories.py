@@ -13,8 +13,10 @@ from src.theme.colors import ensure_unique_category_colors
 
 USER_CATEGORY_CONFIG_PATH = DATA_DIR / "categories.json"
 DEFAULT_CATEGORY_ICON = "❓"
+_META_KEY = "_ft"
 
 _category_definitions_cache: dict[str, dict[str, Any]] | None = None
+_removed_defaults: list[str] = []
 
 
 DEFAULT_CATEGORY_ICONS = {
@@ -28,12 +30,13 @@ DEFAULT_CATEGORY_ICONS = {
     "Salute & Benessere": "❤️",
     "Investimenti": "📈",
     "Trasferimenti interni": "🔁",
+    "Saldo iniziale": "🏦",
     "Stipendio": "💼",
     "Rimborsi": "↩️",
     "Viaggi & Vacanze": "🏖️",
     "Svago & Tempo libero": "🎮",
     "Abbonamenti": "📺",
-    "Regali & Donazioni": "🎁",
+    "Regali, Donazioni & Prestiti": "🎁",
     "Altro": "❓",
 }
 
@@ -82,33 +85,247 @@ def invalidate_category_cache() -> None:
     _category_definitions_cache = None
 
 
+def _split_category_meta(
+    raw_data: Any,
+) -> tuple[dict[str, Any], list[str]]:
+    if not isinstance(raw_data, dict):
+        return {}, []
+    meta = raw_data.get(_META_KEY)
+    removed: list[str] = []
+    if isinstance(meta, dict):
+        removed = [
+            str(item).strip()
+            for item in meta.get("removed", [])
+            if str(item).strip()
+        ]
+    categories = {
+        key: value
+        for key, value in raw_data.items()
+        if key != _META_KEY
+    }
+    return categories, removed
+
+
+def _replaces_list(data: dict[str, Any]) -> list[str]:
+    raw = data.get("replaces")
+    if isinstance(raw, str) and raw.strip():
+        return [raw.strip()]
+    if isinstance(raw, list):
+        return [str(item).strip() for item in raw if str(item).strip()]
+    return []
+
+
+def _collect_replaced_names(
+    definitions: dict[str, dict[str, Any]],
+) -> set[str]:
+    replaced: set[str] = set()
+    for data in definitions.values():
+        replaced.update(_replaces_list(data))
+    return replaced
+
+
+def _load_bundled_definitions() -> dict[str, dict[str, Any]]:
+    bundled_path = get_bundled_category_config_path()
+    if not bundled_path.exists():
+        return {}
+    try:
+        with bundled_path.open("r", encoding="utf-8") as file:
+            bundled_raw = json.load(file)
+    except (json.JSONDecodeError, OSError):
+        return {}
+    bundled_categories, _ = _split_category_meta(bundled_raw)
+    bundled_definitions, _ = _normalize_category_definitions(bundled_categories)
+    return bundled_definitions
+
+
+def _category_movement_count(category: str) -> int:
+    if not DB_PATH.exists():
+        return 0
+    try:
+        with sqlite3.connect(DB_PATH) as connection:
+            column_names = {
+                column[1]
+                for column in connection.execute("PRAGMA table_info(movements)")
+            }
+            category_column = (
+                "categoria"
+                if "categoria" in column_names
+                else "category"
+                if "category" in column_names
+                else None
+            )
+            if category_column is None:
+                return 0
+            row = connection.execute(
+                f"""
+                SELECT COUNT(*) FROM movements
+                WHERE {category_column} = ?
+                """,
+                (category,),
+            ).fetchone()
+    except sqlite3.Error:
+        return 0
+    return int(row[0]) if row else 0
+
+
+def _remember_removed(name: str) -> None:
+    cleaned = str(name).strip()
+    if cleaned and cleaned not in _removed_defaults:
+        _removed_defaults.append(cleaned)
+
+
+_LEGACY_CATEGORY_NAMES = {
+    "Regali & Donazioni": "Regali, Donazioni & Prestiti",
+    "Regali, Donazioni &  Prestiti": "Regali, Donazioni & Prestiti",
+}
+
+
+def _relabel_movements(old_name: str, new_name: str) -> int:
+    if not DB_PATH.exists() or old_name == new_name:
+        return 0
+    try:
+        with sqlite3.connect(DB_PATH) as connection:
+            column_names = {
+                column[1]
+                for column in connection.execute("PRAGMA table_info(movements)")
+            }
+            category_column = (
+                "categoria"
+                if "categoria" in column_names
+                else "category"
+                if "category" in column_names
+                else None
+            )
+            if category_column is None:
+                return 0
+            cursor = connection.execute(
+                f"""
+                UPDATE movements
+                SET {category_column} = ?
+                WHERE {category_column} = ?
+                """,
+                (new_name, old_name),
+            )
+            connection.commit()
+            return max(cursor.rowcount, 0)
+    except sqlite3.Error:
+        return 0
+
+
+def _migrate_legacy_category_names(
+    definitions: dict[str, dict[str, Any]],
+) -> bool:
+    """Allinea nomi vecchi (es. Regali & Donazioni) al default attuale."""
+    changed = False
+    for old_name, new_name in _LEGACY_CATEGORY_NAMES.items():
+        _relabel_movements(old_name, new_name)
+        if old_name not in definitions or old_name == new_name:
+            if old_name != new_name:
+                _remember_removed(old_name)
+            continue
+
+        incoming = _copy_category_data(definitions.pop(old_name))
+        if new_name in definitions:
+            current = definitions[new_name]
+            merged_keywords = list(current.get("keywords") or [])
+            for keyword in incoming.get("keywords") or []:
+                if keyword not in merged_keywords:
+                    merged_keywords.append(keyword)
+            current["keywords"] = merged_keywords
+            if not current.get("icon") and incoming.get("icon"):
+                current["icon"] = incoming["icon"]
+            if not current.get("color") and incoming.get("color"):
+                current["color"] = incoming["color"]
+            chain = _replaces_list(current)
+        else:
+            definitions[new_name] = incoming
+            chain = _replaces_list(incoming)
+        if old_name not in chain:
+            chain.append(old_name)
+        definitions[new_name]["replaces"] = chain
+        _remember_removed(old_name)
+        changed = True
+    return changed
+
+
 def _merge_new_bundled_categories(
     definitions: dict[str, dict[str, Any]],
 ) -> tuple[dict[str, dict[str, Any]], bool]:
     """
     Aggiunge categorie presenti nel JSON di default ma assenti
-    nella copia utente, senza sovrascrivere quelle già personalizzate.
+    nella copia utente, senza sovrascrivere quelle già personalizzate
+    e senza riannunciare nomi rinominati o eliminati.
     """
-    bundled_path = get_bundled_category_config_path()
-
-    if not bundled_path.exists():
+    bundled_definitions = _load_bundled_definitions()
+    if not bundled_definitions:
         return definitions, False
 
-    try:
-        with bundled_path.open("r", encoding="utf-8") as file:
-            bundled_raw = json.load(file)
-    except (json.JSONDecodeError, OSError):
-        return definitions, False
-
-    bundled_definitions, _ = _normalize_category_definitions(bundled_raw)
+    skip = set(_removed_defaults) | _collect_replaced_names(definitions)
     changed = False
 
     for category_name, category_data in bundled_definitions.items():
-        if category_name not in definitions:
-            definitions[category_name] = category_data
-            changed = True
+        if category_name in definitions:
+            continue
+        if (
+            category_name not in RENAME_LOCKED_CATEGORIES
+            and category_name in skip
+        ):
+            continue
+        definitions[category_name] = category_data
+        changed = True
 
     return definitions, changed
+
+
+def _drop_renamed_bundled_ghosts(
+    definitions: dict[str, dict[str, Any]],
+) -> bool:
+    """
+    Toglie il default riannunciato dopo una rinomina
+    (es. il nome vecchio accanto a quello nuovo).
+    """
+    bundled_definitions = _load_bundled_definitions()
+    if not bundled_definitions:
+        return False
+
+    changed = False
+    replaced = _collect_replaced_names(definitions)
+
+    for name in list(definitions):
+        if name not in bundled_definitions:
+            continue
+        if name in RENAME_LOCKED_CATEGORIES:
+            continue
+        if _category_movement_count(name) > 0:
+            continue
+
+        current = definitions[name]
+        bundled = bundled_definitions[name]
+        exact_default = (
+            list(current.get("keywords") or [])
+            == list(bundled.get("keywords") or [])
+            and str(current.get("icon") or "") == str(bundled.get("icon") or "")
+        )
+        superseded = name in replaced
+        same_icon_custom = [
+            other
+            for other, data in definitions.items()
+            if other not in bundled_definitions
+            and str(data.get("icon") or "") == str(current.get("icon") or "")
+        ]
+        if not (superseded or (exact_default and same_icon_custom)):
+            continue
+
+        for other in same_icon_custom:
+            chain = _replaces_list(definitions[other])
+            if name not in chain:
+                chain.append(name)
+                definitions[other]["replaces"] = chain
+        del definitions[name]
+        _remember_removed(name)
+        changed = True
+
+    return changed
 
 
 def _normalize_category_definitions(
@@ -135,7 +352,7 @@ def _normalize_category_definitions(
     for raw_name, raw_value in raw_data.items():
         category_name = str(raw_name).strip()
 
-        if not category_name:
+        if not category_name or category_name == _META_KEY:
             changed = True
             continue
 
@@ -146,6 +363,7 @@ def _normalize_category_definitions(
                 DEFAULT_CATEGORY_ICON,
             )
             color = None
+            replaces = None
             changed = True
 
         elif isinstance(raw_value, dict):
@@ -158,6 +376,7 @@ def _normalize_category_definitions(
                 ),
             )
             color = raw_value.get("color")
+            replaces = raw_value.get("replaces")
 
             if "keywords" not in raw_value or "icon" not in raw_value:
                 changed = True
@@ -168,6 +387,7 @@ def _normalize_category_definitions(
                 DEFAULT_CATEGORY_ICON,
             )
             color = None
+            replaces = None
             changed = True
 
         if not isinstance(keywords, list):
@@ -193,6 +413,10 @@ def _normalize_category_definitions(
         if color:
             category_entry["color"] = str(color).strip()
 
+        replace_names = _replaces_list({"replaces": replaces})
+        if replace_names:
+            category_entry["replaces"] = replace_names
+
         normalized[category_name] = category_entry
 
     if "Altro" not in normalized:
@@ -214,6 +438,17 @@ def _normalize_category_definitions(
         }
         changed = True
 
+    if "Saldo iniziale" not in normalized:
+        normalized["Saldo iniziale"] = {
+            "icon": "🏦",
+            "keywords": [
+                "SALDO INIZIALE",
+                "APERTURA CONTO",
+                "OPENING BALANCE",
+            ],
+        }
+        changed = True
+
     return normalized, changed
 
 
@@ -227,6 +462,10 @@ def _copy_category_data(
 
     if data.get("color"):
         copied["color"] = str(data["color"])
+
+    replace_names = _replaces_list(data)
+    if replace_names:
+        copied["replaces"] = replace_names
 
     return copied
 
@@ -257,11 +496,17 @@ def load_category_definitions() -> dict[str, dict[str, Any]]:
     except (json.JSONDecodeError, OSError):
         raw_data = {}
 
-    definitions, changed = _normalize_category_definitions(raw_data)
+    category_raw, removed = _split_category_meta(raw_data)
+    _removed_defaults.clear()
+    _removed_defaults.extend(removed)
+
+    definitions, changed = _normalize_category_definitions(category_raw)
+    migrated = _migrate_legacy_category_names(definitions)
     definitions, merged = _merge_new_bundled_categories(definitions)
+    dropped = _drop_renamed_bundled_ghosts(definitions)
     definitions, colored = ensure_unique_category_colors(definitions)
 
-    if changed or merged or colored:
+    if changed or migrated or merged or dropped or colored:
         try:
             save_category_definitions(definitions)
         except OSError:
@@ -293,9 +538,15 @@ def save_category_definitions(
     normalized, _ = _normalize_category_definitions(definitions)
     normalized, _ = ensure_unique_category_colors(normalized)
 
+    payload: dict[str, Any] = dict(normalized)
+    if _removed_defaults:
+        payload[_META_KEY] = {
+            "removed": sorted(set(_removed_defaults)),
+        }
+
     with config_path.open("w", encoding="utf-8") as file:
         json.dump(
-            normalized,
+            payload,
             file,
             indent=2,
             ensure_ascii=False,
@@ -370,6 +621,78 @@ def update_category_icon(category: str, icon: str) -> bool:
     save_category_definitions(definitions)
 
     return True
+
+
+RENAME_LOCKED_CATEGORIES = {
+    "Altro",
+    "Trasferimenti interni",
+    "Saldo iniziale",
+    "Investimenti",
+}
+
+
+def rename_category(old_name: str, new_name: str) -> tuple[bool, int]:
+    """
+    Rinomina una categoria e aggiorna i movimenti.
+
+    Non rinomina Altro, trasferimenti, saldo iniziale e investimenti.
+    """
+    old_name = str(old_name).strip()
+    new_name = str(new_name).strip()
+    if not old_name or not new_name or old_name == new_name:
+        return False, 0
+    if old_name in RENAME_LOCKED_CATEGORIES:
+        return False, 0
+
+    definitions = load_category_definitions()
+    if old_name not in definitions:
+        return False, 0
+
+    existing = {name.casefold() for name in definitions}
+    if new_name.casefold() in existing:
+        return False, 0
+
+    reordered: dict[str, dict[str, Any]] = {}
+    for name, data in definitions.items():
+        if name == old_name:
+            copied = _copy_category_data(data)
+            chain = _replaces_list(copied)
+            if old_name not in chain:
+                chain.append(old_name)
+            copied["replaces"] = chain
+            reordered[new_name] = copied
+        else:
+            reordered[name] = data
+    _remember_removed(old_name)
+    save_category_definitions(reordered)
+
+    renamed = 0
+    if DB_PATH.exists():
+        with sqlite3.connect(DB_PATH) as connection:
+            column_names = {
+                column[1]
+                for column in connection.execute("PRAGMA table_info(movements)")
+            }
+            category_column = (
+                "categoria"
+                if "categoria" in column_names
+                else "category"
+                if "category" in column_names
+                else None
+            )
+            if category_column:
+                cursor = connection.execute(
+                    f"""
+                    UPDATE movements
+                    SET {category_column} = ?
+                    WHERE {category_column} = ?
+                    """,
+                    (new_name, old_name),
+                )
+                renamed = max(cursor.rowcount, 0)
+                connection.commit()
+
+    return True, renamed
 
 
 def add_keyword_to_category(category: str, keyword: str) -> bool:
@@ -494,6 +817,7 @@ def delete_category(category: str) -> tuple[bool, int]:
             connection.commit()
 
     del definitions[category]
+    _remember_removed(category)
     save_category_definitions(definitions)
 
     return True, reassigned_movements

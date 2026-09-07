@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
@@ -22,13 +23,21 @@ from src.components.cards import (
     render_kpi_card,
     render_section_title,
 )
+from src.components.date_input import themed_date_input
 from src.components.navigation import switch_to
 from src.services.analytics import (
+    MOVEMENT_TYPE_FILTERS,
+    PERIOD_CUSTOM,
+    PERIOD_CUSTOM_ALIASES,
+    accounts_chip_label,
+    calculate_account_balance,
     calculate_daily_expense,
     calculate_financial_metrics,
     calculate_period_days,
     category_expense_breakdown,
     category_income_breakdown,
+    filter_by_accounts,
+    filter_by_movement_types,
     format_comparison_caption,
     get_current_period_bounds,
     get_daily_expense_comparison,
@@ -38,13 +47,16 @@ from src.services.analytics import (
     get_value_comparison,
     monthly_flow_totals,
     normalize_date_column,
+    refund_income,
     resolve_analysis_bounds,
     savings_rate,
     special_expense_summary,
     special_expenses_overview,
     top_expense_category,
     top_income_category,
+    types_chip_label,
 )
+from src.services.backup_service import restore_backup
 from src.services.categories import get_category_icon, load_category_definitions
 from src.services.movement_service import load_movements
 from src.theme.colors import get_category_colors
@@ -344,6 +356,41 @@ def _render_category_breakdown_section(
     )
 
 
+_RESTORE_KEY = "dashboard_restore_open"
+
+
+def _close_restore_dialog() -> None:
+    st.session_state.pop(_RESTORE_KEY, None)
+
+
+@st.dialog("Parti da un backup", on_dismiss=_close_restore_dialog)
+def _restore_backup_dialog() -> None:
+    st.caption(
+        "Sostituisce database e categorie con lo zip di backup. "
+        "Se la cartella sembra vuota, scegli «Tutti i file»."
+    )
+    uploaded = st.file_uploader(
+        "Seleziona un backup (.zip)",
+        type=None,
+        key="dashboard_restore_uploader",
+    )
+    if uploaded is not None and Path(uploaded.name).suffix.lower() != ".zip":
+        st.error("Formato non supportato. Usa un file backup .zip.")
+        uploaded = None
+    if uploaded is not None:
+        if st.button("Ripristina", type="primary", width="stretch"):
+            success, message = restore_backup(uploaded)
+            if success:
+                _close_restore_dialog()
+                st.toast(message)
+                st.rerun()
+            else:
+                st.error(message)
+    if st.button("Annulla", width="stretch"):
+        _close_restore_dialog()
+        st.rerun()
+
+
 def show_dashboard() -> None:
     st.title("Dashboard")
 
@@ -403,14 +450,16 @@ def show_dashboard() -> None:
                     line-height:1.5;
                     color:var(--ft-muted);
                 ">
-                    Nessun movimento ancora. Importa un estratto conto
-                    oppure aggiungi il primo movimento manualmente.
+                    Nessun movimento ancora. Importa un estratto conto,
+                    aggiungi il primo movimento oppure parti da un backup.
                 </div>
             </div>
             """
         )
         st.markdown("")
-        c1, c2, _ = st.columns([1.2, 1.2, 2])
+        if st.session_state.get(_RESTORE_KEY):
+            _restore_backup_dialog()
+        c1, c2, c3, _ = st.columns([1.2, 1.3, 1.5, 1.2])
         with c1:
             if st.button(
                 "Importa dati",
@@ -425,6 +474,14 @@ def show_dashboard() -> None:
                 width="stretch",
             ):
                 switch_to("manual_entry")
+        with c3:
+            if st.button(
+                "Parti da un backup",
+                type="secondary",
+                width="stretch",
+            ):
+                st.session_state[_RESTORE_KEY] = True
+                st.rerun()
         return
 
     dated_all = normalize_date_column(df)
@@ -440,40 +497,106 @@ def show_dashboard() -> None:
     months = sorted(df["mese"].dropna().unique(), reverse=True)
     accounts = sorted(df["account"].dropna().unique().tolist())
 
-    f1, f2, f3 = st.columns([1.4, 1.4, 1.4])
-
-    with f1:
-        period = st.selectbox(
-            "Periodo",
-            [
-                "Questo mese",
-                "Mese scorso",
-                "Mese specifico",
-                "Ultimi 3 mesi",
-                "Ultimi 6 mesi",
-                "Quest'anno",
-                "Tutto",
-            ],
-            index=6,
-        )
+    period_options = [
+        "Questo mese",
+        "Mese scorso",
+        "Mese specifico",
+        PERIOD_CUSTOM,
+        "Ultimi 3 mesi",
+        "Ultimi 6 mesi",
+        "Quest'anno",
+        "Tutto",
+    ]
+    if "dashboard_period" not in st.session_state:
+        st.session_state["dashboard_period"] = "Tutto"
+    period = st.session_state["dashboard_period"]
+    if period in PERIOD_CUSTOM_ALIASES:
+        period = PERIOD_CUSTOM
+    if period not in period_options:
+        period = "Tutto"
+    st.session_state["dashboard_period"] = period
 
     selected_month = None
+    custom_start = None
+    custom_end = None
+    dated_all_bounds = dated_all
+    min_data = (
+        dated_all_bounds["data"].min().date()
+        if not dated_all_bounds.empty
+        else pd.Timestamp.today().date()
+    )
+    max_data = (
+        dated_all_bounds["data"].max().date()
+        if not dated_all_bounds.empty
+        else pd.Timestamp.today().date()
+    )
 
-    with f2:
-        if period == "Mese specifico":
-            selected_month = st.selectbox("Mese", months)
-        else:
-            st.selectbox("Mese", ["Automatico"], disabled=True)
+    period = st.selectbox(
+        "Periodo",
+        period_options,
+        key="dashboard_period",
+    )
+    if period == "Mese specifico" and months:
+        selected_month = st.selectbox(
+            "Mese",
+            months,
+            key="dashboard_month",
+        )
+    elif period == PERIOD_CUSTOM:
+        from_col, to_col = st.columns(2)
+        with from_col:
+            custom_start = themed_date_input(
+                "Dal",
+                value=min_data,
+                key="dashboard_from",
+                min_year=min_data.year,
+                max_year=max_data.year + 1,
+            )
+        with to_col:
+            custom_end = themed_date_input(
+                "Al",
+                value=max_data,
+                key="dashboard_to",
+                min_year=min_data.year,
+                max_year=max_data.year + 1,
+            )
 
-    with f3:
-        selected_account = st.selectbox("Conto", ["Tutti"] + accounts)
+    selected_accounts = st.pills(
+        "Conti",
+        accounts,
+        selection_mode="multi",
+        default=[],
+        key="dashboard_accounts",
+        help="Nessuno selezionato = tutti i conti.",
+    )
+    selected_accounts = list(selected_accounts or [])
 
-    filtered_df = get_period_df(df, period, selected_month)
+    selected_types = st.pills(
+        "Tipo",
+        list(MOVEMENT_TYPE_FILTERS),
+        selection_mode="multi",
+        default=[],
+        key="dashboard_types",
+        help="Nessuno selezionato = tutti i movimenti.",
+    )
+    selected_types = list(selected_types or [])
 
-    if selected_account != "Tutti":
-        filtered_df = filtered_df[
-            filtered_df["account"] == selected_account
-        ].copy()
+    custom_start_ts = (
+        pd.Timestamp(custom_start).normalize() if custom_start else None
+    )
+    custom_end_ts = (
+        pd.Timestamp(custom_end).normalize() if custom_end else None
+    )
+
+    filtered_df = get_period_df(
+        df,
+        period,
+        selected_month,
+        custom_start=custom_start_ts,
+        custom_end=custom_end_ts,
+    )
+    filtered_df = filter_by_accounts(filtered_df, selected_accounts)
+    filtered_df = filter_by_movement_types(filtered_df, selected_types)
 
     if filtered_df.empty:
         st.warning(
@@ -486,23 +609,24 @@ def show_dashboard() -> None:
     uscite = metrics["uscite"]
     bilancio = metrics["bilancio"]
     investimenti = metrics["investimenti"]
-    liquidita = metrics["liquidita"]
+    account_scope = filter_by_accounts(df, selected_accounts)
+    analysis_start, analysis_end = resolve_analysis_bounds(
+        filtered_df,
+        period,
+        selected_month,
+        custom_start=custom_start_ts,
+        custom_end=custom_end_ts,
+    )
+    saldo = calculate_account_balance(account_scope, through=analysis_end)
 
     period_days = get_period_day_count(
         filtered_df,
         period,
         selected_month,
+        custom_start=custom_start_ts,
+        custom_end=custom_end_ts,
     )
-    analysis_start, analysis_end = resolve_analysis_bounds(
-        filtered_df,
-        period,
-        selected_month,
-    )
-    specials_source_df = dated_all
-    if selected_account != "Tutti":
-        specials_source_df = dated_all[
-            dated_all["account"] == selected_account
-        ].copy()
+    specials_source_df = filter_by_accounts(dated_all, selected_accounts)
 
     avg_daily_expense = calculate_daily_expense(
         filtered_df,
@@ -535,17 +659,16 @@ def show_dashboard() -> None:
         )
     daily_footer = " · ".join(daily_footer_parts)
 
-    comparison_source_df = normalize_date_column(df)
-
-    if selected_account != "Tutti":
-        comparison_source_df = comparison_source_df[
-            comparison_source_df["account"] == selected_account
-        ].copy()
-
+    comparison_source_df = filter_by_accounts(
+        normalize_date_column(df),
+        selected_accounts,
+    )
 
     previous_bounds = get_previous_period_bounds(
         period=period,
         selected_month=selected_month,
+        custom_start=custom_start_ts,
+        custom_end=custom_end_ts,
     )
 
     daily_comparison_text = None
@@ -562,6 +685,10 @@ def show_dashboard() -> None:
                 inclusive="both",
             )
         ].copy()
+        previous_period_df = filter_by_movement_types(
+            previous_period_df,
+            selected_types,
+        )
 
         previous_period_days = calculate_period_days(
             previous_start,
@@ -613,14 +740,29 @@ def show_dashboard() -> None:
         "investimenti",
         higher_is_better=True,
     )
-    liquidita_delta, liquidita_delta_color = metric_delta(
-        "liquidita",
-        higher_is_better=True,
-    )
+    previous_saldo = None
+    if previous_bounds is not None:
+        previous_saldo = calculate_account_balance(
+            account_scope,
+            through=previous_bounds[1],
+        )
+    if previous_saldo is None:
+        saldo_delta, saldo_delta_color = None, MUTED_COLOR
+    else:
+        saldo_delta, saldo_delta_color = get_value_comparison(
+            saldo,
+            previous_saldo,
+            higher_is_better=True,
+        )
 
     comparison_caption = None
     if previous_bounds is not None:
-        current_bounds = get_current_period_bounds(period, selected_month)
+        current_bounds = get_current_period_bounds(
+            period,
+            selected_month,
+            custom_start=custom_start_ts,
+            custom_end=custom_end_ts,
+        )
         if current_bounds is not None:
             comparison_caption = format_comparison_caption(
                 current_bounds[0],
@@ -644,32 +786,51 @@ def show_dashboard() -> None:
         top_income_category_name, top_income_amount = top_income
 
     balance_color = BALANCE_COLOR if bilancio >= 0 else EXPENSE_COLOR
-    liquidity_color = LIQUIDITY_COLOR if liquidita >= 0 else EXPENSE_COLOR
+    liquidity_color = LIQUIDITY_COLOR if saldo >= 0 else EXPENSE_COLOR
 
-    rate = savings_rate(metrics)
+    exclude_refunds = bool(
+        st.session_state.get("dashboard_savings_ex_refunds", False)
+    )
+    refunds = refund_income(filtered_df)
+    rate = savings_rate(
+        metrics,
+        exclude_refunds=exclude_refunds,
+        refunds=refunds,
+    )
     if rate is None:
         savings_label = "—"
         savings_color = MUTED_COLOR
-        savings_footer = "serve almeno un’entrata"
+        if exclude_refunds and refunds > 0:
+            savings_footer = "serve almeno un’entrata oltre i rimborsi"
+        else:
+            savings_footer = "serve almeno un’entrata"
     else:
         savings_label = f"{rate:.1f}".replace(".", ",") + "%"
         savings_color = INCOME_COLOR if rate >= 0 else EXPENSE_COLOR
-        savings_footer = "(entrate − uscite) / entrate"
+        spent_share = f"{(100.0 - rate):.1f}".replace(".", ",")
+        refunds_prefix = "senza rimborsi · " if exclude_refunds else ""
+        if rate > 0:
+            savings_footer = (
+                f"{refunds_prefix}{spent_share}% delle entrate è andato in uscite"
+            )
+        elif rate == 0:
+            savings_footer = f"{refunds_prefix}tutto è andato in uscite"
+        else:
+            savings_footer = f"{refunds_prefix}hai speso più di quanto è entrato"
 
     if comparison_caption:
         st.caption(f"Confronto: {comparison_caption}")
 
     account_chip = html.escape(
-        selected_account
-        if selected_account != "Tutti"
-        else "Tutti i conti"
+        accounts_chip_label(selected_accounts, accounts)
     )
+    type_chip = html.escape(types_chip_label(selected_types))
     period_chip = html.escape(period)
     render_html(
         f"""
         <div class="ft-appearance-chip" style="margin:4px 0 14px 0;width:fit-content;">
           <span class="ft-appearance-chip-dot"></span>
-          {period_chip} · {account_chip}
+          {period_chip} · {account_chip} · {type_chip}
         </div>
         """
     )
@@ -716,10 +877,10 @@ def show_dashboard() -> None:
     with k4:
         render_kpi_card(
             "Liquidità",
-            signed_euro(liquidita),
+            signed_euro(saldo),
             value_color=liquidity_color,
-            subtitle=liquidita_delta,
-            subtitle_color=liquidita_delta_color,
+            subtitle=saldo_delta,
+            subtitle_color=saldo_delta_color,
         )
 
     st.markdown("")
@@ -758,6 +919,15 @@ def show_dashboard() -> None:
             value=savings_label,
             value_color=savings_color,
             footer=savings_footer,
+            extra_class="ft-savings-rate-card",
+        )
+        st.checkbox(
+            "Tieni fuori i rimborsi",
+            key="dashboard_savings_ex_refunds",
+            help=(
+                "I rimborsi non sono reddito: toglierli evita di gonfiare "
+                "il risparmio. Regali, donazioni e prestiti restano."
+            ),
         )
 
     special_overview = special_expenses_overview(

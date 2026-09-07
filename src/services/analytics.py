@@ -8,35 +8,118 @@ import pandas as pd
 
 INVESTMENT_CATEGORY = "Investimenti"
 TRANSFER_CATEGORY = "Trasferimenti interni"
+INITIAL_BALANCE_CATEGORY = "Saldo iniziale"
+RIMBORSO_CATEGORY = "Rimborsi"
+PERIOD_CUSTOM = "Intervallo personalizzato"
+PERIOD_CUSTOM_ALIASES = ("Da – a", "Da - a")
 
 
 def is_transfer_category(category: object) -> bool:
     return str(category) == TRANSFER_CATEGORY
 
 
+def is_initial_balance_category(category: object) -> bool:
+    return str(category) == INITIAL_BALANCE_CATEGORY
+
+
+def is_non_operating_category(category: object) -> bool:
+    """Trasferimenti e saldo iniziale: fuori da entrate/uscite, nel saldo conto."""
+    name = str(category)
+    return name in {TRANSFER_CATEGORY, INITIAL_BALANCE_CATEGORY}
+
+
 def _excluded_from_metrics_mask(df: pd.DataFrame) -> pd.Series:
-    """Trasferimenti interni e flag Escludere dalle metriche."""
+    """Trasferimenti interni e saldo iniziale."""
     if df.empty:
         return pd.Series(dtype=bool)
 
-    transfer = (
-        df["categoria"].map(is_transfer_category)
-        if "categoria" in df.columns
-        else pd.Series(False, index=df.index)
-    )
-    flagged = (
-        df["escludi_metriche"].fillna(False).astype(bool)
-        if "escludi_metriche" in df.columns
-        else pd.Series(False, index=df.index)
-    )
-    return transfer | flagged
+    if "categoria" not in df.columns:
+        return pd.Series(False, index=df.index)
+    return df["categoria"].map(is_non_operating_category)
 
 
 def _for_metrics(df: pd.DataFrame) -> pd.DataFrame:
-    """Esclude trasferimenti interni e movimenti con flag dalle metriche."""
+    """Esclude trasferimenti e saldo iniziale da entrate, uscite e medie."""
     if df.empty:
         return df
     return df.loc[~_excluded_from_metrics_mask(df)].copy()
+
+
+def filter_by_accounts(
+    df: pd.DataFrame,
+    selected: list[str] | None,
+) -> pd.DataFrame:
+    """Lista vuota = tutti i conti."""
+    if df.empty or not selected:
+        return df
+    return df[df["account"].isin(selected)].copy()
+
+
+MOVEMENT_TYPE_FILTERS = ("Entrate", "Uscite", "Investimenti")
+
+
+def filter_by_movement_types(
+    df: pd.DataFrame,
+    selected: list[str] | None,
+) -> pd.DataFrame:
+    """Lista vuota = tutti i tipi."""
+    if df.empty or not selected:
+        return df
+    chosen = {str(item) for item in selected}
+    mask = pd.Series(False, index=df.index)
+    non_operating = df["categoria"].map(is_non_operating_category)
+    if "Entrate" in chosen:
+        mask |= (df["importo"] > 0) & ~non_operating
+    if "Uscite" in chosen:
+        mask |= (
+            (df["importo"] < 0)
+            & (df["categoria"] != INVESTMENT_CATEGORY)
+            & ~non_operating
+        )
+    if "Investimenti" in chosen:
+        mask |= df["categoria"] == INVESTMENT_CATEGORY
+    return df.loc[mask].copy()
+
+
+def types_chip_label(selected: list[str]) -> str:
+    if not selected or set(selected) == set(MOVEMENT_TYPE_FILTERS):
+        return "Tutti i tipi"
+    if len(selected) == 1:
+        return selected[0]
+    return " + ".join(selected)
+
+
+def accounts_chip_label(selected: list[str], all_accounts: list[str]) -> str:
+    if not selected or set(selected) == set(all_accounts):
+        return "Tutti i conti"
+    if len(selected) == 1:
+        return selected[0]
+    if len(selected) == 2:
+        return f"{selected[0]} + {selected[1]}"
+    return f"{len(selected)} conti"
+
+
+def calculate_account_balance(
+    df: pd.DataFrame,
+    *,
+    through: pd.Timestamp | None = None,
+) -> float:
+    """
+    Saldo di cassa dei movimenti passati, trasferimenti e saldo iniziale
+    inclusi. Serve a mostrare quanto c’è davvero sul conto.
+    """
+    if df.empty or "importo" not in df.columns:
+        return 0.0
+    working = df
+    if through is not None and "data" in df.columns:
+        dated = normalize_date_column(df)
+        cutoff = pd.Timestamp(through).normalize()
+        working = dated[dated["data"] <= cutoff]
+    if working.empty:
+        return 0.0
+    return float(
+        pd.to_numeric(working["importo"], errors="coerce").fillna(0).sum()
+    )
 
 
 _MONTHS_IT = (
@@ -103,6 +186,9 @@ def format_comparison_caption(
 def get_current_period_bounds(
     period: str,
     selected_month: str | None = None,
+    *,
+    custom_start: pd.Timestamp | None = None,
+    custom_end: pd.Timestamp | None = None,
 ) -> tuple[pd.Timestamp, pd.Timestamp] | None:
     today = pd.Timestamp.today().normalize()
 
@@ -133,6 +219,13 @@ def get_current_period_bounds(
     if period == "Quest'anno":
         return pd.Timestamp(year=today.year, month=1, day=1), today
 
+    if period == PERIOD_CUSTOM and custom_start is not None and custom_end is not None:
+        start = pd.Timestamp(custom_start).normalize()
+        end = pd.Timestamp(custom_end).normalize()
+        if end < start:
+            start, end = end, start
+        return start, end
+
     return None
 
 
@@ -140,6 +233,9 @@ def get_period_df(
     df: pd.DataFrame,
     period: str,
     selected_month: str | None = None,
+    *,
+    custom_start: pd.Timestamp | None = None,
+    custom_end: pd.Timestamp | None = None,
 ) -> pd.DataFrame:
     today = pd.Timestamp.today()
     current_month = today.strftime("%Y-%m")
@@ -167,6 +263,16 @@ def get_period_df(
     if period == "Quest'anno":
         return df[df["mese"].str.startswith(str(today.year), na=False)].copy()
 
+    if period == PERIOD_CUSTOM and custom_start is not None and custom_end is not None:
+        dated = normalize_date_column(df)
+        start = pd.Timestamp(custom_start).normalize()
+        end = pd.Timestamp(custom_end).normalize()
+        if end < start:
+            start, end = end, start
+        return dated[
+            dated["data"].between(start, end, inclusive="both")
+        ].copy()
+
     return df.copy()
 
 
@@ -183,6 +289,9 @@ def normalize_date_column(df: pd.DataFrame) -> pd.DataFrame:
 def get_previous_period_bounds(
     period: str,
     selected_month: str | None = None,
+    *,
+    custom_start: pd.Timestamp | None = None,
+    custom_end: pd.Timestamp | None = None,
 ) -> tuple[pd.Timestamp, pd.Timestamp] | None:
     today = pd.Timestamp.today().normalize()
 
@@ -237,6 +346,16 @@ def get_previous_period_bounds(
         )
         return previous_start, previous_end
 
+    if period == PERIOD_CUSTOM and custom_start is not None and custom_end is not None:
+        start = pd.Timestamp(custom_start).normalize()
+        end = pd.Timestamp(custom_end).normalize()
+        if end < start:
+            start, end = end, start
+        duration = int((end - start).days) + 1
+        previous_end = start - pd.Timedelta(days=1)
+        previous_start = previous_end - pd.Timedelta(days=duration - 1)
+        return previous_start, previous_end
+
     return None
 
 
@@ -254,7 +373,6 @@ def calculate_financial_metrics(df: pd.DataFrame) -> dict[str, float]:
             "uscite": 0.0,
             "bilancio": 0.0,
             "investimenti": 0.0,
-            "liquidita": 0.0,
         }
 
     working = _for_metrics(df)
@@ -264,7 +382,6 @@ def calculate_financial_metrics(df: pd.DataFrame) -> dict[str, float]:
             "uscite": 0.0,
             "bilancio": 0.0,
             "investimenti": 0.0,
-            "liquidita": 0.0,
         }
 
     entrate = float(working.loc[working["importo"] > 0, "importo"].sum())
@@ -287,13 +404,11 @@ def calculate_financial_metrics(df: pd.DataFrame) -> dict[str, float]:
         )
     )
     bilancio = entrate - uscite
-    liquidita = bilancio - investimenti
     return {
         "entrate": entrate,
         "uscite": uscite,
         "bilancio": bilancio,
         "investimenti": investimenti,
-        "liquidita": liquidita,
     }
 
 
@@ -326,9 +441,17 @@ def resolve_analysis_bounds(
     df: pd.DataFrame,
     period: str,
     selected_month: str | None = None,
+    *,
+    custom_start: pd.Timestamp | None = None,
+    custom_end: pd.Timestamp | None = None,
 ) -> tuple[pd.Timestamp, pd.Timestamp]:
     """Limiti calendario usati per ripartire le spese speciali."""
-    bounds = get_current_period_bounds(period, selected_month)
+    bounds = get_current_period_bounds(
+        period,
+        selected_month,
+        custom_start=custom_start,
+        custom_end=custom_end,
+    )
     if bounds is not None:
         return bounds
 
@@ -633,6 +756,9 @@ def get_period_day_count(
     df: pd.DataFrame,
     period: str,
     selected_month: str | None = None,
+    *,
+    custom_start: pd.Timestamp | None = None,
+    custom_end: pd.Timestamp | None = None,
 ) -> int:
     today = pd.Timestamp.today().normalize()
 
@@ -660,6 +786,13 @@ def get_period_day_count(
     if period == "Quest'anno":
         start_date = pd.Timestamp(year=today.year, month=1, day=1)
         return max((today - start_date).days + 1, 1)
+
+    if period == PERIOD_CUSTOM and custom_start is not None and custom_end is not None:
+        start = pd.Timestamp(custom_start).normalize()
+        end = pd.Timestamp(custom_end).normalize()
+        if end < start:
+            start, end = end, start
+        return max(int((end - start).days) + 1, 1)
 
     valid_dates = pd.to_datetime(
         df["data"],
@@ -689,7 +822,7 @@ def get_period_day_count(
 
 
 def expense_frame(df: pd.DataFrame) -> pd.DataFrame:
-    """Uscite operative (esclude investimenti, trasferimenti e flag)."""
+    """Uscite operative (esclude investimenti, trasferimenti e saldo iniziale)."""
     if df.empty:
         return df.iloc[0:0].copy()
     working = _for_metrics(df)
@@ -699,16 +832,37 @@ def expense_frame(df: pd.DataFrame) -> pd.DataFrame:
     ].copy()
 
 
-def savings_rate(metrics: dict[str, float]) -> float | None:
-    """Tasso di risparmio in %: (bilancio / entrate) * 100."""
-    entrate = float(metrics.get("entrate") or 0)
+def refund_income(df: pd.DataFrame) -> float:
+    """Entrate operative in categoria Rimborsi (regali e donazioni restano fuori)."""
+    if df.empty:
+        return 0.0
+    working = _for_metrics(df)
+    if working.empty:
+        return 0.0
+    mask = (working["importo"] > 0) & (working["categoria"] == RIMBORSO_CATEGORY)
+    return float(working.loc[mask, "importo"].sum())
+
+
+def savings_rate(
+    metrics: dict[str, float],
+    *,
+    exclude_refunds: bool = False,
+    refunds: float = 0.0,
+) -> float | None:
+    """Tasso di risparmio in %: (bilancio / entrate) * 100.
+
+    Con exclude_refunds i rimborsi non contano come reddito; regali e donazioni sì.
+    """
+    refunds_cut = max(float(refunds or 0), 0.0) if exclude_refunds else 0.0
+    entrate = float(metrics.get("entrate") or 0) - refunds_cut
     if entrate <= 0:
         return None
-    return float(metrics["bilancio"]) / entrate * 100
+    bilancio = float(metrics.get("bilancio") or 0) - refunds_cut
+    return bilancio / entrate * 100
 
 
 def income_frame(df: pd.DataFrame) -> pd.DataFrame:
-    """Entrate operative (esclude trasferimenti e flag)."""
+    """Entrate operative (esclude trasferimenti e saldo iniziale)."""
     if df.empty:
         return df.iloc[0:0].copy()
     working = _for_metrics(df)

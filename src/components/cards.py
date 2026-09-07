@@ -201,35 +201,23 @@ def render_kpi_card(
     )
 
 
-def render_info_card(
+def _info_card_body_html(
     title: str,
     value: str,
     secondary_value: str | None = None,
     subtitle: str | None = None,
     subtitle_color: str = MUTED_COLOR,
     footer: str | None = None,
-    value_color: str = TEXT_COLOR,
-) -> None:
+) -> str:
     secondary_value_html = ""
-
     if secondary_value:
         secondary_value_html = f"""
-            <div style="
-                margin-top:12px;
-                font-family:Fraunces,Georgia,serif;
-                font-size:clamp(22px,1.8vw,30px);
-                line-height:1.15;
-                font-weight:700;
-                color:{ACCENT_COLOR};
-                overflow-wrap:anywhere;
-                word-break:break-word;
-            ">
+            <div class="ft-info-card-amount">
                 {html.escape(str(secondary_value))}
             </div>
         """
 
     subtitle_html = ""
-
     if subtitle:
         subtitle_html = f"""
             <div style="
@@ -245,7 +233,6 @@ def render_info_card(
         """
 
     footer_html = ""
-
     if footer:
         footer_html = f"""
             <div style="
@@ -260,10 +247,43 @@ def render_info_card(
             </div>
         """
 
+    return f"""
+        <div class="ft-info-card-kicker">
+            {html.escape(str(title))}
+        </div>
+        <div class="ft-info-card-value">
+            {html.escape(str(value))}
+        </div>
+        {secondary_value_html}
+        {subtitle_html}
+        {footer_html}
+    """
+
+
+def render_info_card(
+    title: str,
+    value: str,
+    secondary_value: str | None = None,
+    subtitle: str | None = None,
+    subtitle_color: str = MUTED_COLOR,
+    footer: str | None = None,
+    value_color: str = TEXT_COLOR,
+    extra_class: str = "",
+) -> None:
+    body = _info_card_body_html(
+        title,
+        value,
+        secondary_value=secondary_value,
+        subtitle=subtitle,
+        subtitle_color=subtitle_color,
+        footer=footer,
+    )
+    classes = " ".join(
+        part for part in ("ft-info-card", extra_class) if part
+    )
     render_html(
         f"""
-        <div style="
-            min-height:168px;
+        <div class="{classes}" style="
             padding:20px 18px;
             border-radius:{CARD_RADIUS};
             background:
@@ -275,43 +295,9 @@ def render_info_card(
                 {CARD_BACKGROUND};
             border:{CARD_BORDER};
             box-shadow:{CARD_SHADOW};
-            display:flex;
-            flex-direction:column;
-            justify-content:center;
-            align-items:flex-start;
-            text-align:left;
-            box-sizing:border-box;
-            overflow:hidden;
-            animation: ft-fade-up 320ms ease-out;
+            color:{value_color};
         ">
-            <div style="
-                font-family:Manrope,sans-serif;
-                font-size:12px;
-                line-height:1.2;
-                color:{MUTED_COLOR};
-                font-weight:650;
-                letter-spacing:0.08em;
-                text-transform:uppercase;
-            ">
-                {html.escape(str(title))}
-            </div>
-
-            <div style="
-                margin-top:12px;
-                font-family:Fraunces,Georgia,serif;
-                font-size:clamp(22px,1.8vw,30px);
-                line-height:1.15;
-                font-weight:700;
-                color:{value_color};
-                overflow-wrap:anywhere;
-                word-break:break-word;
-            ">
-                {html.escape(str(value))}
-            </div>
-
-            {secondary_value_html}
-            {subtitle_html}
-            {footer_html}
+            {body}
         </div>
         """
     )

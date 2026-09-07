@@ -6,6 +6,8 @@ from src.components.cards import (
 )
 from src.components.date_input import themed_date_input
 from src.services.analytics import (
+    is_initial_balance_category,
+    is_non_operating_category,
     is_transfer_category,
 )
 from src.services.categories import get_category_icon, get_category_names
@@ -81,24 +83,22 @@ def show_manual_entry() -> None:
 
         is_special = False
         speciale_mesi = 0
-        exclude_from_metrics = False
 
         if is_transfer_category(category):
             st.caption(
-                "I trasferimenti interni restano in lista ma non entrano "
-                "in entrate, uscite o medie."
+                "I trasferimenti non entrano in entrate o uscite, "
+                "ma contano nel saldo del conto."
             )
-        else:
-            exclude_from_metrics = st.checkbox(
-                "Escludere dalle metriche",
-                key="manual_escludi_metriche",
-                help=(
-                    "Il movimento resta in lista ma non conta "
-                    "in entrate, uscite, medie e grafici."
-                ),
+        elif is_initial_balance_category(category):
+            st.caption(
+                "Il saldo iniziale non è un’entrata: serve a far "
+                "quadrare il saldo reale del conto."
             )
 
-        if movement_type == "Uscita" and not is_transfer_category(category):
+        if (
+            movement_type == "Uscita"
+            and not is_non_operating_category(category)
+        ):
             is_special = st.checkbox(
                 "Spesa speciale",
                 key="manual_speciale",
@@ -153,7 +153,6 @@ def show_manual_entry() -> None:
             notes=notes.strip(),
             speciale=is_special,
             speciale_mesi=speciale_mesi,
-            escludi_metriche=exclude_from_metrics,
         )
 
         st.toast("Movimento salvato")

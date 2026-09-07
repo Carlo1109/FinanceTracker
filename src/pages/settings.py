@@ -21,7 +21,9 @@ from src.services.categories import (
     delete_category,
     load_category_definitions,
     remove_keyword_from_category,
+    rename_category,
     update_category_icon,
+    RENAME_LOCKED_CATEGORIES,
 )
 from src.services.settings_service import (
     VALID_ACCENTS,
@@ -112,7 +114,7 @@ def _render_appearance_hero(theme_id: str, accent_id: str) -> None:
           </div>
           <div class="ft-appearance-kpis">
             <div class="ft-appearance-kpi">
-              <div class="ft-appearance-kpi-label">Saldo</div>
+              <div class="ft-appearance-kpi-label">Liquidità</div>
               <div class="ft-appearance-kpi-value">€ 2.480</div>
               <div class="ft-appearance-kpi-bar"><span></span></div>
             </div>
@@ -347,6 +349,7 @@ def _close_category_dialog() -> None:
     if name:
         st.session_state.pop(f"category_icon_{name}", None)
         st.session_state.pop(f"settings_add_kw_{name}", None)
+        st.session_state.pop(f"settings_rename_{name}", None)
 
 
 def _close_new_category_dialog() -> None:
@@ -487,6 +490,29 @@ def _category_edit_dialog(category: str, df, categories: dict) -> None:
         st.session_state[_ICON_GRID_KEY] = True
         st.session_state[f"category_icon_{category}"] = icon
         st.rerun()
+
+    rename_key = f"settings_rename_{category}"
+    if rename_key not in st.session_state:
+        st.session_state[rename_key] = category
+    if category in RENAME_LOCKED_CATEGORIES:
+        st.caption("Questa categoria non si può rinominare.")
+    else:
+        new_name = st.text_input("Nome categoria", key=rename_key)
+        if st.button("Rinomina", width="stretch", type="secondary"):
+            renamed, updated = rename_category(category, new_name)
+            if renamed:
+                _close_category_dialog()
+                st.session_state["category_feedback"] = (
+                    "success",
+                    f'Categoria rinominata in "{new_name.strip()}". '
+                    f"{updated} movimenti aggiornati.",
+                )
+            else:
+                st.session_state["category_feedback"] = (
+                    "warning",
+                    "Nome vuoto, già usato, oppure non modificabile.",
+                )
+            st.rerun()
 
     new_keyword = st.text_input(
         "Nuova parola chiave",
@@ -727,7 +753,8 @@ def show_settings() -> None:
 
     with tab_accounts:
         st.caption(
-            "Rimuovere un conto cancella i suoi movimenti dal database."
+            "La liquidità include trasferimenti e saldo iniziale. "
+            "Rimuovere un conto cancella i suoi movimenti."
         )
 
         if df.empty:

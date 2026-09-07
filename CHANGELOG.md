@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.5.0
+
+### Funzionalità
+
+- Categoria **Saldo iniziale** (fuori da entrate/uscite, conta nel saldo conto)
+- Filtri Dashboard e Movimenti: più conti insieme, **Entrate / Uscite / Investimenti** e **Intervallo personalizzato**
+- **Unisci movimenti** (stesso conto; resta la riga più vecchia)
+- Impostazioni: **Rinomina categoria** (non Altro, trasferimenti, saldo iniziale, investimenti); il nome vecchio non torna al riavvio
+- Liquidità: trasferimenti e saldo iniziale inclusi, così si mostra la cassa reale
+
+### Interfaccia
+
+- Rimosso il flag **Escludere dalle metriche**
+- KPI **Liquidità**: cassa cumulativa dei conti filtrati (trasferimenti e saldo iniziale inclusi)
+- Modifica movimento: si può cambiare anche la data
+- Movimenti: popup **Annulla** dopo elimina, unisci o dividi (non blocca, sparisce dopo 15 s)
+- Dashboard vuota: **Parti da un backup**
+- KPI **Tasso di risparmio**: flag per escludere i rimborsi (regali e donazioni restano)
+
 ## v1.4.1
 
 ### Funzionalità

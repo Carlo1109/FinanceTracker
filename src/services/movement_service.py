@@ -532,6 +532,68 @@ def get_movement(movement_id: int) -> dict[str, Any] | None:
     return dict(row)
 
 
+def snapshot_movements(movement_ids: list[int]) -> list[dict[str, Any]]:
+    """Copia completa delle righe, per annullare delete / unisci / dividi."""
+    unique_ids = [int(item) for item in dict.fromkeys(movement_ids)]
+    if not unique_ids:
+        return []
+    placeholders = ", ".join("?" for _ in unique_ids)
+    with get_connection() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM movements WHERE id IN ({placeholders})",
+            unique_ids,
+        ).fetchall()
+    by_id = {int(row["id"]): dict(row) for row in rows}
+    return [by_id[item] for item in unique_ids if item in by_id]
+
+
+def restore_movement_snapshots(rows: list[dict[str, Any]]) -> None:
+    """Reinserisce le righe (stesso id e hash)."""
+    if not rows:
+        return
+    with get_connection() as conn:
+        columns = [column["name"] for column in conn.execute(
+            "PRAGMA table_info(movements)"
+        ).fetchall()]
+        for row in rows:
+            usable = [name for name in columns if name in row]
+            if not usable:
+                continue
+            col_sql = ", ".join(usable)
+            placeholders = ", ".join("?" for _ in usable)
+            conn.execute(
+                f"""
+                INSERT OR REPLACE INTO movements ({col_sql})
+                VALUES ({placeholders})
+                """,
+                [row.get(name) for name in usable],
+            )
+        conn.commit()
+
+
+def delete_movements(movement_ids: list[int]) -> None:
+    unique_ids = [int(item) for item in dict.fromkeys(movement_ids)]
+    if not unique_ids:
+        return
+    with get_connection() as conn:
+        conn.executemany(
+            "DELETE FROM movements WHERE id = ?",
+            [(item,) for item in unique_ids],
+        )
+        conn.commit()
+
+
+def undo_movement_action(
+    *,
+    restore: list[dict[str, Any]],
+    delete_ids: list[int] | None = None,
+) -> None:
+    """Ripristina lo stato precedente di delete / unisci / dividi."""
+    if delete_ids:
+        delete_movements(delete_ids)
+    restore_movement_snapshots(restore)
+
+
 def update_movement(
     movement_id: int,
     *,
@@ -618,13 +680,13 @@ def update_movement(
 def split_movement(
     movement_id: int,
     parts: list[tuple[float, str]],
-) -> int:
+) -> list[int]:
     """
     Divide un movimento in più quote.
 
     La prima quota aggiorna la riga originale (hash invariato, così
     un re-import non duplica). Le altre diventano nuovi movimenti.
-    Restituisce quante nuove righe sono state create.
+    Restituisce gli id delle nuove righe.
     """
     if len(parts) < 2:
         raise ValueError("Servono almeno due parti.")
@@ -676,11 +738,11 @@ def split_movement(
         escludi_metriche=bool(original.get("escludi_metriche")),
     )
 
-    created = 0
+    created_ids: list[int] = []
     with get_connection() as conn:
         for amount, category in cleaned[1:]:
             signed_amount = _money(sign * amount)
-            conn.execute(
+            cursor = conn.execute(
                 """
                 INSERT INTO movements (
                     movement_hash,
@@ -726,10 +788,88 @@ def split_movement(
                     1 if original.get("escludi_metriche") else 0,
                 ),
             )
-            created += 1
+            created_ids.append(int(cursor.lastrowid))
         conn.commit()
 
-    return created
+    return created_ids
+
+
+def merge_movements(
+    movement_ids: list[int],
+    *,
+    description: str,
+    category: str,
+    notes: str = "",
+) -> int:
+    """
+    Unisce più movimenti in uno.
+
+    Resta la riga più vecchia (hash invariato). Le altre vengono
+    eliminate. Devono appartenere allo stesso conto.
+    """
+    unique_ids = list(dict.fromkeys(int(item) for item in movement_ids))
+    if len(unique_ids) < 2:
+        raise ValueError("Seleziona almeno due movimenti.")
+
+    rows = [get_movement(item) for item in unique_ids]
+    if any(row is None for row in rows):
+        raise ValueError("Uno dei movimenti non è stato trovato.")
+    loaded = [row for row in rows if row is not None]
+
+    accounts = {
+        _clean_text_value(row.get("account")) or "Altro"
+        for row in loaded
+    }
+    if len(accounts) != 1:
+        raise ValueError("Puoi unire solo movimenti dello stesso conto.")
+
+    total = _money(sum(float(row["amount"]) for row in loaded))
+    if abs(total) < 0.01:
+        raise ValueError("La somma dei movimenti è zero.")
+
+    def _sort_key(row: dict[str, Any]) -> tuple:
+        parsed = _parse_date_value(row.get("date"))
+        stamp = (
+            parsed.normalize()
+            if not pd.isna(parsed)
+            else pd.Timestamp.max
+        )
+        return stamp, int(row["id"])
+
+    loaded.sort(key=_sort_key)
+    survivor = loaded[0]
+    drop_ids = [int(row["id"]) for row in loaded[1:]]
+    parsed_date = _parse_date_value(survivor.get("date"))
+    if pd.isna(parsed_date):
+        raise ValueError("Data originale non valida.")
+
+    movement_type = "Entrata" if total >= 0 else "Uscita"
+    update_movement(
+        int(survivor["id"]),
+        movement_date=parsed_date.date(),
+        description=description.strip() or _clean_text_value(
+            survivor.get("description")
+        ),
+        full_description=_clean_text_value(survivor.get("full_description"))
+        or description.strip(),
+        amount=abs(total),
+        category=category.strip() or "Altro",
+        movement_type=movement_type,
+        account=_clean_text_value(survivor.get("account")) or "Altro",
+        notes=notes.strip(),
+        speciale=False,
+        speciale_mesi=0,
+        escludi_metriche=False,
+    )
+
+    with get_connection() as conn:
+        conn.executemany(
+            "DELETE FROM movements WHERE id = ?",
+            [(item,) for item in drop_ids],
+        )
+        conn.commit()
+
+    return len(drop_ids)
 
 
 def delete_movement(movement_id: int) -> None:

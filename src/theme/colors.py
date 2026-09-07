@@ -63,12 +63,13 @@ CATEGORY_COLORS: dict[str, str] = {
     "Salute & Benessere": "#fb7185",
     "Investimenti": "#f59e0b",
     "Trasferimenti interni": "#94a3b8",
+    "Saldo iniziale": "#fb923c",
     "Stipendio": "#4ade80",
     "Rimborsi": "#c084fc",
     "Viaggi & Vacanze": "#22d3ee",
     "Svago & Tempo libero": "#a78bfa",
     "Abbonamenti": "#93c5fd",
-    "Regali & Donazioni": "#fdba74",
+    "Regali, Donazioni & Prestiti": "#fdba74",
     "Altro": "#94a3b8",
 }
 

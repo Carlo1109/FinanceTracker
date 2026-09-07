@@ -129,6 +129,14 @@
       "TRA CONTI"
     ]
   },
+  "Saldo iniziale": {
+    "icon": "🏦",
+    "keywords": [
+      "SALDO INIZIALE",
+      "APERTURA CONTO",
+      "OPENING BALANCE"
+    ]
+  },
   "Stipendio": {
     "icon": "💼",
     "keywords": [
@@ -183,7 +191,7 @@
       "YOUTUBE PREMIUM"
     ]
   },
-  "Regali & Donazioni": {
+  "Regali, Donazioni & Prestiti": {
     "icon": "🎁",
     "keywords": [
       "REGALO",

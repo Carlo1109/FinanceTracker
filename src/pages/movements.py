@@ -1,4 +1,5 @@
 import html
+import time
 from datetime import date
 
 import pandas as pd
@@ -13,6 +14,7 @@ from src.components.cards import (
     render_section_title,
     styled_panel,
 )
+from src.components.date_input import themed_date_input
 from src.components.export_dialog import (
     open_export_confirm_dialog,
     render_pending_export_dialog,
@@ -20,8 +22,19 @@ from src.components.export_dialog import (
 from src.components.navigation import switch_to
 from src.services.analytics import (
     INVESTMENT_CATEGORY,
+    MOVEMENT_TYPE_FILTERS,
+    PERIOD_CUSTOM,
+    PERIOD_CUSTOM_ALIASES,
+    accounts_chip_label,
+    calculate_account_balance,
     calculate_financial_metrics,
+    filter_by_accounts,
+    filter_by_movement_types,
+    is_initial_balance_category,
+    is_non_operating_category,
     is_transfer_category,
+    normalize_date_column,
+    types_chip_label,
 )
 from src.services.categories import (
     add_keyword_to_category,
@@ -34,8 +47,11 @@ from src.theme.colors import get_category_color
 from src.services.movement_service import (
     delete_movement,
     load_movements,
+    merge_movements,
     recalculate_automatic_categories,
+    snapshot_movements,
     split_movement,
+    undo_movement_action,
     update_movement,
 )
 from src.utils.export_excel import (
@@ -51,6 +67,9 @@ _OPEN_MOVEMENT_KEY = "open_movement_id"
 _LIST_LIMIT_KEY = "movements_list_limit"
 _LIST_FILTER_KEY = "movements_list_filter"
 _LIST_PAGE_SIZE = 40
+_MERGE_IDS_KEY = "movements_merge_ids"
+_UNDO_KEY = "movements_undo"
+_UNDO_TTL_SECONDS = 15
 
 
 def _queue_toast(message: str) -> None:
@@ -62,6 +81,84 @@ def _show_queued_toast() -> None:
     message = st.session_state.pop(_MOVEMENTS_TOAST_KEY, None)
     if message:
         st.toast(message, duration=4)
+
+
+def _queue_undo(
+    *,
+    restore: list[dict],
+    delete_ids: list[int] | None = None,
+    label: str,
+) -> None:
+    st.session_state[_UNDO_KEY] = {
+        "at": time.time(),
+        "restore": restore,
+        "delete_ids": list(delete_ids or []),
+        "label": label,
+    }
+
+
+def _close_undo_popup() -> None:
+    st.session_state.pop(_UNDO_KEY, None)
+
+
+def _rerun_app() -> None:
+    st.rerun(scope="app")
+
+
+def _render_pending_undo_dialog() -> None:
+    if not st.session_state.get(_UNDO_KEY):
+        return
+    _undo_popup_tick()
+
+
+@st.fragment(run_every=1)
+def _undo_popup_tick() -> None:
+    payload = st.session_state.get(_UNDO_KEY)
+    if not payload:
+        return
+    elapsed = time.time() - float(payload.get("at") or 0)
+    if elapsed >= _UNDO_TTL_SECONDS:
+        _close_undo_popup()
+        _rerun_app()
+        return
+
+    remaining = max(int(_UNDO_TTL_SECONDS - elapsed), 0)
+    label = str(payload.get("label") or "Ultima azione")
+    with st.container():
+        render_html(
+            f"""
+            <span class="ft-undo-anchor" aria-hidden="true"></span>
+            <div class="ft-undo-card">
+              <div class="ft-appearance-chip" style="width:fit-content;">
+                <span class="ft-appearance-chip-dot"></span>
+                {html.escape(label)}
+              </div>
+              <div class="ft-undo-title">Vuoi tornare indietro?</div>
+              <div class="ft-undo-copy">
+                Sparisce tra {remaining} s se non fai nulla.
+              </div>
+            </div>
+            """
+        )
+        undo_col, keep_col = st.columns(2)
+        with undo_col:
+            if st.button(
+                "Annulla azione",
+                type="primary",
+                width="stretch",
+                key="undo_last_movement",
+            ):
+                undo_movement_action(
+                    restore=list(payload.get("restore") or []),
+                    delete_ids=list(payload.get("delete_ids") or []),
+                )
+                _close_undo_popup()
+                _queue_toast("Azione annullata")
+                _rerun_app()
+        with keep_col:
+            if st.button("Chiudi", width="stretch", key="undo_keep"):
+                _close_undo_popup()
+                _rerun_app()
 
 
 def _clear_movement_widget_state(movement_id: int) -> None:
@@ -97,6 +194,111 @@ def _render_pending_movement_dialog(categories: list[str]) -> None:
     if movement_id is None:
         return
     _movement_edit_dialog(int(movement_id), categories)
+
+
+def _close_merge_dialog() -> None:
+    st.session_state.pop(_MERGE_IDS_KEY, None)
+
+
+def _render_pending_merge_dialog(categories: list[str]) -> None:
+    ids = st.session_state.get(_MERGE_IDS_KEY)
+    if not ids:
+        return
+    _merge_movements_dialog([int(item) for item in ids], categories)
+
+
+@st.dialog("Unisci movimenti", width="large", on_dismiss=_close_merge_dialog)
+def _merge_movements_dialog(movement_ids: list[int], categories: list[str]) -> None:
+    df = load_movements()
+    selected = df[df["id"].isin(movement_ids)].copy()
+    if len(selected) < 2:
+        st.warning("Seleziona almeno due movimenti.")
+        return
+
+    accounts = selected["account"].dropna().astype(str).unique().tolist()
+    total = float(selected["importo"].sum())
+    first = selected.sort_values(
+        by=["data", "id"],
+        ascending=[True, True],
+        na_position="last",
+    ).iloc[0]
+    default_category = (
+        str(first["categoria"])
+        if first["categoria"] in categories
+        else "Altro"
+    )
+    default_desc = clean_description(first["descrizione_completa"]) or (
+        clean_description(first["descrizione"]) or "Movimenti uniti"
+    )
+
+    render_html(
+        f"""
+        <div class="ft-export-dialog" style="padding:2px 0 8px 0;">
+          <div class="ft-appearance-chip" style="width:fit-content;">
+            <span class="ft-appearance-chip-dot"></span>
+            {len(selected)} movimenti
+          </div>
+          <div style="
+              margin-top:12px;
+              font-family:Fraunces,Georgia,serif;
+              font-size:clamp(22px, 2.2vw, 28px);
+              font-weight:700;
+              color:var(--ft-text);
+          ">{html.escape(euro(abs(total)) if total < 0 else '+' + euro(total))}</div>
+          <div style="margin-top:8px;font-size:13px;color:var(--ft-muted);">
+            Resta la riga più vecchia. Le altre vengono eliminate.
+          </div>
+        </div>
+        """
+    )
+    if len(accounts) != 1:
+        st.error("Puoi unire solo movimenti dello stesso conto.")
+        if st.button("Chiudi", width="stretch"):
+            _close_merge_dialog()
+            st.rerun()
+        return
+
+    description = st.text_input(
+        "Descrizione",
+        value=default_desc,
+        key="merge_description",
+    )
+    category = st.selectbox(
+        "Categoria",
+        categories,
+        index=categories.index(default_category),
+        format_func=lambda name: f"{get_category_icon(name)} {name}",
+        key="merge_category",
+    )
+    notes = st.text_area(
+        "Note",
+        value="",
+        key="merge_notes",
+        height=68,
+        placeholder="Opzionale",
+    )
+    confirm_col, cancel_col = st.columns(2)
+    with confirm_col:
+        if st.button("Unisci", type="primary", width="stretch"):
+            snapshots = snapshot_movements(movement_ids)
+            try:
+                removed = merge_movements(
+                    movement_ids,
+                    description=description,
+                    category=category,
+                    notes=notes,
+                )
+            except ValueError as error:
+                st.error(str(error))
+            else:
+                _close_merge_dialog()
+                _queue_undo(restore=snapshots, label="Movimenti uniti")
+                _queue_toast(f"Uniti {removed + 1} movimenti")
+                st.rerun()
+    with cancel_col:
+        if st.button("Annulla", width="stretch"):
+            _close_merge_dialog()
+            st.rerun()
 
 
 def _queue_keyword_suggestion(
@@ -330,9 +532,6 @@ def _movement_edit_dialog(movement_id: int, categories: list[str]) -> None:
         amount=amount,
         is_special=bool(row.get("speciale", False)),
         special_months=int(row.get("speciale_mesi") or 0),
-        exclude_from_metrics=bool(row.get("escludi_metriche", False)),
-        is_investment=category == INVESTMENT_CATEGORY,
-        is_transfer=is_transfer_category(category),
     )
 
 
@@ -354,14 +553,10 @@ def _render_movement_details(
     amount: float,
     is_special: bool,
     special_months: int,
-    exclude_from_metrics: bool,
-    is_investment: bool,
-    is_transfer: bool,
 ) -> None:
     original_category = str(row["categoria"])
     desc_key = f"edit_desc_{movement_id}"
     notes_key = f"edit_notes_{movement_id}"
-    exclude_key = f"escludi_metriche_{movement_id}"
     speciale_key = f"speciale_{movement_id}"
     mesi_key = f"speciale_mesi_{movement_id}"
     split_open_key = f"split_open_{movement_id}"
@@ -370,12 +565,19 @@ def _render_movement_details(
         st.session_state[desc_key] = title
     if notes_key not in st.session_state:
         st.session_state[notes_key] = str(row.get("notes") or "")
-    if exclude_key not in st.session_state:
-        st.session_state[exclude_key] = exclude_from_metrics
     if speciale_key not in st.session_state:
         st.session_state[speciale_key] = is_special
     if mesi_key not in st.session_state:
         st.session_state[mesi_key] = special_months
+
+    current_date = _movement_date(row)
+    movement_date = themed_date_input(
+        "Data",
+        value=current_date,
+        key=f"edit_date_{movement_id}",
+        min_year=min(current_date.year - 10, date.today().year - 10),
+        max_year=date.today().year + 1,
+    )
 
     new_description = st.text_input(
         "Descrizione",
@@ -396,19 +598,14 @@ def _render_movement_details(
     )
 
     if is_transfer_category(new_category):
-        marked_exclude = True
         st.caption(
-            "I trasferimenti interni restano in lista ma "
-            "non entrano in entrate, uscite o medie."
+            "I trasferimenti non entrano in entrate o uscite, "
+            "ma contano nel saldo del conto."
         )
-    else:
-        marked_exclude = st.checkbox(
-            "Escludere dalle metriche",
-            key=exclude_key,
-            help=(
-                "Il movimento resta in lista ma non conta "
-                "in entrate, uscite, medie e grafici."
-            ),
+    elif is_initial_balance_category(new_category):
+        st.caption(
+            "Il saldo iniziale non è un’entrata: serve a far "
+            "quadrare il saldo reale del conto."
         )
 
     movement_type = "Entrata" if amount > 0 else "Uscita"
@@ -416,7 +613,7 @@ def _render_movement_details(
     spread_months = 0
     is_expense_type = (
         movement_type == "Uscita"
-        and not is_transfer_category(new_category)
+        and not is_non_operating_category(new_category)
         and new_category != INVESTMENT_CATEGORY
     )
     if is_expense_type:
@@ -451,10 +648,7 @@ def _render_movement_details(
                     f"Nella media: {euro(abs(amount) / spread_months)}/mese "
                     f"per {spread_months} mesi."
                 )
-    elif not is_transfer and not is_investment:
-        st.caption("Spesa speciale disponibile solo sulle uscite.")
 
-    movement_date = _movement_date(row)
     edited_amount = abs(float(amount))
     edited_account = str(row.get("account") or "Altro")
 
@@ -473,8 +667,10 @@ def _render_movement_details(
             yes_col, no_col = st.columns(2)
             with yes_col:
                 if st.button("Sì", key=f"delete_yes_{movement_id}", width="stretch"):
+                    snapshots = snapshot_movements([movement_id])
                     delete_movement(movement_id)
                     _close_movement_dialog()
+                    _queue_undo(restore=snapshots, label="Movimento eliminato")
                     _queue_toast("Movimento eliminato")
                     st.rerun()
             with no_col:
@@ -500,7 +696,6 @@ def _render_movement_details(
                 notes=str(new_notes or ""),
                 speciale=marked_special,
                 speciale_mesi=spread_months,
-                escludi_metriche=marked_exclude,
             )
             _queue_keyword_suggestion(
                 str(new_description).strip() or description,
@@ -612,13 +807,19 @@ def _render_split_form(
             key=f"split_confirm_{movement_id}",
         ):
             try:
-                created = split_movement(movement_id, parts)
+                snapshots = snapshot_movements([movement_id])
+                created_ids = split_movement(movement_id, parts)
             except ValueError as error:
                 st.error(str(error))
             else:
                 _close_movement_dialog()
+                _queue_undo(
+                    restore=snapshots,
+                    delete_ids=created_ids,
+                    label="Movimento diviso",
+                )
                 _queue_toast(
-                    f"Movimento diviso in {created + 1} parti"
+                    f"Movimento diviso in {len(created_ids) + 1} parti"
                 )
                 st.rerun()
     with cancel_col:
@@ -631,6 +832,7 @@ def show_movements() -> None:
     st.title("Movimenti")
     st.caption("Cerca, filtra e modifica i movimenti salvati.")
     _show_queued_toast()
+    _render_pending_undo_dialog()
     _render_keyword_suggestion()
     render_pending_export_dialog()
 
@@ -686,23 +888,97 @@ def show_movements() -> None:
 
     categories = get_categories()
     _render_pending_movement_dialog(categories)
+    _render_pending_merge_dialog(categories)
     months = sorted(df["mese"].dropna().unique(), reverse=True)
     month_options = ["Tutti"] + list(months)
     accounts = sorted(df["account"].dropna().unique().tolist())
 
+    dated_all = normalize_date_column(df)
+    min_data = (
+        dated_all["data"].min().date()
+        if not dated_all.empty
+        else date.today()
+    )
+    max_data = (
+        dated_all["data"].max().date()
+        if not dated_all.empty
+        else date.today()
+    )
+
     render_section_title("Filtri")
     with styled_panel():
-        filter_col_1, filter_col_2, filter_col_3, filter_col_4 = st.columns(
-            [1.2, 1.4, 1.4, 2.4]
+        period_options = ["Tutto", "Mese specifico", PERIOD_CUSTOM]
+        if "movements_period_mode" not in st.session_state:
+            st.session_state["movements_period_mode"] = "Tutto"
+        period_mode = st.session_state["movements_period_mode"]
+        if period_mode in PERIOD_CUSTOM_ALIASES:
+            period_mode = PERIOD_CUSTOM
+        elif period_mode == "Tutti":
+            period_mode = "Tutto"
+        elif period_mode == "Mese":
+            period_mode = "Mese specifico"
+        if period_mode not in period_options:
+            period_mode = "Tutto"
+        st.session_state["movements_period_mode"] = period_mode
+
+        selected_month = "Tutti"
+        custom_start = None
+        custom_end = None
+
+        period_mode = st.selectbox(
+            "Periodo",
+            period_options,
+            key="movements_period_mode",
         )
+        if period_mode == "Mese specifico":
+            month_choices = month_options[1:] or month_options
+            if month_choices:
+                selected_month = st.selectbox(
+                    "Mese",
+                    month_choices,
+                    key="movements_month",
+                )
+        elif period_mode == PERIOD_CUSTOM:
+            from_col, to_col = st.columns(2)
+            with from_col:
+                custom_start = themed_date_input(
+                    "Dal",
+                    value=min_data,
+                    key="movements_from",
+                    min_year=min_data.year,
+                    max_year=max_data.year + 1,
+                )
+            with to_col:
+                custom_end = themed_date_input(
+                    "Al",
+                    value=max_data,
+                    key="movements_to",
+                    min_year=min_data.year,
+                    max_year=max_data.year + 1,
+                )
 
-        with filter_col_1:
-            selected_month = st.selectbox("Mese", month_options)
+        selected_accounts = st.pills(
+            "Conti",
+            accounts,
+            selection_mode="multi",
+            default=[],
+            key="movements_accounts",
+            help="Nessuno selezionato = tutti i conti.",
+        )
+        selected_accounts = list(selected_accounts or [])
 
-        with filter_col_2:
-            selected_account = st.selectbox("Conto", ["Tutti"] + accounts)
+        selected_types = st.pills(
+            "Tipo",
+            list(MOVEMENT_TYPE_FILTERS),
+            selection_mode="multi",
+            default=[],
+            key="movements_types",
+            help="Nessuno selezionato = tutti i movimenti.",
+        )
+        selected_types = list(selected_types or [])
 
-        with filter_col_3:
+        cat_col, search_col = st.columns([1.4, 2.4])
+        with cat_col:
             selected_category = st.selectbox(
                 "Categoria",
                 ["Tutte"] + categories,
@@ -712,26 +988,31 @@ def show_movements() -> None:
                     else f"{get_category_icon(name)} {name}"
                 ),
             )
-
-        with filter_col_4:
+        with search_col:
             search = st.text_input(
                 "Cerca",
                 placeholder="Lidl, PayPal, Trenitalia...",
             )
 
     search_term = (search or "").strip()
-    # Con testo di ricerca: guarda tutti i mesi (la data resta sulla riga).
     if search_term:
         filtered_df = df.copy()
-    elif selected_month == "Tutti":
-        filtered_df = df.copy()
-    else:
+    elif period_mode == "Mese specifico" and selected_month != "Tutti":
         filtered_df = df[df["mese"] == selected_month].copy()
-
-    if selected_account != "Tutti":
-        filtered_df = filtered_df[
-            filtered_df["account"] == selected_account
+    elif period_mode == PERIOD_CUSTOM and custom_start and custom_end:
+        start = pd.Timestamp(custom_start).normalize()
+        end = pd.Timestamp(custom_end).normalize()
+        if end < start:
+            start, end = end, start
+        dated = normalize_date_column(df)
+        filtered_df = dated[
+            dated["data"].between(start, end, inclusive="both")
         ].copy()
+    else:
+        filtered_df = df.copy()
+
+    filtered_df = filter_by_accounts(filtered_df, selected_accounts)
+    filtered_df = filter_by_movement_types(filtered_df, selected_types)
 
     if selected_category != "Tutte":
         filtered_df = filtered_df[
@@ -766,10 +1047,20 @@ def show_movements() -> None:
     total_expense = metrics["uscite"]
     total_investments = metrics["investimenti"]
     balance = metrics["bilancio"]
-    liquidity = metrics["liquidita"]
+    account_scope = filter_by_accounts(df, selected_accounts)
+    saldo_through = None
+    if period_mode == PERIOD_CUSTOM and custom_end is not None:
+        saldo_through = pd.Timestamp(custom_end).normalize()
+    elif period_mode == "Mese specifico" and selected_month != "Tutti":
+        month_end = pd.Period(selected_month, freq="M").end_time.normalize()
+        saldo_through = month_end
+    account_saldo = calculate_account_balance(
+        account_scope,
+        through=saldo_through,
+    )
 
     balance_color = INCOME_COLOR if balance >= 0 else EXPENSE_COLOR
-    liquidity_color = INCOME_COLOR if liquidity >= 0 else EXPENSE_COLOR
+    saldo_color = INCOME_COLOR if account_saldo >= 0 else EXPENSE_COLOR
 
     render_section_title("Riepilogo")
     c1, c2, c3, c4, c5 = st.columns(5)
@@ -793,17 +1084,24 @@ def show_movements() -> None:
     with c5:
         render_kpi_card(
             "Liquidità",
-            signed_euro(liquidity),
-            value_color=liquidity_color,
+            signed_euro(account_saldo),
+            value_color=saldo_color,
         )
 
     total_found = len(filtered_df)
+    account_label = accounts_chip_label(selected_accounts, accounts)
     if search_term:
         found_suffix = " (ricerca su tutti i mesi)"
-    elif selected_month == "Tutti":
-        found_suffix = " (tutti i mesi)"
+    elif period_mode == PERIOD_CUSTOM:
+        found_suffix = " (intervallo)"
+    elif period_mode == "Mese specifico":
+        found_suffix = f" ({selected_month})"
     else:
-        found_suffix = ""
+        found_suffix = " (tutto)"
+    if selected_accounts:
+        found_suffix += f" · {account_label}"
+    if selected_types:
+        found_suffix += f" · {types_chip_label(selected_types)}"
 
     if filtered_df.empty:
         st.caption(f"0 movimenti trovati{found_suffix}")
@@ -826,10 +1124,14 @@ def show_movements() -> None:
     )
     list_limit = _resolve_list_limit(
         (
+            period_mode,
             selected_month,
-            selected_account,
+            tuple(selected_accounts),
+            tuple(selected_types),
             selected_category,
             search_term,
+            str(custom_start or ""),
+            str(custom_end or ""),
         )
     )
     visible_df = filtered_df.head(list_limit)
@@ -841,6 +1143,7 @@ def show_movements() -> None:
         )
     else:
         st.caption(f"{total_found} movimenti trovati{found_suffix}")
+    st.caption("Seleziona più movimenti dello stesso conto per unirli.")
 
     category_defs = load_category_definitions()
     for _, row in visible_df.iterrows():
@@ -854,13 +1157,12 @@ def show_movements() -> None:
         is_transfer = is_transfer_category(category)
         is_special = bool(row.get("speciale", False))
         special_months = int(row.get("speciale_mesi") or 0)
-        exclude_from_metrics = bool(row.get("escludi_metriche", False))
         movement_id = int(row["id"])
 
         if is_investment:
             tone = "investment"
             displayed_amount = euro(abs(amount))
-        elif is_transfer:
+        elif is_transfer or is_initial_balance_category(category):
             tone = "transfer"
             displayed_amount = (
                 f"+{euro(amount)}" if amount > 0 else euro(amount)
@@ -890,18 +1192,20 @@ def show_movements() -> None:
                 f'<span class="ft-movement-flag">'
                 f"{html.escape(flag_label)}</span>"
             )
-        if exclude_from_metrics or is_transfer:
-            flags += (
-                '<span class="ft-movement-flag is-muted">Escluso</span>'
-            )
         if str(row.get("notes") or "").strip():
             flags += '<span class="ft-movement-flag">Nota</span>'
 
         with styled_panel(kind="movement"):
-            body_col, amount_col, action_col = st.columns(
-                [4.2, 1.35, 1.05],
+            select_col, body_col, amount_col, action_col = st.columns(
+                [0.4, 4.0, 1.3, 1.05],
                 vertical_alignment="center",
             )
+            with select_col:
+                st.checkbox(
+                    "Seleziona",
+                    key=f"merge_pick_{movement_id}",
+                    label_visibility="collapsed",
+                )
 
             with body_col:
                 render_html(
@@ -945,6 +1249,20 @@ def show_movements() -> None:
                     _open_movement_dialog(movement_id)
                     st.rerun()
 
+    picked_ids = [
+        int(row_id)
+        for row_id in visible_df["id"].tolist()
+        if st.session_state.get(f"merge_pick_{int(row_id)}")
+    ]
+    if len(picked_ids) >= 2:
+        if st.button(
+            f"Unisci {len(picked_ids)} movimenti",
+            type="primary",
+            key="movements_merge_open",
+        ):
+            st.session_state[_MERGE_IDS_KEY] = picked_ids
+            st.rerun()
+
     if hidden_count:
         more = min(_LIST_PAGE_SIZE, hidden_count)
         _, more_col, _ = st.columns([1, 1.4, 1])
@@ -961,25 +1279,30 @@ def show_movements() -> None:
     st.markdown("")
     export_month = (
         None
-        if selected_month == "Tutti" or search_term
+        if period_mode != "Mese specifico" or search_term
         else str(selected_month)
+    )
+    export_account = (
+        selected_accounts[0]
+        if len(selected_accounts) == 1
+        else None
     )
     export_name = movements_export_filename(
         month=export_month,
-        account=(
-            selected_account
-            if selected_account != "Tutti"
-            else None
-        ),
+        account=export_account,
     )
     if search_term:
         context = f"Ricerca «{search_term}»"
-    elif selected_month == "Tutti":
-        context = "Tutti i mesi"
-    else:
+    elif period_mode == PERIOD_CUSTOM and custom_start and custom_end:
+        context = f"{custom_start.strftime('%d/%m/%y')} – {custom_end.strftime('%d/%m/%y')}"
+    elif period_mode == "Mese specifico":
         context = f"Mese {selected_month}"
-    if selected_account != "Tutti":
-        context += f" · conto {selected_account}"
+    else:
+        context = "Tutto"
+    if selected_accounts:
+        context += f" · {accounts_chip_label(selected_accounts, accounts)}"
+    if selected_types:
+        context += f" · {types_chip_label(selected_types)}"
     if st.button(
         "Esporta Excel",
         type="secondary",
@@ -1011,7 +1334,6 @@ def show_movements() -> None:
                     "account",
                     "speciale",
                     "speciale_mesi",
-                    "escludi_metriche",
                     "notes",
                 ]
             ],

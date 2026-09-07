@@ -357,6 +357,111 @@ def apply_theme(
             background: transparent !important;
         }}
 
+        /* Info card: stessa altezza anche con nomi lunghi (2 righe max). */
+        [data-testid="stHorizontalBlock"]:has(.ft-info-card) {{
+            align-items: stretch !important;
+        }}
+
+        [data-testid="stHorizontalBlock"]:has(.ft-info-card)
+        [data-testid="column"] {{
+            display: flex !important;
+            flex-direction: column !important;
+        }}
+
+        [data-testid="stHorizontalBlock"]:has(.ft-info-card)
+        [data-testid="column"] > div {{
+            height: 100%;
+        }}
+
+        .ft-info-card {{
+            min-height: 188px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: flex-start;
+            text-align: left;
+            box-sizing: border-box;
+            overflow: hidden;
+            animation: ft-fade-up 320ms ease-out;
+        }}
+
+        .ft-info-card-kicker {{
+            font-family: Manrope, sans-serif;
+            font-size: 12px;
+            line-height: 1.2;
+            color: var(--ft-muted);
+            font-weight: 650;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }}
+
+        .ft-info-card-value {{
+            margin-top: 12px;
+            min-height: calc(1.2em * 2);
+            max-height: calc(1.2em * 2);
+            font-family: Fraunces, Georgia, serif;
+            font-size: clamp(20px, 1.6vw, 28px);
+            line-height: 1.2;
+            font-weight: 700;
+            color: inherit;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+            overflow-wrap: anywhere;
+        }}
+
+        .ft-info-card-amount {{
+            margin-top: 10px;
+            font-family: Fraunces, Georgia, serif;
+            font-size: clamp(22px, 1.8vw, 30px);
+            line-height: 1.15;
+            font-weight: 700;
+            color: var(--ft-accent);
+        }}
+
+        /* Flag rimborsi: stesso riquadro HTML delle altre info card. */
+        .ft-info-card.ft-savings-rate-card {{
+            padding-bottom: 52px !important;
+        }}
+
+        [data-testid="stColumn"]:has(.ft-savings-rate-card),
+        [data-testid="column"]:has(.ft-savings-rate-card) {{
+            position: relative;
+        }}
+
+        [data-testid="stColumn"]:has(.ft-savings-rate-card)
+        [data-testid="stElementContainer"]:has([data-testid="stCheckbox"]),
+        [data-testid="column"]:has(.ft-savings-rate-card)
+        [data-testid="stElementContainer"]:has([data-testid="stCheckbox"]) {{
+            position: absolute;
+            left: 18px;
+            right: 14px;
+            bottom: 14px;
+            z-index: 2;
+            width: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }}
+
+        [data-testid="stColumn"]:has(.ft-savings-rate-card)
+        [data-testid="stCheckbox"],
+        [data-testid="column"]:has(.ft-savings-rate-card)
+        [data-testid="stCheckbox"] {{
+            min-height: 0 !important;
+            padding: 0 !important;
+        }}
+
+        [data-testid="stColumn"]:has(.ft-savings-rate-card)
+        [data-testid="stCheckbox"] label p,
+        [data-testid="column"]:has(.ft-savings-rate-card)
+        [data-testid="stCheckbox"] label p {{
+            font-size: 12px;
+            font-weight: 650;
+            color: var(--ft-muted);
+        }}
+
         /* ---- Content surfaces ---- */
 
         [data-testid="stVerticalBlockBorderWrapper"] {{
@@ -397,6 +502,56 @@ def apply_theme(
         .stButton > button[kind="secondary"]:hover {{
             border-color: rgba(var(--ft-accent-rgb), 0.45) !important;
             background: rgba(var(--ft-accent-rgb), 0.08) !important;
+        }}
+
+        [data-testid="stPills"] button,
+        [data-testid="stBaseButton-pills"],
+        [data-testid="stBaseButton-pillsActive"] {{
+            min-height: 32px !important;
+            padding: 0 12px !important;
+            border-radius: 999px !important;
+            border: 1px solid var(--ft-border) !important;
+            background: var(--ft-input-bg) !important;
+            color: var(--ft-text) !important;
+            font-size: 12px !important;
+            font-weight: 750 !important;
+            box-shadow: none !important;
+        }}
+
+        [data-testid="stBaseButton-pillsActive"],
+        [data-testid="stPills"] button[kind="pillsActive"],
+        [data-testid="stPills"] button[aria-pressed="true"] {{
+            border-color: rgba(var(--ft-accent-rgb), 0.50) !important;
+            background: rgba(var(--ft-accent-rgb), 0.16) !important;
+            color: var(--ft-accent-strong) !important;
+        }}
+
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-undo-anchor):not(:has([data-testid="stVerticalBlock"] .ft-undo-anchor)) {{
+            position: fixed !important;
+            right: 28px !important;
+            bottom: 28px !important;
+            z-index: 10050 !important;
+            width: min(380px, calc(100vw - 48px)) !important;
+            padding: 16px 16px 10px !important;
+            border-radius: 16px !important;
+            border: 1px solid var(--ft-border) !important;
+            background: var(--ft-panel) !important;
+            box-shadow: var(--ft-shadow) !important;
+        }}
+
+        .ft-undo-title {{
+            margin-top: 10px;
+            font-family: Fraunces, Georgia, serif;
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--ft-text);
+            line-height: 1.25;
+        }}
+
+        .ft-undo-copy {{
+            margin: 6px 0 10px 0;
+            font-size: 13px;
+            color: var(--ft-muted);
         }}
 
         /* Dialog: overlay semitrasparente, card a tema */
@@ -1372,6 +1527,12 @@ def apply_theme(
         }}
 
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor)
+        [data-testid="stCheckbox"] {{
+            min-height: 0 !important;
+            padding-top: 2px !important;
+        }}
+
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor)
         [data-testid="stElementContainer"],
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor)
         [data-testid="stMarkdownContainer"] {{
@@ -1473,10 +1634,6 @@ def apply_theme(
             color: var(--ft-muted);
             font-size: 10.5px;
             font-weight: 750;
-        }}
-
-        .ft-movement-flag.is-muted {{
-            background: rgba(148, 163, 184, 0.14);
         }}
 
         .ft-movement-amount {{
