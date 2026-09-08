@@ -412,6 +412,40 @@ def apply_theme(
             overflow-wrap: anywhere;
         }}
 
+        .ft-kpi-card {{
+            container-type: inline-size;
+            overflow: hidden;
+        }}
+
+        .ft-kpi-value,
+        .ft-hero-value,
+        .ft-info-card-amount {{
+            white-space: nowrap;
+            max-width: 100%;
+            overflow: hidden;
+        }}
+
+        .ft-kpi-value {{
+            font-size: clamp(16px, 11cqi, 34px);
+        }}
+
+        .ft-kpi-value.is-long {{
+            font-size: clamp(14px, 9.2cqi, 26px);
+        }}
+
+        .ft-kpi-value.is-huge {{
+            font-size: clamp(13px, 8.2cqi, 22px);
+        }}
+
+        .ft-hero-value {{
+            font-size: clamp(32px, 5vw, 64px);
+        }}
+
+        .ft-hero-value.is-long,
+        .ft-hero-value.is-huge {{
+            font-size: clamp(28px, 4.2vw, 52px);
+        }}
+
         .ft-info-card-amount {{
             margin-top: 10px;
             font-family: Fraunces, Georgia, serif;
@@ -419,6 +453,20 @@ def apply_theme(
             line-height: 1.15;
             font-weight: 700;
             color: var(--ft-accent);
+        }}
+
+        @supports not (font-size: 1cqi) {{
+            .ft-kpi-value {{
+                font-size: clamp(16px, 1.8vw, 34px);
+            }}
+
+            .ft-kpi-value.is-long {{
+                font-size: clamp(14px, 1.4vw, 26px);
+            }}
+
+            .ft-kpi-value.is-huge {{
+                font-size: clamp(13px, 1.15vw, 22px);
+            }}
         }}
 
         /* Flag rimborsi: stesso riquadro HTML delle altre info card. */

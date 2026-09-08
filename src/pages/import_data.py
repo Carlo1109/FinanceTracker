@@ -31,8 +31,15 @@ def _file_signature(uploaded_file) -> str:
 def _render_preview_panel(preview: dict) -> None:
     new_count = int(preview["new_count"])
     skip_count = int(preview["skip_count"])
+    update_count = int(preview.get("update_count") or 0)
     total_count = int(preview["total_count"])
     account = html.escape(str(preview.get("account") or ""))
+    headline = f"{new_count} nuovi · {skip_count} già presenti"
+    if update_count:
+        headline = (
+            f"{new_count} nuovi · {update_count} da aggiornare · "
+            f"{skip_count} già presenti"
+        )
 
     render_section_title("Anteprima import")
     with styled_panel():
@@ -54,7 +61,7 @@ def _render_preview_panel(preview: dict) -> None:
                     color:{TEXT_COLOR};
                     line-height:1.15;
                 ">
-                    {new_count} nuovi · {skip_count} già presenti
+                    {headline}
                 </div>
                 <div style="
                     margin-top:8px;
@@ -67,7 +74,11 @@ def _render_preview_panel(preview: dict) -> None:
             """
         )
 
-        m1, m2, m3 = st.columns(3)
+        if update_count:
+            m1, m2, m3, m4 = st.columns(4)
+        else:
+            m1, m2, m3 = st.columns(3)
+            m4 = None
         with m1:
             render_kpi_card("Nuovi", str(new_count), value_color=INCOME_COLOR)
         with m2:
@@ -78,6 +89,13 @@ def _render_preview_panel(preview: dict) -> None:
                 euro(float(preview["total_new_expense"])),
                 value_color=EXPENSE_COLOR,
             )
+        if m4 is not None:
+            with m4:
+                render_kpi_card(
+                    "Da aggiornare",
+                    str(update_count),
+                    value_color=ACCENT_COLOR,
+                )
 
         top_categories = list(preview.get("top_categories") or [])
         if top_categories:
@@ -94,6 +112,7 @@ def _render_preview_panel(preview: dict) -> None:
 def _render_import_wow(result: dict) -> None:
     inserted = int(result["inserted"])
     skipped = int(result["skipped"])
+    updated = int(result.get("updated") or 0)
     top_categories = list(result.get("top_categories") or [])
     top_line = ""
     if top_categories:
@@ -144,7 +163,9 @@ def _render_import_wow(result: dict) -> None:
                 font-size:14px;
                 color:{MUTED_COLOR};
             ">
-                {skipped} già presenti · uscite
+                {skipped} già presenti
+                {f" · {updated} aggiornati" if updated else ""}
+                · uscite
                 {euro(float(result.get("total_new_expense") or 0))}
                 · entrate {euro(float(result.get("total_new_income") or 0))}
             </div>
@@ -160,7 +181,12 @@ def _render_import_wow(result: dict) -> None:
         """
     )
 
-    if inserted == 0 and skipped > 0:
+    if inserted == 0 and updated > 0:
+        st.info(
+            f"{updated} movimenti Autorizzato aggiornati a Contabilizzato. "
+            "Categoria e note restano quelle già impostate."
+        )
+    elif inserted == 0 and skipped > 0:
         st.info(
             "Il file era già stato importato. "
             "Nessun nuovo movimento aggiunto."
@@ -177,7 +203,11 @@ def show_import_data() -> None:
     result = st.session_state.pop(IMPORT_RESULT_KEY, None)
     if result:
         inserted = int(result.get("inserted") or 0)
-        st.toast(f"Import completato: +{inserted} movimenti")
+        updated = int(result.get("updated") or 0)
+        toast = f"Import completato: +{inserted} movimenti"
+        if updated:
+            toast += f", {updated} aggiornati"
+        st.toast(toast)
         _render_import_wow(result)
         st.markdown("")
 
@@ -245,6 +275,9 @@ def show_import_data() -> None:
     if not uploaded_file:
         return
 
+    if result:
+        return
+
     signature = _file_signature(uploaded_file)
     cached = st.session_state.get(IMPORT_PREVIEW_KEY)
     needs_parse = (
@@ -279,7 +312,10 @@ def show_import_data() -> None:
     _render_preview_panel(preview)
 
     st.markdown("")
-    can_import = int(preview.get("new_count") or 0) > 0
+    can_import = (
+        int(preview.get("new_count") or 0) > 0
+        or int(preview.get("update_count") or 0) > 0
+    )
     if st.button(
         "Conferma import",
         width="stretch",
@@ -290,7 +326,7 @@ def show_import_data() -> None:
             try:
                 uploaded_file.seek(0)
                 imported_df = importer.parse(uploaded_file)
-                inserted, skipped = save_movements(
+                inserted, skipped, updated = save_movements(
                     imported_df,
                     source=info.label,
                     account=info.account,
@@ -302,6 +338,7 @@ def show_import_data() -> None:
         st.session_state[IMPORT_RESULT_KEY] = {
             "inserted": inserted,
             "skipped": skipped,
+            "updated": updated,
             "total_new_income": preview.get("total_new_income", 0),
             "total_new_expense": preview.get("total_new_expense", 0),
             "top_categories": preview.get("top_categories") or [],

@@ -36,6 +36,16 @@ def render_html(value: str) -> None:
     st.markdown(compact_html(value), unsafe_allow_html=True)
 
 
+def _amount_size_class(value: str) -> str:
+    """Classi per importi lunghi: restano su una riga dentro la card."""
+    length = len(str(value).replace("\u00a0", " "))
+    if length >= 15:
+        return "is-huge"
+    if length >= 13:
+        return "is-long"
+    return ""
+
+
 def render_hero_card(
     title: str,
     main_value: str,
@@ -92,15 +102,12 @@ def render_hero_card(
                 {html.escape(title)}
             </div>
 
-            <div style="
+            <div class="ft-hero-value {_amount_size_class(main_value)}" style="
                 margin-top:10px;
                 font-family:Fraunces,Georgia,serif;
-                font-size:clamp(46px,5vw,64px);
                 line-height:1.02;
                 font-weight:700;
                 color:{main_color};
-                white-space:normal;
-                overflow-wrap:anywhere;
             ">
                 {html.escape(main_value)}
             </div>
@@ -137,9 +144,10 @@ def render_kpi_card(
             </div>
         """
 
+    size_class = _amount_size_class(value)
     render_html(
         f"""
-        <div style="
+        <div class="ft-kpi-card" style="
             min-height:132px;
             padding:18px 18px;
             border-radius:{CARD_RADIUS};
@@ -171,16 +179,12 @@ def render_kpi_card(
                 {icon_html}{html.escape(title)}
             </div>
 
-            <div style="
+            <div class="ft-kpi-value {size_class}" style="
                 margin-top:10px;
                 font-family:Fraunces,Georgia,serif;
-                font-size:clamp(26px,2vw,34px);
                 line-height:1.1;
                 font-weight:700;
                 color:{value_color};
-                white-space:normal;
-                overflow-wrap:anywhere;
-                word-break:break-word;
             ">
                 {html.escape(value)}
             </div>

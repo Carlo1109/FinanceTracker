@@ -9,12 +9,8 @@ import streamlit as st
 
 from src.components.cards import render_html
 from src.utils.export_excel import movements_to_export_bytes
+from src.utils.file_save import save_and_reveal
 
-
-EXCEL_MIME = (
-    "application/vnd.openxmlformats-officedocument"
-    ".spreadsheetml.sheet"
-)
 
 EXPORT_DIALOG_KEY = "ft_export_dialog"
 
@@ -96,6 +92,7 @@ def _export_confirm_dialog(
           ">
             Il file include logo FinanceTracker e
             Personal Finance Manager.
+            Si salva nella cartella Download.
           </div>
         </div>
         """
@@ -103,18 +100,18 @@ def _export_confirm_dialog(
 
     confirm_col, cancel_col = st.columns(2)
     with confirm_col:
-        downloaded = st.download_button(
+        if st.button(
             "Conferma e scarica",
-            data=movements_to_export_bytes(df),
-            file_name=file_name,
-            mime=EXCEL_MIME,
             type="primary",
             width="stretch",
-            key=f"export_dialog_download_{dialog_key}",
-        )
-        if downloaded:
+            key=f"export_dialog_save_{dialog_key}",
+        ):
+            saved = save_and_reveal(
+                movements_to_export_bytes(df),
+                file_name,
+            )
             _close_export_dialog()
-            st.toast("Download avviato")
+            st.toast(f"Salvato in Download: {saved.name}")
             st.rerun()
 
     with cancel_col:

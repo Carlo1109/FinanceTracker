@@ -1,4 +1,5 @@
 import hashlib
+import re
 import sqlite3
 import uuid
 from datetime import date
@@ -133,11 +134,447 @@ def generate_movement_hash(
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def _existing_movement_hashes() -> set[str]:
-    with get_connection() as conn:
-        rows = conn.execute(
-            "SELECT movement_hash FROM movements"
-        ).fetchall()
+_SETTLE_DATE_WINDOW = 2
+_DATA_OPERAZIONE_IN_TEXT = re.compile(
+    r"Data operazione\s+(\d{2}/\d{2}/\d{2,4})",
+    re.IGNORECASE,
+)
+_MERCHANT_STOP = {
+    "PAGAMENTO",
+    "VISA",
+    "DEBIT",
+    "CARTA",
+    "DATA",
+    "OPERAZIONE",
+    "MILANO",
+    "MILAN",
+    "ITALIA",
+    "ITALY",
+    "IT",
+    "POS",
+    "GOOGLE",
+    "PAY",
+}
+
+
+def _is_fineco_source(source: str) -> bool:
+    return "fineco" in str(source).casefold()
+
+
+def _status_name(value: Any) -> str:
+    return _clean_text_value(value).casefold()
+
+
+def _is_authorized(status: str, operation_date: str) -> bool:
+    name = _status_name(status)
+    if name == "autorizzato":
+        return True
+    if name == "contabilizzato":
+        return False
+    return not operation_date
+
+
+def _is_settled(status: str, operation_date: str) -> bool:
+    name = _status_name(status)
+    if name == "contabilizzato":
+        return True
+    if name == "autorizzato":
+        return False
+    return bool(operation_date)
+
+
+def _merchant_tokens(description: str, full_description: str) -> tuple[str, ...]:
+    text = f"{description} {full_description}".upper()
+    text = re.sub(r"S\.R\.L\.?", " SRL ", text)
+    tokens: list[str] = []
+    for raw in re.findall(r"[A-Z0-9']{2,}", text):
+        token = raw.replace("'", "")
+        if token in _MERCHANT_STOP:
+            continue
+        if token.isdigit() and len(token) <= 4:
+            continue
+        tokens.append(token)
+    return tuple(tokens)
+
+
+def _tokens_match(left: tuple[str, ...], right: tuple[str, ...]) -> bool:
+    if not left or not right:
+        return False
+    shorter, longer = (
+        (set(left), set(right))
+        if len(left) <= len(right)
+        else (set(right), set(left))
+    )
+    if not shorter <= longer:
+        return False
+    return any(len(token) >= 4 for token in shorter) or len(shorter) >= 2
+
+
+def _collect_row_dates(
+    *,
+    data: str,
+    value_date: str,
+    text: str,
+) -> list[pd.Timestamp]:
+    # Data_Operazione Fineco è la contabilizzazione in banca: non entra
+    # nella finestra, altrimenti un Autorizzato recente si aggancierebbe
+    # a un Contabilizzato più vecchio dello stesso esercente.
+    dates: list[pd.Timestamp] = []
+    for value in (data, value_date):
+        parsed = _parse_date_value(value)
+        if pd.notna(parsed):
+            dates.append(pd.Timestamp(parsed).normalize())
+    for match in _DATA_OPERAZIONE_IN_TEXT.finditer(text):
+        parsed = pd.to_datetime(match.group(1), dayfirst=True, errors="coerce")
+        if pd.notna(parsed):
+            dates.append(pd.Timestamp(parsed).normalize())
+    return dates
+
+
+def _min_date_delta(
+    left: list[pd.Timestamp],
+    right: list[pd.Timestamp],
+) -> int | None:
+    if not left or not right:
+        return None
+    return min(abs((first - second).days) for first in left for second in right)
+
+
+def _as_import_record(row: Any, *, from_prepared: bool = False) -> dict[str, Any]:
+    if from_prepared:
+        description = str(row["descrizione"])
+        full_description = str(row["descrizione_completa"])
+        data = str(row["data"])
+        operation_date = str(row["data_operazione"])
+        value_date = str(row["data_valuta"])
+        status = str(row["stato"])
+        amount = _money(row["importo"])
+        record_id = int(row["id"]) if "id" in row else None
+        movement_hash = str(row.get("movement_hash") or "")
+        mese = str(row.get("mese") or "")
+    else:
+        description = _clean_text_value(row["description"])
+        full_description = _clean_text_value(row["full_description"])
+        data = _serialize_date(row["date"])
+        operation_date = _serialize_date(row["operation_date"])
+        value_date = _serialize_date(row["value_date"])
+        status = _clean_text_value(row["status"])
+        amount = _money(row["amount"] or 0)
+        record_id = int(row["id"])
+        movement_hash = str(row["movement_hash"] or "")
+        mese = _clean_text_value(row["month"]) if "month" in row.keys() else ""
+    text = f"{description} {full_description}"
+    return {
+        "id": record_id,
+        "hash": movement_hash,
+        "amount": amount,
+        "status": status,
+        "data": data,
+        "operation_date": operation_date,
+        "value_date": value_date,
+        "mese": mese,
+        "description": description,
+        "full_description": full_description,
+        "tokens": _merchant_tokens(description, full_description),
+        "dates": _collect_row_dates(
+            data=data,
+            value_date=value_date,
+            text=text,
+        ),
+        "authorized": _is_authorized(status, operation_date),
+        "settled": _is_settled(status, operation_date),
+    }
+
+
+def _unique_settlement_twin(
+    incoming: dict[str, Any],
+    existing: list[dict[str, Any]],
+    used_ids: set[int],
+) -> tuple[dict[str, Any] | None, bool]:
+    """Una sola riga complementare, o ambiguo se due hanno la stessa distanza."""
+    matches: list[tuple[int, dict[str, Any]]] = []
+    for candidate in existing:
+        candidate_id = candidate["id"]
+        if candidate_id is None or candidate_id in used_ids:
+            continue
+        delta = _settlement_candidates(incoming, candidate)
+        if delta is None:
+            continue
+        matches.append((delta, candidate))
+    if not matches:
+        return None, False
+    matches.sort(key=lambda item: (item[0], int(item[1]["id"])))
+    best_delta = matches[0][0]
+    tied = [item for item in matches if item[0] == best_delta]
+    if len(tied) > 1:
+        return None, True
+    return tied[0][1], False
+
+
+def _settlement_candidates(
+    left: dict[str, Any],
+    right: dict[str, Any],
+) -> int | None:
+    if left["amount"] != right["amount"]:
+        return None
+    complementary = (
+        (left["settled"] and right["authorized"])
+        or (left["authorized"] and right["settled"])
+    )
+    if not complementary:
+        return None
+    if not _tokens_match(left["tokens"], right["tokens"]):
+        return None
+    delta = _min_date_delta(left["dates"], right["dates"])
+    if delta is None or delta > _SETTLE_DATE_WINDOW:
+        return None
+    return delta
+
+
+def _existing_settlement_pairs(
+    rows: list[dict[str, Any]],
+) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    authorized = [row for row in rows if row["authorized"]]
+    settled = [row for row in rows if row["settled"] and not row["authorized"]]
+    candidates: list[tuple[int, dict[str, Any], dict[str, Any]]] = []
+    for pending in authorized:
+        for done in settled:
+            delta = _settlement_candidates(pending, done)
+            if delta is None:
+                continue
+            candidates.append((delta, pending, done))
+
+    rejected_auth: set[int] = set()
+    rejected_settled: set[int] = set()
+    by_auth: dict[int, list[tuple[int, int]]] = {}
+    by_settled: dict[int, list[tuple[int, int]]] = {}
+    for delta, pending, done in candidates:
+        by_auth.setdefault(int(pending["id"]), []).append(
+            (delta, int(done["id"]))
+        )
+        by_settled.setdefault(int(done["id"]), []).append(
+            (delta, int(pending["id"]))
+        )
+    for auth_id, matches in by_auth.items():
+        best = min(item[0] for item in matches)
+        if sum(1 for item in matches if item[0] == best) > 1:
+            rejected_auth.add(auth_id)
+    for settled_id, matches in by_settled.items():
+        best = min(item[0] for item in matches)
+        if sum(1 for item in matches if item[0] == best) > 1:
+            rejected_settled.add(settled_id)
+
+    pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    used_auth: set[int] = set()
+    used_settled: set[int] = set()
+    candidates.sort(
+        key=lambda item: (item[0], int(item[1]["id"]), int(item[2]["id"]))
+    )
+    for _delta, pending, done in candidates:
+        auth_id = int(pending["id"])
+        settled_id = int(done["id"])
+        if auth_id in rejected_auth or settled_id in rejected_settled:
+            continue
+        if auth_id in used_auth or settled_id in used_settled:
+            continue
+        pairs.append((pending, done))
+        used_auth.add(auth_id)
+        used_settled.add(settled_id)
+    return pairs
+
+
+def _overlay_settled(
+    keep: dict[str, Any],
+    settled: dict[str, Any],
+) -> None:
+    keep["authorized"] = False
+    keep["settled"] = True
+    keep["status"] = settled["status"] or keep["status"]
+    keep["hash"] = settled["hash"] or keep["hash"]
+    keep["data"] = settled["data"] or keep["data"]
+    keep["operation_date"] = (
+        settled["operation_date"] or keep["operation_date"]
+    )
+    keep["value_date"] = settled["value_date"] or keep["value_date"]
+    keep["mese"] = settled.get("mese") or keep.get("mese") or ""
+    keep["description"] = settled["description"] or keep["description"]
+    keep["full_description"] = (
+        settled["full_description"] or keep["full_description"]
+    )
+    if settled.get("tokens"):
+        keep["tokens"] = settled["tokens"]
+    if settled.get("dates"):
+        keep["dates"] = settled["dates"]
+
+
+def _collapse_fineco_pairs(
+    conn: sqlite3.Connection,
+    account_name: str,
+    inserted_ids: set[int],
+) -> tuple[int, int]:
+    updated = 0
+    retracted = 0
+    while True:
+        leftover = _existing_settlement_pairs(
+            _load_fineco_records(conn, account_name)
+        )
+        if not leftover:
+            break
+        progressed = False
+        for pending, settled in leftover:
+            if not _apply_settlement_merge(conn, pending, settled):
+                continue
+            updated += 1
+            progressed = True
+            settled_id = settled.get("id")
+            if settled_id and int(settled_id) in inserted_ids:
+                retracted += 1
+        if not progressed:
+            break
+    return updated, retracted
+
+
+def _apply_settlement_merge(
+    conn: sqlite3.Connection,
+    keep: dict[str, Any],
+    settled: dict[str, Any],
+) -> bool:
+    new_hash = settled["hash"] or keep["hash"]
+    if new_hash:
+        owner = conn.execute(
+            "SELECT id FROM movements WHERE movement_hash = ?",
+            (new_hash,),
+        ).fetchone()
+        owner_id = int(owner[0]) if owner else None
+        reserved = {int(keep["id"])}
+        settled_id = settled.get("id")
+        if settled_id:
+            reserved.add(int(settled_id))
+        if owner_id is not None and owner_id not in reserved:
+            return False
+    settled_id = settled.get("id")
+    if settled_id and settled_id != keep["id"]:
+        conn.execute("DELETE FROM movements WHERE id = ?", (settled_id,))
+    conn.execute(
+        """
+        UPDATE movements
+        SET movement_hash = ?,
+            date = ?,
+            operation_date = ?,
+            value_date = ?,
+            month = ?,
+            description = ?,
+            full_description = ?,
+            status = ?
+        WHERE id = ?
+        """,
+        (
+            new_hash,
+            settled["data"] or keep["data"],
+            settled["operation_date"] or keep["operation_date"],
+            settled["value_date"] or keep["value_date"],
+            settled.get("mese") or keep.get("mese") or "",
+            settled["description"] or keep["description"],
+            settled["full_description"] or keep["full_description"],
+            settled["status"] or keep["status"],
+            keep["id"],
+        ),
+    )
+    return True
+
+
+def _hash_occurrence_key(
+    *,
+    data: str,
+    data_operazione: str,
+    data_valuta: str,
+    description: str,
+    full_description: str,
+    amount_text: str,
+    status: str,
+    source: str,
+) -> str:
+    return "|".join(
+        [
+            data,
+            data_operazione,
+            data_valuta,
+            description,
+            full_description,
+            amount_text,
+            status,
+            source,
+        ]
+    )
+
+
+def _prepare_import_row(
+    row: pd.Series,
+    *,
+    source: str,
+    occurrences: dict[str, int],
+) -> dict[str, Any]:
+    data = _serialize_date(row.get("data"))
+    data_operazione = _serialize_date(row.get("data_operazione"))
+    data_valuta = _serialize_date(row.get("data_valuta"))
+    description = _clean_text_value(row.get("descrizione"))
+    full_description = _clean_text_value(row.get("descrizione_completa"))
+    status = _clean_text_value(row.get("stato"))
+    amount_text = _clean_text_value(row.get("importo"))
+    base_key = _hash_occurrence_key(
+        data=data,
+        data_operazione=data_operazione,
+        data_valuta=data_valuta,
+        description=description,
+        full_description=full_description,
+        amount_text=amount_text,
+        status=status,
+        source=source,
+    )
+    occurrences[base_key] = occurrences.get(base_key, 0) + 1
+    return {
+        "data": data,
+        "data_operazione": data_operazione,
+        "data_valuta": data_valuta,
+        "mese": _clean_text_value(row.get("mese")),
+        "descrizione": description,
+        "descrizione_completa": full_description,
+        "stato": status,
+        "importo": float(row.get("importo", 0) or 0),
+        "categoria": _clean_text_value(row.get("categoria", "Altro")) or "Altro",
+        "category_source": (
+            _clean_text_value(row.get("category_source", "automatic"))
+            or "automatic"
+        ),
+        "tipo": _clean_text_value(row.get("tipo")),
+        "movement_hash": generate_movement_hash(
+            row,
+            occurrence=occurrences[base_key],
+            source=source,
+        ),
+    }
+
+
+def _load_fineco_records(
+    conn: sqlite3.Connection,
+    account: str,
+) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT id, movement_hash, date, operation_date, value_date,
+               month, description, full_description, amount, status,
+               source, account
+        FROM movements
+        WHERE account = ?
+          AND instr(lower(source), 'fineco') > 0
+        """,
+        (account,),
+    ).fetchall()
+    return [_as_import_record(row) for row in rows]
+
+
+def _hash_set(conn: sqlite3.Connection) -> set[str]:
+    rows = conn.execute("SELECT movement_hash FROM movements").fetchall()
     return {str(row[0]) for row in rows if row and row[0]}
 
 
@@ -149,57 +586,102 @@ def preview_movements(
     """
     Analizza un file importato senza scrivere sul database.
 
-    Restituisce conteggi nuovi/duplicati, top categorie dei nuovi
-    movimenti e eventuali avvisi.
+    Restituisce conteggi nuovi/duplicati/aggiornamenti, top categorie
+    dei nuovi movimenti e eventuali avvisi.
     """
-    existing_hashes = _existing_movement_hashes()
     occurrences: dict[str, int] = {}
     new_rows: list[dict[str, Any]] = []
     skipped = 0
+    update_count = 0
+    review_count = 0
     account_name = account or source
+    fineco = _is_fineco_source(source)
+    existing_records: list[dict[str, Any]] = []
+    used_ids: set[int] = set()
+
+    virtual_to_new_idx: dict[int, int] = {}
+    next_virtual_id = -1
+
+    with get_connection() as conn:
+        existing_hashes = _hash_set(conn)
+        if fineco:
+            existing_records = _load_fineco_records(conn, account_name)
+            existing_pairs = _existing_settlement_pairs(existing_records)
+            update_count += len(existing_pairs)
+            for pending, settled in existing_pairs:
+                used_ids.add(int(pending["id"]))
+                used_ids.add(int(settled["id"]))
+                _overlay_settled(pending, settled)
 
     for _, row in df.iterrows():
-        data = _serialize_date(row.get("data"))
-        data_operazione = _serialize_date(row.get("data_operazione"))
-        data_valuta = _serialize_date(row.get("data_valuta"))
-
-        base_key = "|".join(
-            [
-                data,
-                data_operazione,
-                data_valuta,
-                _clean_text_value(row.get("descrizione")),
-                _clean_text_value(row.get("descrizione_completa")),
-                _clean_text_value(row.get("importo")),
-                _clean_text_value(row.get("stato")),
-                source,
-            ]
-        )
-        occurrences[base_key] = occurrences.get(base_key, 0) + 1
-
-        movement_hash = generate_movement_hash(
+        prepared = _prepare_import_row(
             row,
-            occurrence=occurrences[base_key],
             source=source,
+            occurrences=occurrences,
         )
-
-        if movement_hash in existing_hashes:
+        if prepared["movement_hash"] in existing_hashes:
             skipped += 1
             continue
 
-        amount = float(row.get("importo", 0) or 0)
-        category = (
-            _clean_text_value(row.get("categoria", "Altro")) or "Altro"
-        )
+        incoming = _as_import_record(prepared, from_prepared=True)
+        if fineco:
+            twin, ambiguous = _unique_settlement_twin(
+                incoming,
+                existing_records,
+                used_ids,
+            )
+            if ambiguous:
+                review_count += 1
+            elif twin is not None:
+                twin_id = int(twin["id"])
+                if incoming["settled"] and twin["authorized"]:
+                    used_ids.add(twin_id)
+                    _overlay_settled(twin, incoming)
+                    if twin_id > 0:
+                        update_count += 1
+                    continue
+                if incoming["authorized"] and twin["settled"]:
+                    skipped += 1
+                    used_ids.add(twin_id)
+                    continue
+
         new_rows.append(
             {
-                "data": data,
-                "importo": amount,
-                "categoria": category,
-                "descrizione": _clean_text_value(row.get("descrizione")),
+                "data": prepared["data"],
+                "importo": float(prepared["importo"]),
+                "categoria": prepared["categoria"],
+                "descrizione": prepared["descrizione"],
                 "account": account_name,
             }
         )
+        existing_hashes.add(prepared["movement_hash"])
+        if fineco:
+            incoming["id"] = next_virtual_id
+            incoming["hash"] = prepared["movement_hash"]
+            existing_records.append(incoming)
+            virtual_to_new_idx[next_virtual_id] = len(new_rows) - 1
+            next_virtual_id -= 1
+
+    if fineco:
+        drop_new: set[int] = set()
+        for pending, settled in _existing_settlement_pairs(existing_records):
+            pending_id = int(pending["id"])
+            settled_id = int(settled["id"])
+            if pending_id in used_ids or settled_id in used_ids:
+                continue
+            used_ids.add(pending_id)
+            used_ids.add(settled_id)
+            update_count += 1
+            for virtual_id in (pending_id, settled_id):
+                index = virtual_to_new_idx.get(virtual_id)
+                if index is not None:
+                    drop_new.add(index)
+        if drop_new:
+            new_rows = [
+                row
+                for index, row in enumerate(new_rows)
+                if index not in drop_new
+            ]
 
     new_df = pd.DataFrame(new_rows)
     top_categories: list[tuple[str, float]] = []
@@ -235,14 +717,27 @@ def preview_movements(
                 f"{missing_dates} movimenti senza data valida."
             )
 
-    if len(new_rows) == 0 and skipped > 0:
+    if review_count:
+        warnings.append(
+            f"{review_count} movimenti da rivedere: più di un "
+            "Autorizzato compatibile, non unificati."
+        )
+
+    if not new_rows and skipped > 0 and update_count == 0:
         warnings.append(
             "Tutti i movimenti di questo file risultano già presenti."
+        )
+    elif not new_rows and skipped > 0 and update_count > 0:
+        warnings.append(
+            "Il file è già in archivio. Conferma per aggiornare "
+            f"{update_count} movimenti Autorizzato → Contabilizzato."
         )
 
     return {
         "new_count": len(new_rows),
         "skip_count": skipped,
+        "update_count": update_count,
+        "review_count": review_count,
         "total_count": len(df),
         "total_new_income": total_new_income,
         "total_new_expense": total_new_expense,
@@ -257,42 +752,81 @@ def save_movements(
     df: pd.DataFrame,
     source: str = "Fineco",
     account: str | None = None,
-) -> tuple[int, int]:
+) -> tuple[int, int, int]:
     inserted = 0
     skipped = 0
+    updated = 0
     occurrences: dict[str, int] = {}
     account_name = account or source
+    fineco = _is_fineco_source(source)
 
     with get_connection() as conn:
+        existing_hashes = _hash_set(conn)
+        existing_records: list[dict[str, Any]] = []
+        used_ids: set[int] = set()
+        inserted_ids: set[int] = set()
+
+        if fineco:
+            existing_records = _load_fineco_records(conn, account_name)
+            collapsed, _retracted = _collapse_fineco_pairs(
+                conn,
+                account_name,
+                inserted_ids,
+            )
+            updated += collapsed
+            existing_records = _load_fineco_records(conn, account_name)
+            existing_hashes = _hash_set(conn)
+
         for _, row in df.iterrows():
-            data = _serialize_date(row.get("data"))
-            data_operazione = _serialize_date(
-                row.get("data_operazione")
-            )
-            data_valuta = _serialize_date(row.get("data_valuta"))
-
-            base_key = "|".join(
-                [
-                    data,
-                    data_operazione,
-                    data_valuta,
-                    _clean_text_value(row.get("descrizione")),
-                    _clean_text_value(
-                        row.get("descrizione_completa")
-                    ),
-                    _clean_text_value(row.get("importo")),
-                    _clean_text_value(row.get("stato")),
-                    source,
-                ]
-            )
-
-            occurrences[base_key] = occurrences.get(base_key, 0) + 1
-
-            movement_hash = generate_movement_hash(
+            prepared = _prepare_import_row(
                 row,
-                occurrence=occurrences[base_key],
                 source=source,
+                occurrences=occurrences,
             )
+            movement_hash = prepared["movement_hash"]
+            if movement_hash in existing_hashes:
+                skipped += 1
+                continue
+
+            incoming = _as_import_record(prepared, from_prepared=True)
+            if fineco:
+                twin, ambiguous = _unique_settlement_twin(
+                    incoming,
+                    existing_records,
+                    used_ids,
+                )
+                if not ambiguous and twin is not None:
+                    twin_id = int(twin["id"])
+                    if incoming["settled"] and twin["authorized"]:
+                        settled_payload = {
+                            "id": None,
+                            "hash": movement_hash,
+                            "data": prepared["data"],
+                            "operation_date": prepared["data_operazione"],
+                            "value_date": prepared["data_valuta"],
+                            "mese": prepared["mese"],
+                            "description": prepared["descrizione"],
+                            "full_description": prepared[
+                                "descrizione_completa"
+                            ],
+                            "status": prepared["stato"],
+                        }
+                        if _apply_settlement_merge(
+                            conn,
+                            twin,
+                            settled_payload,
+                        ):
+                            if twin_id not in inserted_ids:
+                                updated += 1
+                            used_ids.add(twin_id)
+                            existing_hashes.add(movement_hash)
+                            incoming["hash"] = movement_hash
+                            _overlay_settled(twin, incoming)
+                            continue
+                    elif incoming["authorized"] and twin["settled"]:
+                        skipped += 1
+                        used_ids.add(twin_id)
+                        continue
 
             try:
                 conn.execute(
@@ -321,26 +855,17 @@ def save_movements(
                     """,
                     (
                         movement_hash,
-                        data,
-                        data_operazione,
-                        data_valuta,
-                        _clean_text_value(row.get("mese")),
-                        _clean_text_value(row.get("descrizione")),
-                        _clean_text_value(
-                            row.get("descrizione_completa")
-                        ),
-                        _clean_text_value(
-                            row.get("categoria", "Altro")
-                        ) or "Altro",
-                        _clean_text_value(
-                            row.get(
-                                "category_source",
-                                "automatic",
-                            )
-                        ) or "automatic",
-                        _clean_text_value(row.get("tipo")),
-                        float(row.get("importo", 0)),
-                        _clean_text_value(row.get("stato")),
+                        prepared["data"],
+                        prepared["data_operazione"],
+                        prepared["data_valuta"],
+                        prepared["mese"],
+                        prepared["descrizione"],
+                        prepared["descrizione_completa"],
+                        prepared["categoria"],
+                        prepared["category_source"],
+                        prepared["tipo"],
+                        float(prepared["importo"]),
+                        prepared["stato"],
                         source,
                         account_name,
                         "",
@@ -350,12 +875,32 @@ def save_movements(
                     ),
                 )
                 inserted += 1
+                existing_hashes.add(movement_hash)
+                if fineco:
+                    new_id = int(
+                        conn.execute(
+                            "SELECT last_insert_rowid()"
+                        ).fetchone()[0]
+                    )
+                    incoming["id"] = new_id
+                    incoming["hash"] = movement_hash
+                    existing_records.append(incoming)
+                    inserted_ids.add(new_id)
             except sqlite3.IntegrityError:
                 skipped += 1
 
+        if fineco:
+            collapsed, retracted = _collapse_fineco_pairs(
+                conn,
+                account_name,
+                inserted_ids,
+            )
+            updated += collapsed
+            inserted = max(0, inserted - retracted)
+
         conn.commit()
 
-    return inserted, skipped
+    return inserted, skipped, updated
 
 
 def load_movements() -> pd.DataFrame:

@@ -1,6 +1,6 @@
 def euro(value: float) -> str:
     return (
-        f"{value:,.2f} €"
+        f"{value:,.2f}\u00a0€"
         .replace(",", "X")
         .replace(".", ",")
         .replace("X", ".")

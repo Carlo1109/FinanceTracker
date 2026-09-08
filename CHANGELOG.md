@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.5.1
+
+### Funzionalità
+
+- Import Fineco: un **Autorizzato** già in archivio diventa **Contabilizzato** se importi lo stesso movimento (stesso conto, stesso importo, stesso esercente, date entro 2 giorni). Categoria e note restano. Se due coppie sono ambigue, non unisce: inserisce e segnala «da rivedere»
+- Export Excel: il file si salva in **Download** e si apre la cartella (niente download del browser)
+
+### Interfaccia
+
+- Anteprima import: conteggio **da aggiornare**; Conferma attivo anche se ci sono solo aggiornamenti
+- Dopo l’import, niente seconda anteprima dello stesso file
+- Importi lunghi sulle card hero/KPI restano su una riga; lo spazio prima di € non va a capo
+- Tasso di risparmio: checkbox **Escludi rimborsi**; niente più «senza rimborsi» sotto la percentuale
+
 ## v1.5.0
 
 ### Funzionalità

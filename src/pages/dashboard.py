@@ -808,15 +808,14 @@ def show_dashboard() -> None:
         savings_label = f"{rate:.1f}".replace(".", ",") + "%"
         savings_color = INCOME_COLOR if rate >= 0 else EXPENSE_COLOR
         spent_share = f"{(100.0 - rate):.1f}".replace(".", ",")
-        refunds_prefix = "senza rimborsi · " if exclude_refunds else ""
         if rate > 0:
             savings_footer = (
-                f"{refunds_prefix}{spent_share}% delle entrate è andato in uscite"
+                f"{spent_share}% delle entrate è andato in uscite"
             )
         elif rate == 0:
-            savings_footer = f"{refunds_prefix}tutto è andato in uscite"
+            savings_footer = "tutto è andato in uscite"
         else:
-            savings_footer = f"{refunds_prefix}hai speso più di quanto è entrato"
+            savings_footer = "hai speso più di quanto è entrato"
 
     if comparison_caption:
         st.caption(f"Confronto: {comparison_caption}")
@@ -922,7 +921,7 @@ def show_dashboard() -> None:
             extra_class="ft-savings-rate-card",
         )
         st.checkbox(
-            "Tieni fuori i rimborsi",
+            "Escludi rimborsi",
             key="dashboard_savings_ex_refunds",
             help=(
                 "I rimborsi non sono reddito: toglierli evita di gonfiare "
@@ -942,7 +941,7 @@ def show_dashboard() -> None:
             <div class="ft-dashboard-card">
               <div class="ft-specials-hint" style="margin:0;">
                 Nessuna spesa speciale nel periodo.
-                Puoi segnalarle in Movimenti → Dettagli.
+                Puoi segnalarle in Movimenti → Modifica.
               </div>
             </div>
             """
