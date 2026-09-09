@@ -200,14 +200,23 @@ def _merchant_tokens(description: str, full_description: str) -> tuple[str, ...]
 def _tokens_match(left: tuple[str, ...], right: tuple[str, ...]) -> bool:
     if not left or not right:
         return False
+    left_tokens = set(left)
+    right_tokens = set(right)
     shorter, longer = (
-        (set(left), set(right))
+        (left_tokens, right_tokens)
         if len(left) <= len(right)
-        else (set(right), set(left))
+        else (right_tokens, left_tokens)
     )
-    if not shorter <= longer:
-        return False
-    return any(len(token) >= 4 for token in shorter) or len(shorter) >= 2
+    if shorter <= longer:
+        return any(len(token) >= 4 for token in shorter) or len(shorter) >= 2
+    # Fineco tronca l’esercente sull’Autorizzato (CASCINA GOB vs
+    # CASCINA G SETTIMO): il sottoinsieme fallisce, restano i token lunghi.
+    strong_shared = {
+        token
+        for token in left_tokens & right_tokens
+        if len(token) >= 4
+    }
+    return len(strong_shared) >= 2
 
 
 def _collect_row_dates(

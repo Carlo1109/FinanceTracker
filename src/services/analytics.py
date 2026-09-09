@@ -9,6 +9,7 @@ import pandas as pd
 INVESTMENT_CATEGORY = "Investimenti"
 TRANSFER_CATEGORY = "Trasferimenti interni"
 INITIAL_BALANCE_CATEGORY = "Saldo iniziale"
+LOAN_CATEGORY = "Prestiti"
 RIMBORSO_CATEGORY = "Rimborsi"
 PERIOD_CUSTOM = "Intervallo personalizzato"
 PERIOD_CUSTOM_ALIASES = ("Da – a", "Da - a")
@@ -22,10 +23,18 @@ def is_initial_balance_category(category: object) -> bool:
     return str(category) == INITIAL_BALANCE_CATEGORY
 
 
+def is_loan_category(category: object) -> bool:
+    return str(category) == LOAN_CATEGORY
+
+
 def is_non_operating_category(category: object) -> bool:
-    """Trasferimenti e saldo iniziale: fuori da entrate/uscite, nel saldo conto."""
+    """Trasferimenti, saldo iniziale e prestiti: fuori da entrate/uscite, nel saldo conto."""
     name = str(category)
-    return name in {TRANSFER_CATEGORY, INITIAL_BALANCE_CATEGORY}
+    return name in {
+        TRANSFER_CATEGORY,
+        INITIAL_BALANCE_CATEGORY,
+        LOAN_CATEGORY,
+    }
 
 
 def _excluded_from_metrics_mask(df: pd.DataFrame) -> pd.Series:
@@ -830,6 +839,53 @@ def expense_frame(df: pd.DataFrame) -> pd.DataFrame:
         (working["importo"] < 0)
         & (working["categoria"] != INVESTMENT_CATEGORY)
     ].copy()
+
+
+def loan_flow_summary(
+    period_df: pd.DataFrame,
+    *,
+    source_df: pd.DataFrame | None = None,
+) -> dict[str, float]:
+    """Flussi Prestiti: dati e rientrati nel periodo, netto aperto sui conti."""
+
+    def _loan_frame(frame: pd.DataFrame) -> pd.DataFrame:
+        if frame is None or frame.empty or "categoria" not in frame.columns:
+            return pd.DataFrame()
+        return frame.loc[frame["categoria"].map(is_loan_category)].copy()
+
+    period = _loan_frame(period_df)
+    if period.empty:
+        outgoing = 0.0
+        incoming = 0.0
+        count = 0
+    else:
+        amounts = pd.to_numeric(period["importo"], errors="coerce").fillna(0)
+        outgoing = float(abs(amounts[amounts < 0].sum()))
+        incoming = float(amounts[amounts > 0].sum())
+        count = int(len(period))
+
+    open_source = _loan_frame(
+        source_df if source_df is not None else period_df
+    )
+    if open_source.empty:
+        open_net = 0.0
+        open_count = 0
+    else:
+        open_net = float(
+            pd.to_numeric(open_source["importo"], errors="coerce")
+            .fillna(0)
+            .sum()
+        )
+        open_count = int(len(open_source))
+
+    return {
+        "count": count,
+        "outgoing": outgoing,
+        "incoming": incoming,
+        "period_net": incoming - outgoing,
+        "open_net": open_net,
+        "open_count": open_count,
+    }
 
 
 def refund_income(df: pd.DataFrame) -> float:

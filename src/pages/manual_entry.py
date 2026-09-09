@@ -7,6 +7,7 @@ from src.components.cards import (
 from src.components.date_input import themed_date_input
 from src.services.analytics import (
     is_initial_balance_category,
+    is_loan_category,
     is_non_operating_category,
     is_transfer_category,
 )
@@ -93,6 +94,12 @@ def show_manual_entry() -> None:
             st.caption(
                 "Il saldo iniziale non è un’entrata: serve a far "
                 "quadrare il saldo reale del conto."
+            )
+        elif is_loan_category(category):
+            st.caption(
+                "I prestiti non entrano in entrate o uscite, "
+                "ma contano nel saldo del conto. "
+                "Andata e ritorno nella stessa categoria."
             )
 
         if (

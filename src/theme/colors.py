@@ -69,7 +69,9 @@ CATEGORY_COLORS: dict[str, str] = {
     "Viaggi & Vacanze": "#22d3ee",
     "Svago & Tempo libero": "#a78bfa",
     "Abbonamenti": "#93c5fd",
+    "Regali & Donazioni": "#fdba74",
     "Regali, Donazioni & Prestiti": "#fdba74",
+    "Prestiti": "#67e8f9",
     "Altro": "#94a3b8",
 }
 

@@ -1,6 +1,21 @@
 # Changelog
 
+## v1.5.2
+
+### Funzionalità
+
+- Categoria **Prestiti** (bloccata): fuori da entrate/uscite/medie, conta nella liquidità del conto. Andata e ritorno nella stessa categoria
+- **Regali, Donazioni & Prestiti** diventa **Regali & Donazioni**; i movimenti già in archivio si rietichettano al primo avvio
+- Import Fineco: se l’Autorizzato ha l’esercente tronco (`CASCINA GOB` vs `CASCINA G SETTIMO`), unisce comunque se restano almeno due parole lunghe in comune
+
+### Interfaccia
+
+- Movimenti: con filtro categoria **Prestiti**, il riepilogo mostra **Prestati / Rientrati / Netto** (e quanto è ancora aperto sui conti filtrati)
+- Nuovo movimento e modifica: caption sui prestiti
+- Impostazioni: Prestiti non si rinomina né si elimina
+
 ## v1.5.1
+
 
 ### Funzionalità
 

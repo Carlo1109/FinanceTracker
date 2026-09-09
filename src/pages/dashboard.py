@@ -925,7 +925,7 @@ def show_dashboard() -> None:
             key="dashboard_savings_ex_refunds",
             help=(
                 "I rimborsi non sono reddito: toglierli evita di gonfiare "
-                "il risparmio. Regali, donazioni e prestiti restano."
+                "il risparmio. Regali e donazioni restano."
             ),
         )
 

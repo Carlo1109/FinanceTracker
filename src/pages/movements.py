@@ -9,6 +9,7 @@ from src.components.cards import (
     EXPENSE_COLOR,
     INCOME_COLOR,
     INVESTMENT_COLOR,
+    MUTED_COLOR,
     render_html,
     render_kpi_card,
     render_section_title,
@@ -31,8 +32,10 @@ from src.services.analytics import (
     filter_by_accounts,
     filter_by_movement_types,
     is_initial_balance_category,
+    is_loan_category,
     is_non_operating_category,
     is_transfer_category,
+    loan_flow_summary,
     normalize_date_column,
     types_chip_label,
 )
@@ -607,6 +610,12 @@ def _render_movement_details(
             "Il saldo iniziale non è un’entrata: serve a far "
             "quadrare il saldo reale del conto."
         )
+    elif is_loan_category(new_category):
+        st.caption(
+            "I prestiti non entrano in entrate o uscite, "
+            "ma contano nel saldo del conto. "
+            "Andata e ritorno nella stessa categoria."
+        )
 
     movement_type = "Entrata" if amount > 0 else "Uscita"
     marked_special = False
@@ -1063,30 +1072,90 @@ def show_movements() -> None:
     saldo_color = INCOME_COLOR if account_saldo >= 0 else EXPENSE_COLOR
 
     render_section_title("Riepilogo")
-    c1, c2, c3, c4, c5 = st.columns(5)
-
-    with c1:
-        render_kpi_card("Entrate", euro(total_income), value_color=INCOME_COLOR)
-
-    with c2:
-        render_kpi_card("Uscite", euro(total_expense), value_color=EXPENSE_COLOR)
-
-    with c3:
-        render_kpi_card("Bilancio", signed_euro(balance), value_color=balance_color)
-
-    with c4:
-        render_kpi_card(
-            "Investimenti",
-            euro(total_investments),
-            value_color=INVESTMENT_COLOR,
+    if is_loan_category(selected_category):
+        loan_summary = loan_flow_summary(
+            filtered_df,
+            source_df=account_scope,
         )
+        period_net = float(loan_summary["period_net"])
+        if period_net > 0:
+            net_color = INCOME_COLOR
+        elif period_net < 0:
+            net_color = EXPENSE_COLOR
+        else:
+            net_color = MUTED_COLOR
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            render_kpi_card(
+                "Prestati",
+                euro(float(loan_summary["outgoing"])),
+                value_color=EXPENSE_COLOR,
+            )
+        with c2:
+            render_kpi_card(
+                "Rientrati",
+                euro(float(loan_summary["incoming"])),
+                value_color=INCOME_COLOR,
+            )
+        with c3:
+            render_kpi_card(
+                "Netto",
+                signed_euro(period_net),
+                value_color=net_color,
+            )
+        open_net = float(loan_summary["open_net"])
+        if open_net < -0.004:
+            st.caption(
+                f"Ancora in prestito sui conti filtrati: "
+                f"{euro(abs(open_net))}."
+            )
+        elif open_net > 0.004:
+            st.caption(
+                f"Hai ricevuto più di quanto hai dato: "
+                f"{signed_euro(open_net)}."
+            )
+        else:
+            st.caption(
+                "Il netto è quanto è rientrato meno quanto hai dato "
+                "nei filtri attuali."
+            )
+    else:
+        c1, c2, c3, c4, c5 = st.columns(5)
 
-    with c5:
-        render_kpi_card(
-            "Liquidità",
-            signed_euro(account_saldo),
-            value_color=saldo_color,
-        )
+        with c1:
+            render_kpi_card(
+                "Entrate",
+                euro(total_income),
+                value_color=INCOME_COLOR,
+            )
+
+        with c2:
+            render_kpi_card(
+                "Uscite",
+                euro(total_expense),
+                value_color=EXPENSE_COLOR,
+            )
+
+        with c3:
+            render_kpi_card(
+                "Bilancio",
+                signed_euro(balance),
+                value_color=balance_color,
+            )
+
+        with c4:
+            render_kpi_card(
+                "Investimenti",
+                euro(total_investments),
+                value_color=INVESTMENT_COLOR,
+            )
+
+        with c5:
+            render_kpi_card(
+                "Liquidità",
+                signed_euro(account_saldo),
+                value_color=saldo_color,
+            )
 
     total_found = len(filtered_df)
     account_label = accounts_chip_label(selected_accounts, accounts)
@@ -1154,7 +1223,6 @@ def show_movements() -> None:
             else "Altro"
         )
         is_investment = category == INVESTMENT_CATEGORY
-        is_transfer = is_transfer_category(category)
         is_special = bool(row.get("speciale", False))
         special_months = int(row.get("speciale_mesi") or 0)
         movement_id = int(row["id"])
@@ -1162,7 +1230,7 @@ def show_movements() -> None:
         if is_investment:
             tone = "investment"
             displayed_amount = euro(abs(amount))
-        elif is_transfer or is_initial_balance_category(category):
+        elif is_non_operating_category(category):
             tone = "transfer"
             displayed_amount = (
                 f"+{euro(amount)}" if amount > 0 else euro(amount)

@@ -563,8 +563,8 @@ def _category_edit_dialog(category: str, df, categories: dict) -> None:
                         )
                     st.rerun()
 
-    if category == "Altro":
-        st.caption('La categoria "Altro" non può essere eliminata.')
+    if category in RENAME_LOCKED_CATEGORIES:
+        st.caption("Questa categoria non si può eliminare.")
         return
 
     if st.session_state.get(_DELETE_CATEGORY_KEY):

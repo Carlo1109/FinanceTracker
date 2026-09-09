@@ -191,12 +191,20 @@
       "YOUTUBE PREMIUM"
     ]
   },
-  "Regali, Donazioni & Prestiti": {
+  "Regali & Donazioni": {
     "icon": "🎁",
     "keywords": [
       "REGALO",
       "DONAZIONE",
       "CROWDFUNDING"
+    ]
+  },
+  "Prestiti": {
+    "icon": "🤝",
+    "keywords": [
+      "PRESTITO",
+      "PRESTITI",
+      "LOAN"
     ]
   },
   "Altro": {

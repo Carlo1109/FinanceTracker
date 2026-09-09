@@ -36,7 +36,9 @@ DEFAULT_CATEGORY_ICONS = {
     "Viaggi & Vacanze": "🏖️",
     "Svago & Tempo libero": "🎮",
     "Abbonamenti": "📺",
+    "Regali & Donazioni": "🎁",
     "Regali, Donazioni & Prestiti": "🎁",
+    "Prestiti": "🤝",
     "Altro": "❓",
 }
 
@@ -174,9 +176,28 @@ def _remember_removed(name: str) -> None:
         _removed_defaults.append(cleaned)
 
 
+def _prune_live_names_from_removed(
+    definitions: dict[str, dict[str, Any]],
+) -> bool:
+    """Un nome ancora in uso non può restare tra i default rimossi."""
+    live = set(definitions)
+    before = list(_removed_defaults)
+    _removed_defaults[:] = [name for name in before if name not in live]
+    changed = _removed_defaults != before
+    for name, data in definitions.items():
+        chain = [item for item in _replaces_list(data) if item != name]
+        if chain != _replaces_list(data):
+            if chain:
+                data["replaces"] = chain
+            else:
+                data.pop("replaces", None)
+            changed = True
+    return changed
+
+
 _LEGACY_CATEGORY_NAMES = {
-    "Regali & Donazioni": "Regali, Donazioni & Prestiti",
-    "Regali, Donazioni &  Prestiti": "Regali, Donazioni & Prestiti",
+    "Regali, Donazioni & Prestiti": "Regali & Donazioni",
+    "Regali, Donazioni &  Prestiti": "Regali & Donazioni",
 }
 
 
@@ -215,7 +236,7 @@ def _relabel_movements(old_name: str, new_name: str) -> int:
 def _migrate_legacy_category_names(
     definitions: dict[str, dict[str, Any]],
 ) -> bool:
-    """Allinea nomi vecchi (es. Regali & Donazioni) al default attuale."""
+    """Allinea nomi vecchi (es. Regali, Donazioni & Prestiti) al default attuale."""
     changed = False
     for old_name, new_name in _LEGACY_CATEGORY_NAMES.items():
         _relabel_movements(old_name, new_name)
@@ -242,8 +263,12 @@ def _migrate_legacy_category_names(
             chain = _replaces_list(incoming)
         if old_name not in chain:
             chain.append(old_name)
-        definitions[new_name]["replaces"] = chain
+        definitions[new_name]["replaces"] = [
+            name for name in chain if name != new_name
+        ]
         _remember_removed(old_name)
+        if new_name in _removed_defaults:
+            _removed_defaults.remove(new_name)
         changed = True
     return changed
 
@@ -449,6 +474,17 @@ def _normalize_category_definitions(
         }
         changed = True
 
+    if "Prestiti" not in normalized:
+        normalized["Prestiti"] = {
+            "icon": "🤝",
+            "keywords": [
+                "PRESTITO",
+                "PRESTITI",
+                "LOAN",
+            ],
+        }
+        changed = True
+
     return normalized, changed
 
 
@@ -505,8 +541,9 @@ def load_category_definitions() -> dict[str, dict[str, Any]]:
     definitions, merged = _merge_new_bundled_categories(definitions)
     dropped = _drop_renamed_bundled_ghosts(definitions)
     definitions, colored = ensure_unique_category_colors(definitions)
+    pruned = _prune_live_names_from_removed(definitions)
 
-    if changed or migrated or merged or dropped or colored:
+    if changed or migrated or merged or dropped or colored or pruned:
         try:
             save_category_definitions(definitions)
         except OSError:
@@ -628,6 +665,7 @@ RENAME_LOCKED_CATEGORIES = {
     "Trasferimenti interni",
     "Saldo iniziale",
     "Investimenti",
+    "Prestiti",
 }
 
 
@@ -635,7 +673,7 @@ def rename_category(old_name: str, new_name: str) -> tuple[bool, int]:
     """
     Rinomina una categoria e aggiorna i movimenti.
 
-    Non rinomina Altro, trasferimenti, saldo iniziale e investimenti.
+    Non rinomina Altro, trasferimenti, saldo iniziale, investimenti e prestiti.
     """
     old_name = str(old_name).strip()
     new_name = str(new_name).strip()
@@ -758,7 +796,7 @@ def delete_category(category: str) -> tuple[bool, int]:
     Compatibile sia con database che usano nomi italiani
     sia con database che usano nomi inglesi.
     """
-    if category == "Altro":
+    if category in RENAME_LOCKED_CATEGORIES:
         return False, 0
 
     definitions = load_category_definitions()
