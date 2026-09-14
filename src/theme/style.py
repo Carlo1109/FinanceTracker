@@ -1548,6 +1548,10 @@ def apply_theme(
             box-shadow: none !important;
         }}
 
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-loan-leg) {{
+            padding: 5px 14px 11px 13px !important;
+        }}
+
         [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-tone.is-income) {{
             box-shadow: inset 3px 0 0 var(--ft-income) !important;
         }}
@@ -1623,6 +1627,30 @@ def apply_theme(
 
         .ft-movement-card {{
             min-width: 0;
+        }}
+
+        .ft-loan-leg {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-top: -2px;
+        }}
+
+        .ft-loan-leg-copy {{
+            min-width: 0;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            transform: translateY(-2px);
+        }}
+
+        .ft-loan-leg .ft-movement-amount {{
+            display: flex;
+            align-items: center;
+            flex: 0 0 auto;
+            transform: translateY(-2px);
         }}
 
         .ft-movement-title {{

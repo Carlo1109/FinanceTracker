@@ -8,8 +8,13 @@ from typing import Any
 import pandas as pd
 
 from src.database.db import get_connection
-from src.services.analytics import INVESTMENT_CATEGORY
+from src.services.analytics import INVESTMENT_CATEGORY, is_loan_category
 from src.services.categories import categorize
+from src.services.loans import (
+    parse_loan_parent_id,
+    sanitize_loan_links,
+    sync_loan_links_after_edit,
+)
 
 KNOWN_ACCOUNTS = [
     "Fineco",
@@ -857,10 +862,9 @@ def save_movements(
                         account,
                         notes,
                         speciale,
-                        speciale_mesi,
-                        escludi_metriche
+                        speciale_mesi
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         movement_hash,
@@ -878,7 +882,6 @@ def save_movements(
                         source,
                         account_name,
                         "",
-                        0,
                         0,
                         0,
                     ),
@@ -934,7 +937,7 @@ def load_movements() -> pd.DataFrame:
                 notes,
                 speciale,
                 speciale_mesi,
-                escludi_metriche
+                prestito_di
             FROM movements
             ORDER BY date DESC
             """,
@@ -965,12 +968,10 @@ def load_movements() -> pd.DataFrame:
         .astype(int)
         .clip(lower=0)
     )
-    df["escludi_metriche"] = (
-        pd.to_numeric(df["escludi_metriche"], errors="coerce")
-        .fillna(0)
-        .astype(int)
-        .astype(bool)
-    )
+    if "prestito_di" in df.columns:
+        df["prestito_di"] = pd.to_numeric(df["prestito_di"], errors="coerce")
+    else:
+        df["prestito_di"] = pd.NA
 
     df = df.sort_values(
         by=["data", "id"],
@@ -992,7 +993,6 @@ def add_manual_movement(
     notes: str = "",
     speciale: bool = False,
     speciale_mesi: int = 0,
-    escludi_metriche: bool = False,
 ) -> None:
     signed_amount = (
         abs(amount)
@@ -1024,10 +1024,9 @@ def add_manual_movement(
                 account,
                 notes,
                 speciale,
-                speciale_mesi,
-                escludi_metriche
+                speciale_mesi
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 movement_hash,
@@ -1047,7 +1046,6 @@ def add_manual_movement(
                 notes,
                 1 if speciale else 0,
                 max(0, int(speciale_mesi)) if speciale else 0,
-                1 if escludi_metriche else 0,
             ),
         )
         conn.commit()
@@ -1075,7 +1073,7 @@ def get_movement(movement_id: int) -> dict[str, Any] | None:
                 notes,
                 speciale,
                 speciale_mesi,
-                escludi_metriche
+                prestito_di
             FROM movements
             WHERE id = ?
             """,
@@ -1131,6 +1129,10 @@ def delete_movements(movement_ids: list[int]) -> None:
         return
     with get_connection() as conn:
         conn.executemany(
+            "UPDATE movements SET prestito_di = NULL WHERE prestito_di = ?",
+            [(item,) for item in unique_ids],
+        )
+        conn.executemany(
             "DELETE FROM movements WHERE id = ?",
             [(item,) for item in unique_ids],
         )
@@ -1161,7 +1163,6 @@ def update_movement(
     full_description: str | None = None,
     speciale: bool = False,
     speciale_mesi: int = 0,
-    escludi_metriche: bool = False,
 ) -> None:
     """Aggiorna i campi modificabili di un movimento. L'hash resta invariato."""
     signed_amount = (
@@ -1207,8 +1208,7 @@ def update_movement(
                 account = ?,
                 notes = ?,
                 speciale = ?,
-                speciale_mesi = ?,
-                escludi_metriche = ?
+                speciale_mesi = ?
             WHERE id = ?
             """,
             (
@@ -1224,11 +1224,11 @@ def update_movement(
                 notes,
                 1 if speciale else 0,
                 max(0, int(speciale_mesi)) if speciale else 0,
-                1 if escludi_metriche else 0,
                 movement_id,
             ),
         )
         conn.commit()
+    sync_loan_links_after_edit(movement_id)
 
 
 def split_movement(
@@ -1289,13 +1289,25 @@ def split_movement(
         notes=_clean_text_value(original.get("notes")),
         speciale=bool(original.get("speciale")),
         speciale_mesi=int(original.get("speciale_mesi") or 0),
-        escludi_metriche=bool(original.get("escludi_metriche")),
     )
+
+    inherit_parent = None
+    if is_loan_category(original.get("category")) and float(
+        original.get("amount") or 0
+    ) > 0:
+        inherit_parent = parse_loan_parent_id(original.get("prestito_di"))
 
     created_ids: list[int] = []
     with get_connection() as conn:
         for amount, category in cleaned[1:]:
             signed_amount = _money(sign * amount)
+            child_parent = (
+                inherit_parent
+                if inherit_parent
+                and is_loan_category(category)
+                and signed_amount > 0
+                else None
+            )
             cursor = conn.execute(
                 """
                 INSERT INTO movements (
@@ -1316,7 +1328,7 @@ def split_movement(
                     notes,
                     speciale,
                     speciale_mesi,
-                    escludi_metriche
+                    prestito_di
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
@@ -1339,7 +1351,7 @@ def split_movement(
                     "",
                     0,
                     0,
-                    1 if original.get("escludi_metriche") else 0,
+                    child_parent,
                 ),
             )
             created_ids.append(int(cursor.lastrowid))
@@ -1413,34 +1425,46 @@ def merge_movements(
         notes=notes.strip(),
         speciale=False,
         speciale_mesi=0,
-        escludi_metriche=False,
     )
 
+    survivor_id = int(survivor["id"])
     with get_connection() as conn:
+        if is_loan_category(category) and total < 0:
+            conn.executemany(
+                "UPDATE movements SET prestito_di = ? WHERE prestito_di = ?",
+                [(survivor_id, item) for item in drop_ids],
+            )
+        else:
+            conn.executemany(
+                "UPDATE movements SET prestito_di = NULL WHERE prestito_di = ?",
+                [(item,) for item in drop_ids],
+            )
         conn.executemany(
             "DELETE FROM movements WHERE id = ?",
             [(item,) for item in drop_ids],
         )
+        sanitize_loan_links(conn)
         conn.commit()
+    sync_loan_links_after_edit(survivor_id)
 
     return len(drop_ids)
-
-
-def delete_movement(movement_id: int) -> None:
-    with get_connection() as conn:
-        conn.execute(
-            """
-            DELETE FROM movements
-            WHERE id = ?
-            """,
-            (movement_id,),
-        )
-        conn.commit()
 
 
 def delete_account(account: str) -> int:
     """Elimina dal DB tutti i movimenti del conto. Restituisce quante righe sono state cancellate."""
     with get_connection() as conn:
+        parent_ids = [
+            int(row["id"])
+            for row in conn.execute(
+                "SELECT id FROM movements WHERE account = ?",
+                (account,),
+            ).fetchall()
+        ]
+        if parent_ids:
+            conn.executemany(
+                "UPDATE movements SET prestito_di = NULL WHERE prestito_di = ?",
+                [(item,) for item in parent_ids],
+            )
         cursor = conn.execute(
             """
             DELETE FROM movements
@@ -1482,6 +1506,7 @@ def recalculate_automatic_categories() -> int:
                 )
                 updated += 1
 
+        sanitize_loan_links(conn)
         conn.commit()
 
     return updated

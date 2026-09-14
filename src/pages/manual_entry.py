@@ -20,10 +20,6 @@ from src.services.movement_service import (
 from src.utils.formatting import euro
 
 
-def get_categories() -> list[str]:
-    return get_category_names()
-
-
 def show_manual_entry() -> None:
     st.title("Nuovo movimento")
     st.caption(
@@ -31,7 +27,7 @@ def show_manual_entry() -> None:
         "non presente negli import."
     )
 
-    categories = get_categories()
+    categories = get_category_names()
 
     render_section_title("Dettagli movimento")
     with styled_panel():

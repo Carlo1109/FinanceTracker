@@ -9,7 +9,6 @@ FinanceTracker è un'app desktop sviluppata in Python per gestire le proprie fin
 - 🔎 Filtri per più conti e intervallo personalizzato
 - 🥧 Distribuzione spese e andamento mensile
 - ⭐ Spese speciali (ripartizione su mesi o esclusione dalla media giornaliera)
-- 🚫 Esclusione movimenti dalle metriche (restano in lista)
 - 🔁 Trasferimenti interni tra conti (fuori da entrate/uscite)
 - 💳 Import estratti conto (Fineco, Revolut, PostePay, PayPal)
 - ✏️ Inserimento movimenti manuali
@@ -43,6 +42,10 @@ FinanceTracker è un'app desktop sviluppata in Python per gestire le proprie fin
 
 ![Impostazioni](screenshots/import.png)
 
+
+## 📖 Manuale
+
+Categorie speciali (prestiti, rimborsi, trasferimenti, …), split, import: **[MANUALE.md](MANUALE.md)**.
 
 ## 🚀 Download
 

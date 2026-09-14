@@ -70,7 +70,6 @@ def init_db() -> None:
                 notes TEXT,
                 speciale INTEGER NOT NULL DEFAULT 0,
                 speciale_mesi INTEGER NOT NULL DEFAULT 0,
-                escludi_metriche INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
             """
@@ -129,12 +128,22 @@ def init_db() -> None:
                 """
             )
 
-        if "escludi_metriche" not in column_names:
+        if "escludi_metriche" in column_names:
+            try:
+                connection.execute(
+                    """
+                    ALTER TABLE movements
+                    DROP COLUMN escludi_metriche
+                    """
+                )
+            except sqlite3.OperationalError:
+                pass
+
+        if "prestito_di" not in column_names:
             connection.execute(
                 """
                 ALTER TABLE movements
-                ADD COLUMN escludi_metriche INTEGER
-                NOT NULL DEFAULT 0
+                ADD COLUMN prestito_di INTEGER
                 """
             )
 

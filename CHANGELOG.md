@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.5.3
+
+### Funzionalità
+
+- **Prestiti**: dal rientro si collega all’uscita (l’app propone, confermi). Un’uscita, più rientri, anche parziali e su conti diversi
+- Lista Movimenti: pratica collegata = **una riga** (**Aperto** col residuo, o **Chiuso** a 0,00 €)
+- **Modifica** apre la pratica: uscita e rientri insieme. **Scollega prestito** li separa; **Elimina** toglie tutta la pratica
+- Se togli la categoria Prestiti, i collegamenti cadono da soli
+- **Manuale** (`MANUALE.md`): Manuale per capire di più su categorie speciali, split, import e prestiti
+
+### Interfaccia
+
+- Dialog prestito: chip **Prestiti · Aperto/Chiuso** e card dei movimenti della pratica
+- **Scollega prestito** accanto a **Dividi movimento**
+
 ## v1.5.2
 
 ### Funzionalità

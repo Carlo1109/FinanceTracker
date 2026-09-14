@@ -47,8 +47,27 @@ from src.services.categories import (
     suggest_keyword_from_text,
 )
 from src.theme.colors import get_category_color
+from src.services.loans import (
+    collapse_closed_loan_rows,
+    is_linked_practice,
+    is_settled_practice,
+    link_repayment,
+    loan_child_ids,
+    loan_practices,
+    loan_practice_ids,
+    loan_related_ids,
+    movement_loan_chip,
+    open_loan_options,
+    parse_loan_parent_id,
+    practice_by_id,
+    settled_parent_id,
+    suggest_loan_parent_id,
+    unlink_children,
+    unlink_repayment,
+    unlinked_repayment_count,
+)
 from src.services.movement_service import (
-    delete_movement,
+    delete_movements,
     load_movements,
     merge_movements,
     recalculate_automatic_categories,
@@ -283,7 +302,10 @@ def _merge_movements_dialog(movement_ids: list[int], categories: list[str]) -> N
     confirm_col, cancel_col = st.columns(2)
     with confirm_col:
         if st.button("Unisci", type="primary", width="stretch"):
-            snapshots = snapshot_movements(movement_ids)
+            related = []
+            for item in movement_ids:
+                related.extend(loan_related_ids(int(item)))
+            snapshots = snapshot_movements(related)
             try:
                 removed = merge_movements(
                     movement_ids,
@@ -457,8 +479,120 @@ def format_date(value) -> str:
     return value.strftime("%d/%m/%y")
 
 
-def get_categories() -> list[str]:
-    return get_category_names()
+def _loan_option_label(practice: dict) -> str:
+    date_label = format_date(practice.get("date"))
+    account = str(practice.get("account") or "").strip()
+    suffix = f" · {account}" if account else ""
+    if practice.get("open"):
+        state = f"ancora {euro(float(practice['remaining']))}"
+    elif practice.get("overpaid"):
+        state = "chiuso+"
+    else:
+        state = "chiuso"
+    return (
+        f"{date_label} · {practice['description']}{suffix} · {state}"
+    )
+
+
+def _render_loan_practices(source_df: pd.DataFrame) -> None:
+    practices = loan_practices(source_df)
+    open_ones = [item for item in practices if item["open"]]
+    unlinked = unlinked_repayment_count(source_df)
+    if not open_ones and unlinked <= 0:
+        return
+    if open_ones:
+        st.caption("Prestiti aperti")
+        for practice in open_ones:
+            repaid = euro(float(practice["repaid"]))
+            remaining = euro(float(practice["remaining"]))
+            account = str(practice.get("account") or "").strip()
+            where = f" · {account}" if account else ""
+            st.caption(
+                f"• {practice['description']}{where} · "
+                f"rientrato {repaid} · ancora {remaining}"
+            )
+    if unlinked > 0:
+        noun = "rientro non collegato" if unlinked == 1 else "rientri non collegati"
+        st.caption(f"{unlinked} {noun}. Aprili e collega all’uscita.")
+
+
+def _render_loan_link_editor(*, row: pd.Series, movement_id: int) -> None:
+    amount = float(row["importo"])
+    df = load_movements()
+    practices = loan_practices(df)
+    if amount < 0:
+        practice = practice_by_id(practices, movement_id)
+        if practice is None:
+            return
+        if practice["open"]:
+            st.caption(
+                f"Pratica aperta: rientrati {euro(float(practice['repaid']))}, "
+                f"ancora {euro(float(practice['remaining']))}."
+            )
+        elif practice["overpaid"]:
+            st.caption(
+                f"Rientrato più di quanto hai dato "
+                f"({euro(float(practice['repaid']))} su "
+                f"{euro(float(practice['outgoing']))})."
+            )
+        else:
+            st.caption("Pratica chiusa: il rientro copre l’uscita.")
+        return
+
+    if amount <= 0:
+        return
+
+    parent_id = parse_loan_parent_id(row.get("prestito_di"))
+    if parent_id:
+        practice = practice_by_id(practices, parent_id)
+        if practice:
+            st.caption(
+                f"Collegato a: {practice['description']} · "
+                f"{format_date(practice.get('date'))}."
+            )
+        else:
+            st.caption("Collegato a un prestito che non è più in archivio.")
+        return
+
+    options = open_loan_options(df, exclude_id=movement_id)
+    if not options:
+        st.caption("Nessun prestito in uscita a cui collegarlo.")
+        return
+
+    suggested = suggest_loan_parent_id(row, options)
+    option_ids = [int(item["id"]) for item in options]
+    default_index = (
+        option_ids.index(suggested) if suggested in option_ids else 0
+    )
+    chosen_id = st.selectbox(
+        "Collega a un prestito",
+        option_ids,
+        index=default_index,
+        format_func=lambda item: _loan_option_label(
+            practice_by_id(practices, int(item)) or {
+                "description": f"#{item}",
+                "remaining": 0,
+                "open": False,
+                "overpaid": False,
+                "account": "",
+                "date": None,
+            }
+        ),
+        key=f"loan_parent_{movement_id}",
+        help="L’app propone la pratica più vicina; confermi tu.",
+    )
+    if st.button(
+        "Collega",
+        type="secondary",
+        key=f"loan_link_{movement_id}",
+    ):
+        try:
+            link_repayment(movement_id, int(chosen_id))
+        except ValueError as error:
+            st.error(str(error))
+        else:
+            _queue_toast("Rientro collegato")
+            st.rerun()
 
 
 def _category_rgb(color: str) -> str:
@@ -479,6 +613,11 @@ def _category_rgb(color: str) -> str:
 )
 def _movement_edit_dialog(movement_id: int, categories: list[str]) -> None:
     df = load_movements()
+    practices = loan_practices(df)
+    settled_id = settled_parent_id(int(movement_id), practices)
+    if settled_id is not None:
+        movement_id = settled_id
+        st.session_state[_OPEN_MOVEMENT_KEY] = settled_id
     match = df[df["id"] == movement_id]
     if match.empty:
         st.warning("Movimento non trovato.")
@@ -495,6 +634,14 @@ def _movement_edit_dialog(movement_id: int, categories: list[str]) -> None:
     full_description = clean_description(row["descrizione_completa"])
     title = full_description if full_description else description
     icon = get_category_icon(category)
+    practice = practice_by_id(practices, movement_id)
+    if practice is None:
+        linked_parent = parse_loan_parent_id(row.get("prestito_di"))
+        if linked_parent:
+            practice = practice_by_id(practices, linked_parent)
+    closed_practice = (
+        practice if practice and is_linked_practice(practice) else None
+    )
     if category == INVESTMENT_CATEGORY:
         amount_label = euro(abs(amount))
     elif amount > 0:
@@ -502,12 +649,29 @@ def _movement_edit_dialog(movement_id: int, categories: list[str]) -> None:
     else:
         amount_label = euro(amount)
 
+    chip_label = f"{icon} {category}"
+    if closed_practice:
+        chip_label += (
+            " · Chiuso"
+            if is_settled_practice(closed_practice)
+            else " · Aperto"
+        )
+    show_legs = bool(practice and practice["child_ids"])
+    amount_block = ""
+    if not show_legs:
+        amount_block = f"""
+          <div style="
+              margin-top:6px;
+              font-size:13px;
+              color:var(--ft-muted);
+          ">{html.escape(amount_label)}</div>
+        """
     render_html(
         f"""
         <div class="ft-export-dialog" style="padding:2px 0 10px 0;">
           <div class="ft-appearance-chip" style="width:fit-content;">
             <span class="ft-appearance-chip-dot"></span>
-            {html.escape(icon)} {html.escape(category)}
+            {html.escape(chip_label)}
           </div>
           <div style="
               margin-top:12px;
@@ -517,14 +681,12 @@ def _movement_edit_dialog(movement_id: int, categories: list[str]) -> None:
               color:var(--ft-text);
               line-height:1.25;
           ">{html.escape(title or "Senza descrizione")}</div>
-          <div style="
-              margin-top:6px;
-              font-size:13px;
-              color:var(--ft-muted);
-          ">{html.escape(amount_label)}</div>
+          {amount_block}
         </div>
         """
     )
+    if show_legs:
+        _render_loan_practice_legs(df, practice)
     _render_movement_details(
         row=row,
         movement_id=movement_id,
@@ -536,6 +698,64 @@ def _movement_edit_dialog(movement_id: int, categories: list[str]) -> None:
         is_special=bool(row.get("speciale", False)),
         special_months=int(row.get("speciale_mesi") or 0),
     )
+
+
+def _loan_leg_title(row: pd.Series) -> str:
+    full = clean_description(row.get("descrizione_completa"))
+    short = clean_description(row.get("descrizione"))
+    return full or short or "Senza descrizione"
+
+
+def _render_loan_leg_row(row: pd.Series, *, role: str) -> None:
+    amount = float(row["importo"])
+    tone = "income" if amount > 0 else "expense"
+    displayed = f"+{euro(amount)}" if amount > 0 else euro(amount)
+    title = _loan_leg_title(row)
+    account = clean_description(row.get("account"))
+    cat_rgb = "74, 222, 128" if amount > 0 else "248, 113, 113"
+    with styled_panel(kind="movement"):
+        render_html(
+            f"""
+            <div class="ft-movement-card ft-loan-leg"
+                 style="--ft-cat-rgb:{cat_rgb};">
+                <span class="ft-movement-tone is-{tone}" hidden></span>
+                <div class="ft-loan-leg-copy">
+                    <div class="ft-movement-title">
+                        {html.escape(title)}
+                    </div>
+                    <div class="ft-movement-meta">
+                        <span class="ft-movement-cat">
+                            <span class="ft-movement-cat-dot"></span>
+                            {html.escape(role)}
+                        </span>
+                        <span>{html.escape(format_date(row.get("data")))}</span>
+                        <span class="ft-movement-dot">·</span>
+                        <span>{html.escape(account)}</span>
+                    </div>
+                </div>
+                <div class="ft-movement-amount is-{tone}">
+                    {html.escape(displayed)}
+                </div>
+            </div>
+            """
+        )
+
+
+def _render_loan_practice_legs(
+    df: pd.DataFrame,
+    practice: dict,
+) -> None:
+    parent = df[df["id"] == int(practice["id"])]
+    if parent.empty:
+        return
+    children = df[df["id"].isin(practice["child_ids"])].sort_values(
+        by=["data", "id"],
+        ascending=[True, True],
+    )
+    st.caption("Movimenti della pratica")
+    _render_loan_leg_row(parent.iloc[0], role="Uscita")
+    for _, child in children.iterrows():
+        _render_loan_leg_row(child, role="Entrata")
 
 
 def _movement_date(row: pd.Series) -> date:
@@ -617,6 +837,9 @@ def _render_movement_details(
             "Andata e ritorno nella stessa categoria."
         )
 
+    if is_loan_category(original_category):
+        _render_loan_link_editor(row=row, movement_id=movement_id)
+
     movement_type = "Entrata" if amount > 0 else "Uscita"
     marked_special = False
     spread_months = 0
@@ -661,7 +884,7 @@ def _render_movement_details(
     edited_amount = abs(float(amount))
     edited_account = str(row.get("account") or "Altro")
 
-    save_col, delete_col = st.columns([1.6, 1.2])
+    save_col, delete_col = st.columns(2)
     with save_col:
         saved = st.button(
             "Salva modifiche",
@@ -672,15 +895,32 @@ def _render_movement_details(
     with delete_col:
         confirm_key = f"confirm_delete_{movement_id}"
         if st.session_state.get(confirm_key):
-            st.warning("Eliminare questo movimento?")
+            practice_ids = loan_practice_ids(movement_id)
+            if len(practice_ids) > 1:
+                st.warning(
+                    f"Eliminare la pratica e i suoi "
+                    f"{len(practice_ids)} movimenti?"
+                )
+            else:
+                st.warning("Eliminare questo movimento?")
             yes_col, no_col = st.columns(2)
             with yes_col:
                 if st.button("Sì", key=f"delete_yes_{movement_id}", width="stretch"):
-                    snapshots = snapshot_movements([movement_id])
-                    delete_movement(movement_id)
+                    snapshots = snapshot_movements(practice_ids)
+                    delete_movements(practice_ids)
                     _close_movement_dialog()
-                    _queue_undo(restore=snapshots, label="Movimento eliminato")
-                    _queue_toast("Movimento eliminato")
+                    if len(practice_ids) > 1:
+                        _queue_undo(
+                            restore=snapshots,
+                            label="Pratica eliminata",
+                        )
+                        _queue_toast("Pratica eliminata")
+                    else:
+                        _queue_undo(
+                            restore=snapshots,
+                            label="Movimento eliminato",
+                        )
+                        _queue_toast("Movimento eliminato")
                     st.rerun()
             with no_col:
                 if st.button("No", key=f"delete_no_{movement_id}", width="stretch"):
@@ -718,6 +958,14 @@ def _render_movement_details(
         if short_description != title:
             st.caption(short_description)
 
+    linked_parent = parse_loan_parent_id(row.get("prestito_di"))
+    linked_children = (
+        loan_child_ids(movement_id)
+        if is_loan_category(original_category) and amount < 0
+        else []
+    )
+    can_unlink_loan = bool(linked_parent or linked_children)
+
     if st.session_state.get(split_open_key):
         _render_split_form(
             movement_id=movement_id,
@@ -725,17 +973,43 @@ def _render_movement_details(
             categories=categories,
             amount=amount,
         )
-    elif st.button("Dividi movimento", key=f"split_open_btn_{movement_id}"):
-        original_abs = round(abs(float(amount)), 2)
-        st.session_state[split_open_key] = True
-        st.session_state[f"split_n_{movement_id}"] = 2
-        first = round(original_abs / 2, 2)
-        second = round(original_abs - first, 2)
-        st.session_state[f"split_amt_{movement_id}_0"] = first
-        st.session_state[f"split_amt_{movement_id}_1"] = second
-        st.session_state[f"split_cat_{movement_id}_0"] = category
-        st.session_state[f"split_cat_{movement_id}_1"] = category
-        st.rerun()
+        return
+
+    if can_unlink_loan:
+        split_col, unlink_col = st.columns(2)
+    else:
+        split_col = st.container()
+        unlink_col = None
+
+    with split_col:
+        if st.button(
+            "Dividi movimento",
+            key=f"split_open_btn_{movement_id}",
+            width="stretch",
+        ):
+            original_abs = round(abs(float(amount)), 2)
+            st.session_state[split_open_key] = True
+            st.session_state[f"split_n_{movement_id}"] = 2
+            first = round(original_abs / 2, 2)
+            second = round(original_abs - first, 2)
+            st.session_state[f"split_amt_{movement_id}_0"] = first
+            st.session_state[f"split_amt_{movement_id}_1"] = second
+            st.session_state[f"split_cat_{movement_id}_0"] = category
+            st.session_state[f"split_cat_{movement_id}_1"] = category
+            st.rerun()
+    if unlink_col is not None:
+        with unlink_col:
+            if st.button(
+                "Scollega prestito",
+                key=f"loan_unlink_all_{movement_id}",
+                width="stretch",
+            ):
+                if linked_children:
+                    unlink_children(movement_id)
+                elif linked_parent:
+                    unlink_repayment(movement_id)
+                _queue_toast("Prestito scollegato")
+                st.rerun()
 
 
 def _render_split_form(
@@ -895,7 +1169,7 @@ def show_movements() -> None:
                 switch_to("manual_entry")
         return
 
-    categories = get_categories()
+    categories = get_category_names()
     _render_pending_movement_dialog(categories)
     _render_pending_merge_dialog(categories)
     months = sorted(df["mese"].dropna().unique(), reverse=True)
@@ -1119,6 +1393,7 @@ def show_movements() -> None:
                 "Il netto è quanto è rientrato meno quanto hai dato "
                 "nei filtri attuali."
             )
+        _render_loan_practices(account_scope)
     else:
         c1, c2, c3, c4, c5 = st.columns(5)
 
@@ -1157,7 +1432,6 @@ def show_movements() -> None:
                 value_color=saldo_color,
             )
 
-    total_found = len(filtered_df)
     account_label = accounts_chip_label(selected_accounts, accounts)
     if search_term:
         found_suffix = " (ricerca su tutti i mesi)"
@@ -1172,7 +1446,27 @@ def show_movements() -> None:
     if selected_types:
         found_suffix += f" · {types_chip_label(selected_types)}"
 
-    if filtered_df.empty:
+    export_df = filtered_df
+    loan_chip_practices = loan_practices(df)
+    list_df = collapse_closed_loan_rows(
+        filtered_df,
+        df,
+        loan_chip_practices,
+    )
+    sort_column = (
+        "_loan_sort_data"
+        if "_loan_sort_data" in list_df.columns
+        else "data"
+    )
+    list_df = list_df.sort_values(
+        by=[sort_column, "id"],
+        ascending=[False, False],
+        na_position="last",
+        kind="stable",
+    )
+    total_found = len(list_df)
+
+    if list_df.empty:
         st.caption(f"0 movimenti trovati{found_suffix}")
         render_html(
             """
@@ -1184,13 +1478,6 @@ def show_movements() -> None:
         return
 
     render_section_title("Lista")
-
-    filtered_df = filtered_df.sort_values(
-        by=["data", "id"],
-        ascending=[False, False],
-        na_position="last",
-        kind="stable",
-    )
     list_limit = _resolve_list_limit(
         (
             period_mode,
@@ -1203,7 +1490,7 @@ def show_movements() -> None:
             str(custom_end or ""),
         )
     )
-    visible_df = filtered_df.head(list_limit)
+    visible_df = list_df.head(list_limit)
     hidden_count = max(total_found - len(visible_df), 0)
     if hidden_count:
         st.caption(
@@ -1226,8 +1513,22 @@ def show_movements() -> None:
         is_special = bool(row.get("speciale", False))
         special_months = int(row.get("speciale_mesi") or 0)
         movement_id = int(row["id"])
+        closed_practice = None
+        if bool(row.get("_loan_closed")):
+            closed_practice = practice_by_id(loan_chip_practices, movement_id)
+            if closed_practice and not is_linked_practice(closed_practice):
+                closed_practice = None
 
-        if is_investment:
+        if closed_practice:
+            if is_settled_practice(closed_practice):
+                tone = "transfer"
+                displayed_amount = euro(0)
+            else:
+                tone = "expense"
+                displayed_amount = euro(
+                    -abs(float(closed_practice["remaining"]))
+                )
+        elif is_investment:
             tone = "investment"
             displayed_amount = euro(abs(amount))
         elif is_non_operating_category(category):
@@ -1248,10 +1549,47 @@ def show_movements() -> None:
         full_description = clean_description(row["descrizione_completa"])
         title = full_description if full_description else description
         account = clean_description(row["account"])
+        if closed_practice:
+            children = df[df["id"].isin(closed_practice["child_ids"])]
+            member_dates = pd.concat(
+                [
+                    pd.Series([pd.to_datetime(row["data"], errors="coerce")]),
+                    pd.to_datetime(children["data"], errors="coerce"),
+                ],
+                ignore_index=True,
+            )
+            start_date = member_dates.min()
+            end_date = member_dates.max()
+            start_label = format_date(start_date)
+            end_label = format_date(end_date)
+            date = (
+                start_label
+                if start_label == end_label
+                else f"{start_label} → {end_label}"
+            )
+            child_accounts = {
+                clean_description(value)
+                for value in children["account"].tolist()
+                if clean_description(value)
+            }
+            if account:
+                child_accounts.add(account)
+            if len(child_accounts) > 1:
+                account = " · ".join(sorted(child_accounts))
         category_rgb = _category_rgb(
             get_category_color(category, category_defs)
         )
         flags = ""
+        if closed_practice:
+            if is_settled_practice(closed_practice):
+                flags += '<span class="ft-movement-flag">Chiuso</span>'
+            else:
+                flags += '<span class="ft-movement-flag">Aperto</span>'
+                repaid = euro(float(closed_practice["repaid"]))
+                flags += (
+                    f'<span class="ft-movement-flag">'
+                    f"rientrato {html.escape(repaid)}</span>"
+                )
         if is_special:
             flag_label = "Speciale"
             if special_months > 0:
@@ -1262,6 +1600,13 @@ def show_movements() -> None:
             )
         if str(row.get("notes") or "").strip():
             flags += '<span class="ft-movement-flag">Nota</span>'
+        if not closed_practice:
+            loan_chip = movement_loan_chip(row, loan_chip_practices)
+            if loan_chip:
+                flags += (
+                    f'<span class="ft-movement-flag">'
+                    f"{html.escape(loan_chip)}</span>"
+                )
 
         with styled_panel(kind="movement"):
             select_col, body_col, amount_col, action_col = st.columns(
@@ -1403,6 +1748,7 @@ def show_movements() -> None:
                     "speciale",
                     "speciale_mesi",
                     "notes",
+                    "prestito_di",
                 ]
             ],
             width="stretch",
