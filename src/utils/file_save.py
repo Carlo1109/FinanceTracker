@@ -105,7 +105,7 @@ def _reveal_in_file_manager(path: Path) -> None:
     resolved = str(path.resolve())
     try:
         if sys.platform == "win32":
-            subprocess.Popen(["explorer", f"/select,{resolved}"])
+            subprocess.Popen(["explorer", "/select,", resolved])
         elif sys.platform == "darwin":
             subprocess.Popen(["open", "-R", resolved])
         else:

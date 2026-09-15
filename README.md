@@ -45,7 +45,7 @@ FinanceTracker è un'app desktop sviluppata in Python per gestire le proprie fin
 
 ## 📖 Manuale
 
-Categorie speciali (prestiti, rimborsi, trasferimenti, …), split, import: **[MANUALE.md](MANUALE.md)**.
+Categorie speciali (prestiti, rimborsi, trasferimenti, …), split, import: **[MANUAL.md](MANUAL.md)**.
 
 ## 🚀 Download
 

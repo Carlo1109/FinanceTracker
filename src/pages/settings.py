@@ -41,6 +41,7 @@ from src.theme.colors import get_category_color
 from src.theme.tokens import ACCENTS, THEMES, resolve_palette
 from src.theme.style import apply_theme
 from src.utils.export_excel import movements_export_filename
+from src.utils.file_save import save_and_reveal
 from src.utils.formatting import euro
 from src.utils.version import get_app_version
 
@@ -968,7 +969,7 @@ def show_settings() -> None:
         with styled_panel():
             _settings_section_header("Backup", chip="Sicurezza")
             st.caption(
-                "Esporta o ripristina database e categorie in un file zip."
+                "Crea uno zip con database e categorie e lo salva in Download."
             )
 
             if st.button(
@@ -977,17 +978,11 @@ def show_settings() -> None:
                 type="primary",
             ):
                 backup_path = create_backup()
-                st.toast("Backup creato correttamente.")
-
-                with open(backup_path, "rb") as backup_file:
-                    st.download_button(
-                        "⬇️ Scarica backup",
-                        data=backup_file,
-                        file_name=backup_path.name,
-                        mime="application/zip",
-                        width="stretch",
-                        type="primary",
-                    )
+                saved = save_and_reveal(
+                    backup_path.read_bytes(),
+                    backup_path.name,
+                )
+                st.toast(f"Salvato in Download: {saved.name}")
 
             st.caption(
                 "Ripristino: sostituisce database e categorie. "

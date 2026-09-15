@@ -485,8 +485,6 @@ def _loan_option_label(practice: dict) -> str:
     suffix = f" · {account}" if account else ""
     if practice.get("open"):
         state = f"ancora {euro(float(practice['remaining']))}"
-    elif practice.get("overpaid"):
-        state = "chiuso+"
     else:
         state = "chiuso"
     return (

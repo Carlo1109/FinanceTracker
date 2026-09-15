@@ -139,7 +139,7 @@ Dopo un Salva, se c’è qualcosa di nuovo da imparare: proponiamo una keyword. 
 
 ### Export e backup
 
-Excel in **Download**, si apre la cartella. Backup zip (database + categorie) da Impostazioni; in dashboard vuota puoi **partire da un backup**.
+Excel e backup zip in **Download**, si apre la cartella. Il backup resta anche in archivio locale. In dashboard vuota puoi **partire da un backup**.
 
 Percorsi dati: Windows `%LOCALAPPDATA%\FinanceTracker\`, Linux `~/.local/share/FinanceTracker/`, macOS `~/Library/Application Support/FinanceTracker/`.
 

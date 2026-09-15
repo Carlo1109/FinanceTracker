@@ -8,12 +8,14 @@
 - Lista Movimenti: pratica collegata = **una riga** (**Aperto** col residuo, o **Chiuso** a 0,00 €)
 - **Modifica** apre la pratica: uscita e rientri insieme. **Scollega prestito** li separa; **Elimina** toglie tutta la pratica
 - Se togli la categoria Prestiti, i collegamenti cadono da soli
-- **Manuale** (`MANUALE.md`): Manuale per capire di più su categorie speciali, split, import e prestiti
+- **Manuale** (`MANUAL.md`): Manuale per capire di più su categorie speciali, split, import e prestiti
 
 ### Interfaccia
 
 - Dialog prestito: chip **Prestiti · Aperto/Chiuso** e card dei movimenti della pratica
 - **Scollega prestito** accanto a **Dividi movimento**
+- Backup: come l’Excel, si salva in **Download** e si apre la cartella (su Windows il tasto Scarica del browser non partiva)
+- Pratica con rientro un filo sopra: in lista e nel menu resta **chiuso**; il dettaglio sta in modifica
 
 ## v1.5.2
 
