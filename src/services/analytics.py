@@ -28,7 +28,7 @@ def is_loan_category(category: object) -> bool:
 
 
 def is_non_operating_category(category: object) -> bool:
-    """Trasferimenti, saldo iniziale e prestiti: fuori da entrate/uscite, nel saldo conto."""
+    """Trasferimenti, saldo iniziale e anticipi & recuperi: fuori da entrate/uscite, nel saldo conto."""
     name = str(category)
     return name in {
         TRANSFER_CATEGORY,

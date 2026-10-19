@@ -549,7 +549,7 @@ def _render_loan_link_editor(*, row: pd.Series, movement_id: int) -> None:
                 f"{format_date(practice.get('date'))}."
             )
         else:
-            st.caption("Collegato a un prestito che non è più in archivio.")
+            st.caption("Collegato a un ""Anticipo & Recupero"" che non è più in archivio.")
         return
 
     options = open_loan_options(df, exclude_id=movement_id)
@@ -1006,7 +1006,7 @@ def _render_movement_details(
                     unlink_children(movement_id)
                 elif linked_parent:
                     unlink_repayment(movement_id)
-                _queue_toast("Prestito scollegato")
+                _queue_toast("Anticipo & Recupero scollegato")
                 st.rerun()
 
 
@@ -1378,7 +1378,7 @@ def show_movements() -> None:
         open_net = float(loan_summary["open_net"])
         if open_net < -0.004:
             st.caption(
-                f"Ancora in prestito sui conti filtrati: "
+                f"Ancora in debito sui conti filtrati: "
                 f"{euro(abs(open_net))}."
             )
         elif open_net > 0.004:
