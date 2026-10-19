@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.5.4
+
+- Categoria **Prestiti** rinominata **Anticipi & Recuperi**; i movimenti già archiviati si aggiornano al primo avvio
+
 ## v1.5.3
 
 ### Funzionalità

@@ -499,7 +499,7 @@ def _render_loan_practices(source_df: pd.DataFrame) -> None:
     if not open_ones and unlinked <= 0:
         return
     if open_ones:
-        st.caption("Prestiti aperti")
+        st.caption("Anticipi aperti")
         for practice in open_ones:
             repaid = euro(float(practice["repaid"]))
             remaining = euro(float(practice["remaining"]))
@@ -554,7 +554,7 @@ def _render_loan_link_editor(*, row: pd.Series, movement_id: int) -> None:
 
     options = open_loan_options(df, exclude_id=movement_id)
     if not options:
-        st.caption("Nessun prestito in uscita a cui collegarlo.")
+        st.caption("Nessun anticipo in uscita a cui collegarlo.")
         return
 
     suggested = suggest_loan_parent_id(row, options)
@@ -563,7 +563,7 @@ def _render_loan_link_editor(*, row: pd.Series, movement_id: int) -> None:
         option_ids.index(suggested) if suggested in option_ids else 0
     )
     chosen_id = st.selectbox(
-        "Collega a un prestito",
+        "Collega a un movimento ""Anticipo & Recupero"" in uscita",
         option_ids,
         index=default_index,
         format_func=lambda item: _loan_option_label(
@@ -830,7 +830,7 @@ def _render_movement_details(
         )
     elif is_loan_category(new_category):
         st.caption(
-            "I prestiti non entrano in entrate o uscite, "
+            "Gli anticipi e i recuperi non entrano in entrate o uscite, "
             "ma contano nel saldo del conto. "
             "Andata e ritorno nella stessa categoria."
         )
@@ -998,7 +998,7 @@ def _render_movement_details(
     if unlink_col is not None:
         with unlink_col:
             if st.button(
-                "Scollega prestito",
+                "Scollega",
                 key=f"loan_unlink_all_{movement_id}",
                 width="stretch",
             ):

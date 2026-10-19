@@ -93,7 +93,7 @@ def show_manual_entry() -> None:
             )
         elif is_loan_category(category):
             st.caption(
-                "I prestiti non entrano in entrate o uscite, "
+                "Gli anticipi e i recuperi non entrano in entrate o uscite, "
                 "ma contano nel saldo del conto. "
                 "Andata e ritorno nella stessa categoria."
             )

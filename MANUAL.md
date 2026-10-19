@@ -11,8 +11,8 @@ Ogni movimento tocca il **conto**. Non tutti toccano il **tenore di vita**.
 
 | Cosa guardi                                  | Cosa conta                                                                                                                  |
 | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| **Liquidità**                                | Tutto il cash: spese, stipendi, giri tra conti, prestiti, saldo iniziale, investimenti                                               |
-| **Entrate / Uscite / medie / grafici / tasso** | Solo il quotidiano. Fuori: trasferimenti interni, saldo iniziale, prestiti. Gli **investimenti** hanno un KPI loro, non sono uscite |
+| **Liquidità**                                | Tutto il cash: spese, stipendi, giri tra conti, anticipi e recuperi, saldo iniziale, investimenti                                    |
+| **Entrate / Uscite / medie / grafici / tasso** | Solo il quotidiano. Fuori: trasferimenti interni, saldo iniziale, anticipi e recuperi. Gli **investimenti** hanno un KPI loro, non sono uscite |
 
 
 Se Fineco «sembra ricca» in liquidità e «povera» nel tasso, di solito c’è un giroconto in entrata: soldi già tuoi, non reddito.
@@ -55,19 +55,19 @@ PAC, ETF, compravendita titoli.
 
 Esempio: -50 € Compravendita Titoli. Uscite del mese invariate; liquidità Fineco -50.
 
-### Prestiti
+### Anticipi & Recuperi
 
 Soldi **tra persone** (o un tab da chiudere), andata e ritorno. Non la rata banca / mutuo: quella è spesa (Casa, Gestione conti, …).
 
 - Fuori da entrate/uscite
 - Nella liquidità
-- Filtro **Prestiti** in Movimenti: **Prestati / Rientrati / Netto**
+- Filtro **Anticipi & Recuperi** in Movimenti: **Prestati / Rientrati / Netto**
 
-**Collegare.** Solo dall’**entrata** Prestiti: *Collega a un prestito* (l’app propone, confermi). L’uscita è la pratica. Con almeno un rientro collegato, in lista vedi **una riga** (aperta o chiusa). **Modifica** mostra uscita e rientri. **Scollega prestito** li separa. **Elimina** toglie tutta la pratica. Se togli la categoria Prestiti, i link cadono da soli.
+**Collegare.** Solo dall’**entrata** Anticipi & Recuperi: *Collega a un prestito* (l’app propone, confermi). L’uscita è la pratica. Con almeno un rientro collegato, in lista vedi **una riga** (aperta o chiusa). **Modifica** mostra uscita e rientri. **Scollega prestito** li separa. **Elimina** toglie tutta la pratica. Se togli la categoria Anticipi & Recuperi, i link cadono da soli.
 
-Esempio: presti 50 € per un bus (−50 Prestiti). Quando tornano (+50 Prestiti) colleghi. Lista: una riga **Chiuso**, 0,00 €. Se torna solo 30 €: una riga **Aperto**, ancora −20 €.
+Esempio: anticipi 50 € per un bus (−50 Anticipi & Recuperi). Quando tornano (+50 Anticipi & Recuperi) colleghi. Lista: una riga **Chiuso**, 0,00 €. Se torna solo 30 €: una riga **Aperto**, ancora −20 €.
 
-Non usare Prestiti per l’affitto o la spesa del mese: quello è consumo, non un prestito.
+Non usare Anticipi & Recuperi per l’affitto o la spesa del mese: quello è consumo, non un prestito.
 
 ### Rimborsi
 
@@ -93,7 +93,7 @@ Su un’**uscita** normale: flag **Spesa speciale**.
 - **0 mesi** = fuori dalla **media giornaliera** (una tantum)
 - **N mesi** = in media si spalma (abbonamento annuale / 12)
 
-Non è possibile su trasferimenti interni, prestiti, saldo iniziale, investimenti.
+Non è possibile su trasferimenti interni, anticipi e recuperi, saldo iniziale, investimenti.
 
 Esempio: −120 € Netflix annuale, speciale 12 mesi. In uscite ci sono 120 € associati al mese in cui hai pagato; in media giornaliera pesa come 10 €/mese.
 
@@ -115,7 +115,7 @@ Fineco: se reimporti, la stessa riga (stesso hash) si salta. Un **Autorizzato** 
 
 Dashboard e Movimenti: più conti, Entrate / Uscite / Investimenti, mese o **intervallo**. Nessun filtro conti/tipi = tutti.
 
-Prestiti e trasferimenti **non** compaiono se filtri solo Entrate o Uscite: non sono operativi. Per vederli, tipo vuoto (tutti) o categoria Prestiti.
+Anticipi & Recuperi e trasferimenti **non** compaiono se filtri solo Entrate o Uscite: non sono operativi. Per vederli, tipo vuoto (tutti) o categoria Anticipi & Recuperi.
 
 ### Modificare
 

@@ -37,8 +37,7 @@ DEFAULT_CATEGORY_ICONS = {
     "Svago & Tempo libero": "🎮",
     "Abbonamenti": "📺",
     "Regali & Donazioni": "🎁",
-    "Regali, Donazioni & Prestiti": "🎁",
-    "Prestiti": "🤝",
+    "Anticipi & Recuperi": "🤝",
     "Altro": "❓",
 }
 
@@ -197,7 +196,7 @@ def _prune_live_names_from_removed(
 
 _LEGACY_CATEGORY_NAMES = {
     "Regali, Donazioni & Prestiti": "Regali & Donazioni",
-    "Regali, Donazioni &  Prestiti": "Regali & Donazioni",
+    "Prestiti": "Anticipi & Recuperi",
 }
 
 
@@ -474,8 +473,11 @@ def _normalize_category_definitions(
         }
         changed = True
 
-    if "Prestiti" not in normalized:
-        normalized["Prestiti"] = {
+    if (
+        "Anticipi & Recuperi" not in normalized
+        and "Prestiti" not in normalized
+    ):
+        normalized["Anticipi & Recuperi"] = {
             "icon": "🤝",
             "keywords": [
                 "PRESTITO",
@@ -665,7 +667,7 @@ RENAME_LOCKED_CATEGORIES = {
     "Trasferimenti interni",
     "Saldo iniziale",
     "Investimenti",
-    "Prestiti",
+    "Anticipi & Recuperi",
 }
 
 
@@ -673,7 +675,7 @@ def rename_category(old_name: str, new_name: str) -> tuple[bool, int]:
     """
     Rinomina una categoria e aggiorna i movimenti.
 
-    Non rinomina Altro, trasferimenti, saldo iniziale, investimenti e prestiti.
+    Non rinomina Altro, trasferimenti, saldo iniziale, investimenti e anticipi.
     """
     old_name = str(old_name).strip()
     new_name = str(new_name).strip()

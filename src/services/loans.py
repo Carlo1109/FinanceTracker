@@ -1,4 +1,4 @@
-"""Collegamento andata/ritorno della categoria Prestiti."""
+"""Collegamento andata/ritorno della categoria Anticipi & Recuperi."""
 
 from __future__ import annotations
 
@@ -126,7 +126,7 @@ def unlink_children(parent_id: int) -> None:
 
 
 def sanitize_loan_links(conn: Any | None = None) -> None:
-    """Toglie link se uscita/entrata non sono più Prestiti validi."""
+    """Toglie i link se uscita/entrata non sono più movimenti validi."""
     own = conn is None
     if own:
         conn = get_connection()
@@ -219,9 +219,12 @@ def link_repayment(child_id: int, parent_id: int) -> None:
         if child is None or parent is None:
             raise ValueError("Movimento non trovato.")
         if not _is_loan_in(child["category"], child["amount"]):
-            raise ValueError("Si collega solo un rientro Prestiti.")
+            raise ValueError("Si collega solo un rientro Anticipi & Recuperi.")
         if not _is_loan_out(parent["category"], parent["amount"]):
-            raise ValueError("Il prestito di destinazione deve essere un’uscita Prestiti.")
+            raise ValueError(
+                "Il prestito di destinazione deve essere un’uscita "
+                "Anticipi & Recuperi."
+            )
         if parse_loan_parent_id(parent["prestito_di"]):
             raise ValueError("Quel movimento è già un rientro, non una pratica.")
         conn.execute(
@@ -423,7 +426,7 @@ def collapse_closed_loan_rows(
     source_df: pd.DataFrame,
     practices: list[dict[str, Any]] | None = None,
 ) -> pd.DataFrame:
-    """Una riga per pratica Prestiti collegata (anche parziale)."""
+    """Una riga per pratica collegata (anche parziale)."""
     if filtered_df is None or filtered_df.empty:
         return filtered_df
     working = filtered_df.copy()

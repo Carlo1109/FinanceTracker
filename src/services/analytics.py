@@ -9,7 +9,7 @@ import pandas as pd
 INVESTMENT_CATEGORY = "Investimenti"
 TRANSFER_CATEGORY = "Trasferimenti interni"
 INITIAL_BALANCE_CATEGORY = "Saldo iniziale"
-LOAN_CATEGORY = "Prestiti"
+LOAN_CATEGORY = "Anticipi & Recuperi"
 RIMBORSO_CATEGORY = "Rimborsi"
 PERIOD_CUSTOM = "Intervallo personalizzato"
 PERIOD_CUSTOM_ALIASES = ("Da – a", "Da - a")
@@ -846,7 +846,7 @@ def loan_flow_summary(
     *,
     source_df: pd.DataFrame | None = None,
 ) -> dict[str, float]:
-    """Flussi Prestiti: dati e rientrati nel periodo, netto aperto sui conti."""
+    """Flussi anticipi/recuperi: dati e rientri nel periodo, netto aperto."""
 
     def _loan_frame(frame: pd.DataFrame) -> pd.DataFrame:
         if frame is None or frame.empty or "categoria" not in frame.columns:
