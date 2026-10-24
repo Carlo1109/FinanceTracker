@@ -468,6 +468,36 @@ def _apply_settlement_merge(
             return False
     settled_id = settled.get("id")
     if settled_id and settled_id != keep["id"]:
+        old_hash = str(keep.get("hash") or "")
+        aliases = conn.execute(
+            """
+            SELECT movement_hash
+            FROM movement_hash_aliases
+            WHERE movement_id = ?
+            """,
+            (settled_id,),
+        ).fetchall()
+        conn.execute(
+            "DELETE FROM movement_hash_aliases WHERE movement_id = ?",
+            (settled_id,),
+        )
+        if old_hash and old_hash != new_hash:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO movement_hash_aliases
+                    (movement_hash, movement_id)
+                VALUES (?, ?)
+                """,
+                (old_hash, keep["id"]),
+            )
+        conn.executemany(
+            """
+            INSERT OR IGNORE INTO movement_hash_aliases
+                (movement_hash, movement_id)
+            VALUES (?, ?)
+            """,
+            [(str(alias[0]), keep["id"]) for alias in aliases],
+        )
         conn.execute("DELETE FROM movements WHERE id = ?", (settled_id,))
     conn.execute(
         """
@@ -589,7 +619,14 @@ def _load_fineco_records(
 
 def _hash_set(conn: sqlite3.Connection) -> set[str]:
     rows = conn.execute("SELECT movement_hash FROM movements").fetchall()
-    return {str(row[0]) for row in rows if row and row[0]}
+    aliases = conn.execute(
+        "SELECT movement_hash FROM movement_hash_aliases"
+    ).fetchall()
+    return {
+        str(row[0])
+        for row in [*rows, *aliases]
+        if row and row[0]
+    }
 
 
 def preview_movements(
@@ -1057,6 +1094,7 @@ def get_movement(movement_id: int) -> dict[str, Any] | None:
             """
             SELECT
                 id,
+                movement_hash,
                 date,
                 operation_date,
                 value_date,
@@ -1095,7 +1133,22 @@ def snapshot_movements(movement_ids: list[int]) -> list[dict[str, Any]]:
             f"SELECT * FROM movements WHERE id IN ({placeholders})",
             unique_ids,
         ).fetchall()
+        alias_rows = conn.execute(
+            f"""
+            SELECT movement_id, movement_hash
+            FROM movement_hash_aliases
+            WHERE movement_id IN ({placeholders})
+            """,
+            unique_ids,
+        ).fetchall()
     by_id = {int(row["id"]): dict(row) for row in rows}
+    aliases_by_id: dict[int, list[str]] = {}
+    for row in alias_rows:
+        aliases_by_id.setdefault(int(row["movement_id"]), []).append(
+            str(row["movement_hash"])
+        )
+    for movement_id, row in by_id.items():
+        row["_movement_hash_aliases"] = aliases_by_id.get(movement_id, [])
     return [by_id[item] for item in unique_ids if item in by_id]
 
 
@@ -1108,6 +1161,11 @@ def restore_movement_snapshots(rows: list[dict[str, Any]]) -> None:
             "PRAGMA table_info(movements)"
         ).fetchall()]
         for row in rows:
+            movement_id = int(row["id"])
+            conn.execute(
+                "DELETE FROM movement_hash_aliases WHERE movement_id = ?",
+                (movement_id,),
+            )
             usable = [name for name in columns if name in row]
             if not usable:
                 continue
@@ -1120,6 +1178,19 @@ def restore_movement_snapshots(rows: list[dict[str, Any]]) -> None:
                 """,
                 [row.get(name) for name in usable],
             )
+            conn.executemany(
+                """
+                INSERT OR IGNORE INTO movement_hash_aliases
+                    (movement_hash, movement_id)
+                VALUES (?, ?)
+                """,
+                [
+                    (str(movement_hash), movement_id)
+                    for movement_hash in row.get(
+                        "_movement_hash_aliases", []
+                    )
+                ],
+            )
         conn.commit()
 
 
@@ -1128,6 +1199,14 @@ def delete_movements(movement_ids: list[int]) -> None:
     if not unique_ids:
         return
     with get_connection() as conn:
+        placeholders = ", ".join("?" for _ in unique_ids)
+        conn.execute(
+            f"""
+            DELETE FROM movement_hash_aliases
+            WHERE movement_id IN ({placeholders})
+            """,
+            unique_ids,
+        )
         conn.executemany(
             "UPDATE movements SET prestito_di = NULL WHERE prestito_di = ?",
             [(item,) for item in unique_ids],
@@ -1370,8 +1449,9 @@ def merge_movements(
     """
     Unisce più movimenti in uno.
 
-    Resta la riga più vecchia (hash invariato). Le altre vengono
-    eliminate. Devono appartenere allo stesso conto.
+    Resta la riga più vecchia; gli hash delle righe eliminate vengono
+    conservati come alias per riconoscere i movimenti al reimport.
+    Devono appartenere allo stesso conto.
     """
     unique_ids = list(dict.fromkeys(int(item) for item in movement_ids))
     if len(unique_ids) < 2:
@@ -1405,6 +1485,23 @@ def merge_movements(
     loaded.sort(key=_sort_key)
     survivor = loaded[0]
     drop_ids = [int(row["id"]) for row in loaded[1:]]
+    merged_hashes = {
+        str(row["movement_hash"])
+        for row in loaded
+        if row.get("movement_hash")
+    }
+    if drop_ids:
+        placeholders = ", ".join("?" for _ in unique_ids)
+        with get_connection() as conn:
+            aliases = conn.execute(
+                f"""
+                SELECT movement_hash
+                FROM movement_hash_aliases
+                WHERE movement_id IN ({placeholders})
+                """,
+                unique_ids,
+            ).fetchall()
+            merged_hashes.update(str(row[0]) for row in aliases)
     parsed_date = _parse_date_value(survivor.get("date"))
     if pd.isna(parsed_date):
         raise ValueError("Data originale non valida.")
@@ -1429,6 +1526,24 @@ def merge_movements(
 
     survivor_id = int(survivor["id"])
     with get_connection() as conn:
+        conn.execute(
+            "DELETE FROM movement_hash_aliases WHERE movement_id IN "
+            f"({', '.join('?' for _ in unique_ids)})",
+            unique_ids,
+        )
+        survivor_hash = str(survivor.get("movement_hash") or "")
+        conn.executemany(
+            """
+            INSERT OR IGNORE INTO movement_hash_aliases
+                (movement_hash, movement_id)
+            VALUES (?, ?)
+            """,
+            [
+                (movement_hash, survivor_id)
+                for movement_hash in merged_hashes
+                if movement_hash and movement_hash != survivor_hash
+            ],
+        )
         if is_loan_category(category) and total < 0:
             conn.executemany(
                 "UPDATE movements SET prestito_di = ? WHERE prestito_di = ?",
@@ -1461,6 +1576,14 @@ def delete_account(account: str) -> int:
             ).fetchall()
         ]
         if parent_ids:
+            placeholders = ", ".join("?" for _ in parent_ids)
+            conn.execute(
+                f"""
+                DELETE FROM movement_hash_aliases
+                WHERE movement_id IN ({placeholders})
+                """,
+                parent_ids,
+            )
             conn.executemany(
                 "UPDATE movements SET prestito_di = NULL WHERE prestito_di = ?",
                 [(item,) for item in parent_ids],

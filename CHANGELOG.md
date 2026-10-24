@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.5.5
+
+### Bugfix
+
+- Unisci movimenti: conserva gli hash dei movimenti originali, così il reimport non li reinserisce come duplicati; gli hash vengono ripristinati anche annullando l’unione
+
 ## v1.5.4
 
 - Categoria **Prestiti** rinominata **Anticipi & Recuperi**; i movimenti già archiviati si aggiornano al primo avvio

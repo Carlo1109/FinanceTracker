@@ -75,6 +75,15 @@ def init_db() -> None:
             """
         )
 
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS movement_hash_aliases (
+                movement_hash TEXT PRIMARY KEY,
+                movement_id INTEGER NOT NULL
+            )
+            """
+        )
+
         columns = connection.execute(
             "PRAGMA table_info(movements)"
         ).fetchall()
