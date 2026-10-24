@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.5.6
+
+### Build
+
+- Release Linux: runner fissato a Ubuntu 24.04 per garantire la compatibilità di PyGObject con Python 3.12; aggiornate le GitHub Actions al runtime Node.js 24
+
 ## v1.5.5
 
 ### Bugfix
