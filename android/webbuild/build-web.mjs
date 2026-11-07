@@ -245,6 +245,33 @@ print("Controllo app OK:", len(df), "movimento, export Excel e backup generati")
   return { lock, installed };
 }
 
+// Il lockfile congelato può indicare i file in tre modi:
+//  - URL (pacchetti presi da PyPI da micropip)          -> download
+//  - percorso assoluto nella cache locale di Node       -> lettura dal disco
+//  - nome relativo (pacchetti della distribuzione Pyodide) -> cache o CDN
+async function fetchPackageFile(key, source, cdn) {
+  if (/^https?:\/\//.test(source)) {
+    const fileName = decodeURIComponent(new URL(source).pathname.split("/").pop());
+    return { fileName, data: await download(source) };
+  }
+  if (source.startsWith("emfs:")) {
+    throw new Error(`Pacchetto ${key} installato da file locale non previsto: ${source}`);
+  }
+
+  const localPath = source.startsWith("file://") ? fileURLToPath(source) : source;
+  const fileName = path.basename(localPath);
+  const candidates = [
+    path.isAbsolute(localPath) ? localPath : null,
+    path.join(PKG_CACHE, fileName),
+    path.join(PYODIDE_DIR, fileName),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return { fileName, data: fs.readFileSync(candidate) };
+  }
+  return { fileName, data: await download(cdn + fileName) };
+}
+
 async function writeOfflinePyodide({ lock, installed }) {
   const outDir = path.join(OUT, "pyodide");
   log("Pyodide offline in", path.relative(REPO, outDir));
@@ -296,19 +323,7 @@ async function writeOfflinePyodide({ lock, installed }) {
     const pkg = { ...lock.packages[key] };
     const source = String(pkg.file_name);
 
-    let fileName;
-    let data;
-    if (/^https?:\/\//.test(source)) {
-      fileName = decodeURIComponent(new URL(source).pathname.split("/").pop());
-      data = await download(source);
-    } else if (source.startsWith("emfs:")) {
-      throw new Error(`Pacchetto ${key} installato da file locale non previsto: ${source}`);
-    } else {
-      fileName = source;
-      const cached = path.join(PKG_CACHE, source);
-      data = fs.existsSync(cached) ? fs.readFileSync(cached) : await download(cdn + source);
-    }
-
+    const { fileName, data } = await fetchPackageFile(key, source, cdn);
     if (pkg.sha256 && sha256(data) !== pkg.sha256) {
       throw new Error(`Checksum errato per ${fileName}`);
     }
