@@ -7,8 +7,8 @@
  *  - l'app deve avviarsi solo con i file locali (prova dell'offline);
  *  - ogni pagina deve aprirsi senza errori Python;
  *  - un movimento salvato deve esserci ancora dopo il riavvio (persistenza);
- *  - con la cartella dei dati (ponte nativo simulato) i dati vanno nella
- *    cartella e tornano da lì dopo una "reinstallazione".
+ *  - (con FT_TEST_FOLDER=1) cartella dei dati: i dati vanno nella cartella
+ *    e tornano da lì dopo una "reinstallazione".
  * Salva uno screenshot per pagina. Esce con codice 1 se qualcosa non va.
  */
 
@@ -216,7 +216,8 @@ async function folderPage(options) {
   return { ctx, folderPg };
 }
 
-if (!failures.length) {
+// Cartella dei dati: per ora spenta nell'app (vedi FOLDER_STORAGE_ENABLED in android/web/native.js).
+if (process.env.FT_TEST_FOLDER === "1" && !failures.length) {
   try {
     console.log("Cartella dei dati: primo avvio...");
     const first = await folderPage({ configured: false, folder: {} });
@@ -282,4 +283,4 @@ if (failures.length) {
   console.error("\nPROVA FALLITA:\n" + failures.map((f) => " - " + f).join("\n"));
   process.exit(1);
 }
-console.log("\nProva superata: avvio offline, tutte le pagine, persistenza, cartella dei dati.");
+console.log("\nProva superata: avvio offline, tutte le pagine, persistenza.");

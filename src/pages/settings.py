@@ -723,7 +723,7 @@ def _render_android_storage_info() -> None:
     st.caption("Dove sono i tuoi dati sul telefono.")
 
     with styled_panel():
-        _settings_section_header("Cartella dei dati", chip="Telefono")
+        _settings_section_header("Dati dell'app", chip="Privati")
         st.html(
             '<div data-ft-widget="storage">'
             "I dati sono nella memoria dell'app."
@@ -736,8 +736,8 @@ def _render_android_storage_info() -> None:
             """
             <div style="font-size:14px;line-height:1.5;color:var(--ft-text);">
               I backup (.zip) e gli export Excel si salvano nella cartella
-              <b>Download</b> del telefono; i backup anche in <b>backups/</b>
-              dentro la cartella dei dati, se l'hai scelta.
+              <b>Download</b> del telefono: li trovi nell'app File e puoi
+              inviarli su Drive, via mail o al PC.
             </div>
             """
         )

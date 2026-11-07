@@ -6,9 +6,8 @@
 
 - Backup: oltre a **Sostituisci tutto** c’è **Unisci al database**, che aggiunge solo i movimenti e le categorie mancanti (riconosciuti come negli import) senza cancellare nulla. I collegamenti dei prestiti restano corretti. Serve per allineare PC e telefono
 - **Promemoria backup** in Dashboard se l’ultimo backup ha più di 14 giorni o non è mai stato fatto, con **Crea backup ora** e **Più tardi**
-- Android: **cartella dei dati sul telefono**, scelta al primo avvio (es. Documenti/FinanceTracker). Database, categorie e backup sono lì, visibili dall’app File come sul PC, e **restano anche disinstallando l’app**. Se un’altra app (es. una sincronizzazione) cambia il file, FinanceTracker non lo sovrascrive e chiede cosa fare
 - Android: **blocco con impronta, volto o PIN** del telefono, all’apertura e dopo 30 secondi in background; con il blocco attivo screenshot e anteprima nelle app recenti sono nascosti
-- Android: **Opzioni → Dati** mostra la cartella dei dati (con «Cambia cartella»), dove finiscono backup ed export e il blocco dell’app
+- Android: **Opzioni → Dati** spiega dove stanno i dati (memoria privata dell’app) e dove finiscono backup ed export (Download), e contiene il blocco dell’app
 
 ### Interfaccia
 

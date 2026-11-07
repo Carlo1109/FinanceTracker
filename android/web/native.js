@@ -20,6 +20,14 @@
 
 const bridge = window.FTAndroid;
 
+/*
+ * Cartella dei dati sul telefono: per ora SPENTA (v1.7.0).
+ * Il codice è completo ma la prova automatica su GitHub non riusciva a
+ * superare la scelta della cartella al primo avvio. Per riattivarla:
+ * true qui e FT_TEST_FOLDER=1 nella prova (android/webbuild/smoke-test.mjs).
+ */
+const FOLDER_STORAGE_ENABLED = false;
+
 export const DATA_FILES = ["finance_tracker.db", "categories.json"];
 const SYNC_INTERVAL_MS = 2000;
 
@@ -112,7 +120,7 @@ export function pickFolder() {
  * cartella dentro la schermata di avvio e aspetta la risposta.
  */
 export async function firstRunFolderChoice(ui) {
-  if (!available()) return;
+  if (!available() || !FOLDER_STORAGE_ENABLED) return;
   const state = storageState();
   if (state.configured || state.prompted) return;
 
@@ -138,7 +146,7 @@ export async function firstRunFolderChoice(ui) {
  */
 export function loadInitialFiles() {
   const files = {};
-  if (!available()) return files;
+  if (!available() || !FOLDER_STORAGE_ENABLED) return files;
 
   const state = storageState();
   sync.configured = !!state.configured;
@@ -403,6 +411,14 @@ function injectStyles() {
 
 function renderStorage(el) {
   let html;
+  if (!FOLDER_STORAGE_ENABLED) {
+    el.innerHTML = `
+      <div class="ft-nw-status"><span class="ft-nw-dot is-ok"></span>Memoria interna dell'app</div>
+      <div class="ft-nw-sub">Movimenti, categorie e impostazioni restano sul telefono, privati e offline,
+        esclusi dal backup automatico di Google. Si perdono solo disinstallando l'app:
+        fai ogni tanto un backup (qui sotto).</div>`;
+    return;
+  }
   if (sync.pendingChoice) {
     html = `
       <div class="ft-nw-text"><b>${escapeHtml(sync.label)}</b> contiene già dei dati FinanceTracker.</div>
@@ -521,6 +537,8 @@ export function start(stlite) {
     });
   });
   observer.observe(document.body, { childList: true, subtree: true });
+
+  if (!FOLDER_STORAGE_ENABLED) return;
 
   // I salvataggi nella cartella partono solo ad app pronta (mai durante l'avvio).
   const startMirroring = () => {

@@ -24,7 +24,7 @@ barra di navigazione in basso, card in griglia e grafici che si leggono al tocco
 Funziona **senza internet**: Python e Streamlit girano dentro l'app.
 
 - Si installa dall'APK allegato alle **Releases** (Android 10 o successivo)
-- Al primo avvio scegli una **cartella del telefono** per i dati (es. Documenti/FinanceTracker): restano lì anche se disinstalli l'app
+- I dati restano nella memoria privata dell'app; backup ed export Excel vanno nella cartella **Download**
 - Blocco facoltativo con **impronta, volto o PIN** del telefono
 - Il primo avvio richiede 10–30 secondi, il tempo di caricare Python; dal background la riapertura è immediata
 - Per portare i dati dal PC al telefono: backup dal desktop, poi **Unisci** da **Opzioni → Dati**
@@ -92,10 +92,9 @@ Tutti i dati restano in locale sul dispositivo. Sul PC, nella cartella dell'app 
 Su Windows il percorso completo tipico è:
 `C:\Users\<utente>\AppData\Local\FinanceTracker\`
 
-Su **Android** database, categorie e backup stanno nella **cartella del telefono scelta al primo avvio**
-(es. `Documenti/FinanceTracker`), con gli stessi nomi del PC, e restano anche se disinstalli l'app.
-Se non scegli una cartella, i dati restano solo nella memoria interna dell'app e si perdono disinstallandola;
-puoi sceglierla in qualsiasi momento da **Opzioni → Dati**.
+Su **Android** database e categorie stanno nella memoria privata dell'app (non vanno su internet e sono
+esclusi dal backup automatico di Google); backup ed export Excel finiscono in **Download**. Disinstallando
+l'app i dati si perdono: fai ogni tanto un backup, l'app te lo ricorda.
 
 ## 📄 Licenza
 
