@@ -155,6 +155,11 @@ def render_category_pie_chart(
     st.iframe(
         f"""
         <style>
+          /* Stesso color-scheme dell'iframe nella pagina (vedi style.py):
+             se non coincidono il browser dipinge un fondo bianco pieno. */
+          :root {{
+            color-scheme: normal !important;
+          }}
           html, body {{
             margin: 0;
             padding: 0;

@@ -1241,6 +1241,14 @@ def apply_theme(
             background: rgba(var(--ft-accent-rgb), 0.08) !important;
         }}
 
+        /* Iframe (donut): color-scheme fisso, uguale a quello del documento interno.
+           Se la pagina è "dark" (es. telefono in tema scuro) e l'iframe no,
+           il browser riempie l'iframe di bianco invece di lasciarlo trasparente. */
+        iframe {{
+            color-scheme: normal !important;
+            background: transparent !important;
+        }}
+
         /* Alert / info / warning / toast */
         /* Un solo riquadro: lo stile va sul contenitore interno, quello esterno resta neutro. */
         [data-testid="stAlert"] {{
