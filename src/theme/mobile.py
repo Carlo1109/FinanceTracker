@@ -277,6 +277,35 @@ body:has([data-testid="stDialog"]) .st-key-ft_mobile_tabbar {
     min-width: 0;
 }
 
+/* "Vuoi tornare indietro?": sopra la barra in basso, a tutta larghezza, fondo pieno. */
+[data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-undo-anchor):not(:has([data-testid="stVerticalBlock"] .ft-undo-anchor)) {
+    left: 12px !important;
+    right: 12px !important;
+    bottom: calc(84px + env(safe-area-inset-bottom)) !important;
+    width: auto !important;
+    max-width: none !important;
+    z-index: 999995 !important;
+    padding: 14px 14px 8px !important;
+    border-radius: 18px !important;
+    background: var(--ft-menu-bg) !important;
+    box-shadow: 0 -6px 28px rgba(0, 0, 0, 0.35) !important;
+    gap: 6px !important;
+}
+
+.ft-undo-title {
+    margin-top: 8px !important;
+    font-size: 17px !important;
+}
+
+.ft-undo-copy {
+    margin: 2px 0 6px 0 !important;
+}
+
+/* Con il riquadro "torna indietro" aperto, i messaggi salgono sopra di lui. */
+body:has(.ft-undo-anchor) [data-testid="stToastContainer"] {
+    bottom: calc(260px + env(safe-area-inset-bottom)) !important;
+}
+
 /* ---------- Tendine (selectbox e multiselect) ---------- */
 
 /* Campo chiuso: un solo blocco arrotondato, freccia nel colore dell'app. */
@@ -346,12 +375,17 @@ body:has([data-testid="stDialog"]) .st-key-ft_mobile_tabbar {
     overscroll-behavior: contain;
 }
 
+/* Le voci sono "virtuali": Streamlit le posiziona a righe fisse di 40 px.
+   L'altezza va lasciata così, altrimenti le ultime voci finiscono fuori
+   dall'elenco e non si vedono (es. Disinvestimenti, Anticipi & Recuperi). */
 [data-testid$="VirtualDropdown"] [role="option"] {
-    min-height: 48px !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
     display: flex !important;
     align-items: center !important;
     padding: 0 16px !important;
-    margin: 1px 0 !important;
+    margin: 0 !important;
     border-radius: 12px !important;
     background: transparent !important;
     color: var(--ft-text) !important;
@@ -523,7 +557,34 @@ input, textarea, select, [data-testid="stSelectbox"] input {
     }
 
     .ft-info-card.ft-savings-rate-card {
-        padding-bottom: 44px !important;
+        padding-bottom: 46px !important;
+    }
+
+    /* Testo sopra la casella: al massimo una riga, mai sotto la casella. */
+    .ft-savings-rate-card > div:last-child {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+    }
+
+    [data-testid="stColumn"]:has(.ft-savings-rate-card)
+    [data-testid="stElementContainer"]:has([data-testid="stCheckbox"]) {
+        left: 12px !important;
+        right: 10px !important;
+        bottom: 10px !important;
+    }
+
+    [data-testid="stColumn"]:has(.ft-savings-rate-card) [data-testid="stCheckbox"] label {
+        gap: 6px !important;
+        min-height: 28px !important;
+    }
+
+    [data-testid="stColumn"]:has(.ft-savings-rate-card) [data-testid="stCheckbox"] label * {
+        white-space: nowrap !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        font-size: 12px !important;
     }
 
     .ft-kpi-value {
@@ -716,11 +777,12 @@ input, textarea, select, [data-testid="stSelectbox"] input {
         min-width: 0 !important;
     }
 
+    /* Mese in numero (vedi date_input.py): l'anno, a 4 cifre, ha più spazio. */
     [data-testid="stElementContainer"]:has(.ft-date-label)
-    + [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(2),
+    + [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(3),
     [data-testid="stElementContainer"]:has(.ft-date-label)
-    + [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(2) {
-        flex-grow: 1.6 !important;
+    + [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(3) {
+        flex-grow: 1.3 !important;
     }
 
     /* Card distribuzione: torta sopra, elenco sotto (niente separatore laterale). */
@@ -766,16 +828,20 @@ input, textarea, select, [data-testid="stSelectbox"] input {
         padding: 0 0 calc(10px + env(safe-area-inset-bottom)) 0 !important;
         border-radius: 22px !important;
         /* Fondo pieno: dietro al foglio non si intravedono le card della pagina. */
-        background:
-            radial-gradient(circle at 12% 0%, rgba(var(--ft-accent-rgb), 0.12), transparent 42%),
-            var(--ft-menu-bg) !important;
+        background: var(--ft-menu-bg) !important;
         background-color: var(--ft-menu-bg) !important;
         overflow-x: hidden !important;
         overscroll-behavior: contain;
     }
 
+    /* Titolo fisso in alto mentre si scorre: la ✕ non copre più il contenuto. */
     [data-testid="stDialog"] section[role="dialog"] > h2 {
-        padding: 22px 64px 8px 18px !important;
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 4 !important;
+        background: var(--ft-menu-bg) !important;
+        border-bottom: 1px solid transparent;
+        padding: 22px 64px 10px 18px !important;
         font-size: 22px !important;
         line-height: 1.2 !important;
     }
@@ -788,6 +854,25 @@ input, textarea, select, [data-testid="stSelectbox"] input {
     [data-testid="stDialog"] section[role="dialog"] > div {
         padding: 8px 18px 16px 18px !important;
         min-width: 0 !important;
+    }
+
+    /* Pannelli dentro le finestre (es. movimenti di un anticipo): mai più larghi del foglio. */
+    [data-testid="stDialog"] section[role="dialog"] [data-testid="stVerticalBlock"] {
+        box-sizing: border-box !important;
+    }
+
+    [data-testid="stDialog"] section[role="dialog"] [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-movement-anchor) {
+        width: 100% !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+    }
+
+    [data-testid="stDialog"] section[role="dialog"] .ft-loan-leg {
+        gap: 10px !important;
+    }
+
+    [data-testid="stDialog"] section[role="dialog"] .ft-loan-leg-copy .ft-movement-meta {
+        flex-wrap: wrap;
     }
 
     [data-testid="stDialog"] section[role="dialog"] [data-testid="stVerticalBlock"],

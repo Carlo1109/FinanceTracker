@@ -7,6 +7,8 @@ from datetime import date
 
 import streamlit as st
 
+from src.utils.platform import IS_ANDROID
+
 ITALIAN_MONTHS = (
     "Gennaio",
     "Febbraio",
@@ -86,7 +88,8 @@ def themed_date_input(
             st.selectbox(
                 "Mese",
                 options=list(range(1, 13)),
-                format_func=lambda m: ITALIAN_MONTHS[m - 1],
+                # Sul telefono il nome del mese non ci sta: si usa il numero.
+                format_func=(lambda m: f"{m:02d}") if IS_ANDROID else (lambda m: ITALIAN_MONTHS[m - 1]),
                 key=month_key,
                 label_visibility="collapsed",
             )
