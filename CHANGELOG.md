@@ -5,7 +5,6 @@
 ### Funzionalità
 
 - Backup: oltre a **Sostituisci tutto** c’è **Unisci al database**, che aggiunge solo i movimenti e le categorie mancanti (riconosciuti come negli import) senza cancellare nulla. I collegamenti dei prestiti restano corretti. Serve per allineare PC e telefono
-- **Promemoria backup** in Dashboard se l’ultimo backup ha più di 14 giorni o non è mai stato fatto, con **Crea backup ora** e **Più tardi**
 - Android: **blocco con impronta, volto o PIN** del telefono, all’apertura e dopo 30 secondi in background; con il blocco attivo screenshot e anteprima nelle app recenti sono nascosti
 - Android: **Opzioni → Dati** spiega dove stanno i dati (memoria privata dell’app) e dove finiscono backup ed export (Download), e contiene il blocco dell’app
 
@@ -16,10 +15,16 @@
 - Android, popup e tocco: dialog a tutto schermo che scorrono al loro interno, pulsante di chiusura grande e sempre visibile, pulsanti affiancati (Conferma/Annulla), griglia delle icone su più colonne, ✕ delle parole chiave piccolo e accanto alla parola, menu a tendina che non aprono la tastiera, messaggi in basso che non coprono i dialog, dettaglio dei grafici che sparisce da solo dopo il tocco
 - Messaggi di conferma (es. «Movimento salvato»): fondo pieno e leggibile, un solo bordo con barra colorata, testo più grande (anche su desktop)
 - Card della dashboard (spesa principale, fonte principale, spesa media, tasso di risparmio): sempre della stessa altezza, anche con testi su più righe
+- Android: grafico a ciambella nativo, sempre trasparente sul tema dell’app (prima poteva avere il fondo bianco con il telefono in tema scuro)
+- Android: tutte le card della dashboard (Entrate, Uscite, Investimenti, Liquidità e le card informative) hanno la stessa identica misura; confronti più brevi («vs prec.»)
+- Android: menu a tendina rinnovati, con campo unico arrotondato, voci più alte e la voce scelta evidenziata con ✓
+- Android: i testi dei pulsanti non vengono più tagliati con «…» (vanno a capo; «Scegli» per i colori); nella dashboard vuota i pulsanti sono uno sotto l’altro
 
 ### Prestazioni
 
 - I grafici a ciambella non si ricaricano più a ogni interazione se i dati non cambiano
+- Grafico mensile tenuto in memoria finché dati e colori non cambiano: la dashboard si aggiorna più in fretta
+- Android: niente sfocature, ombre più leggere, nessuna animazione o pagina sbiadita a ogni aggiornamento, controlli della pagina raggruppati una volta per fotogramma: scorrimento e tocchi più fluidi
 
 ### Build
 

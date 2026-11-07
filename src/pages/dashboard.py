@@ -56,20 +56,13 @@ from src.services.analytics import (
     top_income_category,
     types_chip_label,
 )
-from src.services.backup_service import (
-    build_backup_bytes,
-    create_backup,
-    days_since_last_backup,
-    mark_backup_done,
-    restore_backup,
-)
+from src.services.backup_service import restore_backup
 from src.services.categories import get_category_icon, load_category_definitions
 from src.services.movement_service import load_movements
 from src.theme.colors import get_category_colors
 from src.theme.tokens import resolve_semantic
 from src.utils.formatting import euro, signed_euro
-from src.utils.file_save import save_and_reveal
-from src.utils.platform import IS_ANDROID, PLOTLY_JS_URL, ZIP_MIME
+from src.utils.platform import IS_ANDROID, PLOTLY_JS_URL
 
 
 
@@ -104,7 +97,33 @@ def render_category_pie_chart(
     height: int = 420,
     root_id: str = "ft-pie-root",
 ) -> None:
-    """Donut in iframe con hover luminoso (WebKit-friendly via Plotly.restyle)."""
+    """Donut in iframe con hover luminoso (WebKit-friendly via Plotly.restyle).
+
+    Su Android niente iframe: il grafico nativo di Streamlit è trasparente con
+    qualsiasi tema del telefono (l'iframe in WebView poteva avere il fondo
+    bianco) e non ricarica plotly.js a ogni pagina, quindi è anche più veloce.
+    """
+    if IS_ANDROID:
+        fig.update_layout(
+            autosize=True,
+            margin=dict(l=4, r=4, t=4, b=4),
+            height=max(height - 20, 280),
+            dragmode=False,
+        )
+        st.plotly_chart(
+            fig,
+            width="stretch",
+            theme=None,
+            key=root_id,
+            config={
+                "displayModeBar": False,
+                "responsive": True,
+                "scrollZoom": False,
+                "doubleClick": False,
+            },
+        )
+        return
+
     trace = fig.data[0] if fig.data else None
     base_colors = (
         [str(color) for color in (trace.marker.colors or [])]
@@ -434,63 +453,143 @@ def _restore_backup_dialog() -> None:
         st.rerun()
 
 
-BACKUP_REMINDER_DAYS = 14
-_BACKUP_REMINDER_DISMISSED = "dashboard_backup_reminder_dismissed"
+@st.cache_resource(max_entries=8, show_spinner=False)
+def _monthly_figure(
+    monthly_df: pd.DataFrame,
+    month_order_key: tuple[str, ...],
+    sem,
+    is_android: bool,
+) -> go.Figure:
+    """Grafico mensile, tenuto in memoria finché dati e colori non cambiano.
 
+    Costruire e validare la figura Plotly è la parte più lenta della dashboard
+    (soprattutto sul telefono): a ogni interazione che non cambia i dati
+    si riusa la stessa figura.
+    """
+    month_order = list(month_order_key)
 
-def _render_backup_reminder() -> None:
-    """Avviso discreto se l'ultimo backup è vecchio (o non c'è mai stato)."""
-    if st.session_state.get(_BACKUP_REMINDER_DISMISSED):
-        return
-
-    days = days_since_last_backup()
-    if days is not None and days < BACKUP_REMINDER_DAYS:
-        return
-
-    when = "Non hai ancora fatto un backup" if days is None else f"Ultimo backup {days} giorni fa"
-    render_html(
-        f"""
-        <div class="ft-backup-reminder" style="
-            margin:4px 0 6px 0;
-            padding:12px 16px;
-            border-radius:14px;
-            border:1px solid rgba(var(--ft-accent-rgb), 0.30);
-            background:rgba(var(--ft-accent-rgb), 0.08);
-            font-size:14px;
-            line-height:1.45;
-            color:var(--ft-text);
-        ">
-            💾 <b>{html.escape(when)}.</b>
-            <span style="color:var(--ft-muted);">
-                Uno zip con movimenti e categorie ti protegge da guasti e cambi di dispositivo.
-            </span>
-        </div>
-        """
+    fig2 = px.line(
+        monthly_df,
+        x="mese_label",
+        y=[
+            "entrate",
+            "uscite",
+            "investimenti",
+        ],
+        markers=True,
+        category_orders={
+            "mese_label": month_order,
+        },
+        color_discrete_map={
+            "entrate": sem.income,
+            "uscite": sem.expense,
+            "investimenti": sem.investment,
+        },
+        labels={
+            "mese_label": "",
+            "value": "€",
+            "variable": "",
+            "entrate": "Entrate",
+            "uscite": "Uscite",
+            "investimenti": "Investimenti",
+        },
     )
 
-    backup_col, later_col, _ = st.columns([1.2, 1, 2.8])
-    with backup_col:
-        if IS_ANDROID:
-            name, data = build_backup_bytes()
-            st.download_button(
-                "Crea backup ora",
-                data=data,
-                file_name=name,
-                mime=ZIP_MIME,
-                type="primary",
-                width="stretch",
-                on_click=mark_backup_done,
-                key="dashboard_backup_now",
-            )
-        elif st.button("Crea backup ora", type="primary", width="stretch", key="dashboard_backup_now"):
-            backup_path = create_backup()
-            saved = save_and_reveal(backup_path.read_bytes(), backup_path.name)
-            st.toast(f"Salvato in Download: {saved.name}")
-            st.rerun()
-    with later_col:
-        if st.button("Più tardi", width="stretch", key="dashboard_backup_later"):
-            st.session_state[_BACKUP_REMINDER_DISMISSED] = True
-            st.rerun()
+    flow_labels = {
+        "entrate": "Entrate",
+        "uscite": "Uscite",
+        "investimenti": "Investimenti",
+    }
+
+    for trace in fig2.data:
+        trace.name = flow_labels.get(trace.name, trace.name)
+        trace.hovertemplate = "%{y:,.2f} €<extra></extra>"
+
+    fig2.update_layout(
+        height=400,
+        margin=dict(l=16, r=20, t=18, b=34),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(
+            color=sem.text,
+            family="Manrope",
+            size=13,
+        ),
+        legend_title_text="",
+        xaxis_title="",
+        yaxis_title="",
+        hovermode="x unified",
+        hoverlabel=dict(
+            bgcolor=sem.hover_bg,
+            bordercolor=sem.info,
+            font=dict(
+                color=sem.text,
+                family="Manrope",
+                size=13,
+            ),
+            namelength=-1,
+        ),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="left",
+            x=0,
+            font=dict(
+                color=sem.text,
+                family="Manrope",
+                size=13,
+            ),
+        ),
+        xaxis=dict(
+            type="category",
+            categoryorder="array",
+            categoryarray=month_order,
+            tickmode="array",
+            tickvals=month_order,
+            ticktext=month_order,
+            showgrid=False,
+            zeroline=False,
+            automargin=True,
+            tickangle=0,
+            tickfont=dict(
+                color=sem.muted,
+                family="Manrope",
+                size=12,
+            ),
+        ),
+        yaxis=dict(
+            showgrid=True,
+            gridcolor="rgba(148,163,184,0.18)",
+            zeroline=False,
+            automargin=True,
+            tickfont=dict(
+                color=sem.muted,
+                family="Manrope",
+                size=12,
+            ),
+            tickformat=",.0f",
+            ticksuffix=" €",
+        ),
+    )
+
+    if is_android:
+        # Touch: tocco = dettaglio, niente zoom/trascinamento che blocca lo scroll.
+        fig2.update_layout(dragmode=False, height=340)
+
+        # Schermo stretto: al massimo 5 etichette dei mesi, sempre leggibili.
+        step = max(1, -(-len(month_order) // 5))
+        visible_months = month_order[::-1][::step][::-1]
+        fig2.update_xaxes(
+            tickvals=visible_months,
+            # "Nov 2026" -> "Nov '26": etichette brevi che non si sovrappongono.
+            ticktext=[
+                f"{label[:3]} '{label[-2:]}" if label[-4:].isdigit() else label
+                for label in visible_months
+            ],
+        )
+
+    return fig2
 
 
 def show_dashboard() -> None:
@@ -561,7 +660,11 @@ def show_dashboard() -> None:
         st.markdown("")
         if st.session_state.get(_RESTORE_KEY):
             _restore_backup_dialog()
-        c1, c2, c3, _ = st.columns([1.2, 1.3, 1.5, 1.2])
+        if IS_ANDROID:
+            # Sul telefono uno sotto l'altro: tre pulsanti affiancati non ci stanno.
+            c1 = c2 = c3 = st.container()
+        else:
+            c1, c2, c3, _ = st.columns([1.2, 1.3, 1.5, 1.2])
         with c1:
             if st.button(
                 "Importa dati",
@@ -596,7 +699,6 @@ def show_dashboard() -> None:
     else:
         st.caption("Panoramica generale delle tue finanze.")
 
-    _render_backup_reminder()
 
     months = sorted(df["mese"].dropna().unique(), reverse=True)
     accounts = sorted(df["account"].dropna().unique().tolist())
@@ -1276,126 +1378,12 @@ def show_dashboard() -> None:
 
     month_order = monthly_df["mese_label"].tolist()
 
-    fig2 = px.line(
+    fig2 = _monthly_figure(
         monthly_df,
-        x="mese_label",
-        y=[
-            "entrate",
-            "uscite",
-            "investimenti",
-        ],
-        markers=True,
-        category_orders={
-            "mese_label": month_order,
-        },
-        color_discrete_map={
-            "entrate": sem.income,
-            "uscite": sem.expense,
-            "investimenti": sem.investment,
-        },
-        labels={
-            "mese_label": "",
-            "value": "€",
-            "variable": "",
-            "entrate": "Entrate",
-            "uscite": "Uscite",
-            "investimenti": "Investimenti",
-        },
+        tuple(month_order),
+        sem,
+        IS_ANDROID,
     )
-
-    flow_labels = {
-        "entrate": "Entrate",
-        "uscite": "Uscite",
-        "investimenti": "Investimenti",
-    }
-
-    for trace in fig2.data:
-        trace.name = flow_labels.get(trace.name, trace.name)
-        trace.hovertemplate = "%{y:,.2f} €<extra></extra>"
-
-    fig2.update_layout(
-        height=400,
-        margin=dict(l=16, r=20, t=18, b=34),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(
-            color=sem.text,
-            family="Manrope",
-            size=13,
-        ),
-        legend_title_text="",
-        xaxis_title="",
-        yaxis_title="",
-        hovermode="x unified",
-        hoverlabel=dict(
-            bgcolor=sem.hover_bg,
-            bordercolor=sem.info,
-            font=dict(
-                color=sem.text,
-                family="Manrope",
-                size=13,
-            ),
-            namelength=-1,
-        ),
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="left",
-            x=0,
-            font=dict(
-                color=sem.text,
-                family="Manrope",
-                size=13,
-            ),
-        ),
-        xaxis=dict(
-            type="category",
-            categoryorder="array",
-            categoryarray=month_order,
-            tickmode="array",
-            tickvals=month_order,
-            ticktext=month_order,
-            showgrid=False,
-            zeroline=False,
-            automargin=True,
-            tickangle=0,
-            tickfont=dict(
-                color=sem.muted,
-                family="Manrope",
-                size=12,
-            ),
-        ),
-        yaxis=dict(
-            showgrid=True,
-            gridcolor="rgba(148,163,184,0.18)",
-            zeroline=False,
-            automargin=True,
-            tickfont=dict(
-                color=sem.muted,
-                family="Manrope",
-                size=12,
-            ),
-            tickformat=",.0f",
-            ticksuffix=" €",
-        ),
-    )
-
-    if IS_ANDROID:
-        # Touch: tocco = dettaglio, niente zoom/trascinamento che blocca lo scroll.
-        fig2.update_layout(dragmode=False, height=340)
-
-        # Schermo stretto: al massimo 5 etichette dei mesi, sempre leggibili.
-        step = max(1, -(-len(month_order) // 5))
-        visible_months = month_order[::-1][::step][::-1]
-        fig2.update_xaxes(
-            tickvals=visible_months,
-            # "Nov 2026" -> "Nov '26": etichette brevi che non si sovrappongono.
-            ticktext=[
-                f"{label[:3]} '{label[-2:]}" if label[-4:].isdigit() else label
-                for label in visible_months
-            ],
-        )
 
     render_chart_card(
         lambda: st.plotly_chart(

@@ -6,6 +6,11 @@ import calendar
 
 import pandas as pd
 
+from src.utils.platform import IS_ANDROID
+
+# Sul telefono le card sono strette: testo del confronto più corto.
+_PREV = "prec." if IS_ANDROID else "periodo prec."
+
 INVESTMENT_CATEGORY = "Investimenti"
 TRANSFER_CATEGORY = "Trasferimenti interni"
 INITIAL_BALANCE_CATEGORY = "Saldo iniziale"
@@ -730,7 +735,7 @@ def get_value_comparison(
 
     if previous_value == 0:
         return (
-            "Nessun confronto possibile vs periodo prec.",
+            "Nessun confronto" if IS_ANDROID else "Nessun confronto possibile vs periodo prec.",
             "var(--ft-accent)",
         )
 
@@ -739,7 +744,7 @@ def get_value_comparison(
     )
 
     if abs(percentage_change) < 0.05:
-        return "≈ In linea col periodo prec.", muted
+        return f"≈ In linea col {_PREV}", muted
 
     formatted_percentage = f"{abs(percentage_change):.1f}".replace(".", ",")
     improved = (
@@ -747,7 +752,7 @@ def get_value_comparison(
     )
     arrow = "↑" if percentage_change > 0 else "↓"
     color = good if improved else bad
-    return f"{arrow} {formatted_percentage}% vs periodo prec.", color
+    return f"{arrow} {formatted_percentage}% vs {_PREV}", color
 
 
 def get_daily_expense_comparison(

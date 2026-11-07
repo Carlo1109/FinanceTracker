@@ -529,11 +529,18 @@ export function start(stlite) {
   });
 
   // Riempie i segnaposto quando Streamlit li (ri)disegna.
+  // Un solo controllo per fotogramma (Streamlit cambia molti nodi a ogni aggiornamento).
+  let widgetScan = false;
   const observer = new MutationObserver(() => {
-    document.querySelectorAll("[data-ft-widget]:not([data-ft-ready])").forEach((el) => {
-      el.dataset.ftReady = "1";
-      const render = RENDERERS[el.dataset.ftWidget];
-      if (render) render(el);
+    if (widgetScan) return;
+    widgetScan = true;
+    requestAnimationFrame(() => {
+      widgetScan = false;
+      document.querySelectorAll("[data-ft-widget]:not([data-ft-ready])").forEach((el) => {
+        el.dataset.ftReady = "1";
+        const render = RENDERERS[el.dataset.ftWidget];
+        if (render) render(el);
+      });
     });
   });
   observer.observe(document.body, { childList: true, subtree: true });

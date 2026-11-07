@@ -53,7 +53,7 @@ Se qualcosa non va, la run si ferma lì e il log dice cosa.
 - **Primo avvio e riaperture "a freddo":** 10–30 secondi, il tempo di caricare Python. Se l'app resta in background,
   la riapertura è immediata. Il tasto Indietro, dalla Home, la mette in background senza chiuderla.
 - **Dati:** restano nella memoria privata dell'app: non vanno su internet e sono esclusi dal backup automatico
-  di Google. Si perdono solo disinstallando l'app, quindi fai ogni tanto un backup (l'app te lo ricorda).
+  di Google. Si perdono solo disinstallando l'app, quindi fai ogni tanto un backup da *Opzioni → Dati*.
 - **Blocco:** da *Opzioni → Dati* puoi attivare lo sblocco con impronta, volto o PIN del telefono (serve un blocco
   schermo impostato). L'app lo chiede all'apertura e quando ci torni dopo 30 secondi; con il blocco attivo
   screenshot e anteprima nelle app recenti sono nascosti.

@@ -821,7 +821,8 @@ def show_settings() -> None:
                         theme_id=current_theme,
                     )
                     if st.button(
-                        "In uso" if is_selected else "Seleziona",
+                        # Sul telefono 4 pulsanti per riga: etichetta corta.
+                        "In uso" if is_selected else ("Scegli" if IS_ANDROID else "Seleziona"),
                         key=f"appearance_accent_{accent_id}",
                         width="stretch",
                         type="primary" if is_selected else "secondary",

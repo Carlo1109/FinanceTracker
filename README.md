@@ -94,7 +94,7 @@ Su Windows il percorso completo tipico è:
 
 Su **Android** database e categorie stanno nella memoria privata dell'app (non vanno su internet e sono
 esclusi dal backup automatico di Google); backup ed export Excel finiscono in **Download**. Disinstallando
-l'app i dati si perdono: fai ogni tanto un backup, l'app te lo ricorda.
+l'app i dati si perdono: ricordati di fare ogni tanto un backup.
 
 ## 📄 Licenza
 

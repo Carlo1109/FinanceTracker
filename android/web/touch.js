@@ -25,9 +25,20 @@
       });
   }
 
+  // Un solo controllo per fotogramma, anche se Streamlit cambia mille nodi.
+  var patchScheduled = false;
+  function schedulePatch() {
+    if (patchScheduled) return;
+    patchScheduled = true;
+    requestAnimationFrame(function () {
+      patchScheduled = false;
+      patchSelectInputs();
+    });
+  }
+
   function watchSelects() {
     patchSelectInputs();
-    new MutationObserver(patchSelectInputs).observe(document.documentElement, {
+    new MutationObserver(schedulePatch).observe(document.documentElement, {
       childList: true,
       subtree: true,
     });
@@ -63,8 +74,11 @@
   document.addEventListener(
     "touchstart",
     function (event) {
-      document.querySelectorAll(".js-plotly-plot").forEach(function (plot) {
-        if (!plot.contains(event.target)) hideHover(plot);
+      // Solo i grafici che stanno davvero mostrando un dettaglio.
+      document.querySelectorAll(".js-plotly-plot .hoverlayer").forEach(function (layer) {
+        if (!layer.firstChild) return;
+        var plot = layer.closest(".js-plotly-plot");
+        if (plot && !plot.contains(event.target)) hideHover(plot);
       });
     },
     { passive: true }

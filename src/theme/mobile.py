@@ -87,9 +87,8 @@ button, [data-testid="stPageLink"] a, [role="tab"], label {
     flex-wrap: nowrap !important;
     gap: 2px !important;
     padding: 6px 8px calc(6px + env(safe-area-inset-bottom)) !important;
-    background: color-mix(in srgb, var(--ft-panel) 86%, transparent);
-    -webkit-backdrop-filter: blur(18px) saturate(1.5);
-    backdrop-filter: blur(18px) saturate(1.5);
+    /* Fondo pieno: niente sfocatura (costosa mentre si scorre). */
+    background: var(--ft-menu-bg);
     border-top: 1px solid var(--ft-border);
     box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.18);
 }
@@ -226,6 +225,180 @@ body:has([data-testid="stDialog"]) .st-key-ft_mobile_tabbar {
     min-height: 46px;
 }
 
+/* ---------- Fluidità sul telefono ----------
+   Sfocature, ombre ampie e animazioni a ogni ridisegno sono le cose più
+   costose per la GPU di un telefono: qui le togliamo o le alleggeriamo. */
+:root:root {
+    --ft-shadow: 0 6px 16px rgba(0, 0, 0, 0.20);
+}
+
+*, *::before, *::after {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+}
+
+/* Le card non si "rianimano" a ogni interazione. */
+[class*="ft-"] {
+    animation: none !important;
+}
+
+/* Durante l'aggiornamento Streamlit sbiadisce la pagina: sul telefono
+   sembra uno scatto, quindi il contenuto resta pieno. */
+[data-stale="true"],
+[data-stale="true"] * {
+    opacity: 1 !important;
+    transition: none !important;
+}
+
+/* Scorrimento: niente rimbalzi della pagina dietro a menu e finestre. */
+[data-testid="stMain"],
+[data-testid="stAppViewContainer"] {
+    overscroll-behavior-y: contain;
+}
+
+/* Testo dei pulsanti: se non ci sta va a capo invece di finire con "…". */
+.stButton > button,
+.stDownloadButton > button,
+[data-testid="stFormSubmitButton"] > button {
+    height: auto !important;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+}
+
+.stButton > button *,
+.stDownloadButton > button *,
+[data-testid="stFormSubmitButton"] > button * {
+    white-space: normal !important;
+    text-overflow: clip !important;
+    overflow: visible !important;
+    overflow-wrap: break-word;
+    line-height: 1.2 !important;
+    text-align: center;
+    min-width: 0;
+}
+
+/* ---------- Tendine (selectbox e multiselect) ---------- */
+
+/* Campo chiuso: un solo blocco arrotondato, freccia nel colore dell'app. */
+[data-testid="stSelectbox"] [role="group"],
+[data-testid="stMultiSelect"] [role="group"] {
+    min-height: 48px !important;
+    border-radius: 14px !important;
+    border: 1px solid var(--ft-border) !important;
+    background: var(--ft-input-bg) !important;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+[data-testid="stSelectbox"] [role="group"]:focus-within,
+[data-testid="stMultiSelect"] [role="group"]:focus-within {
+    border-color: var(--ft-accent) !important;
+    box-shadow: 0 0 0 3px rgba(var(--ft-accent-rgb), 0.18) !important;
+}
+
+[data-testid="stSelectbox"] [role="group"] input,
+[data-testid="stMultiSelect"] [role="group"] input {
+    background: transparent !important;
+    border: 0 !important;
+    font-weight: 500 !important;
+    padding-left: 12px !important;
+    padding-right: 0 !important;
+    min-width: 0 !important;
+    text-overflow: clip !important;
+    cursor: pointer;
+    caret-color: transparent;
+}
+
+[data-testid="stSelectbox"] [role="group"] > button,
+[data-testid="stMultiSelect"] [role="group"] > button {
+    background: transparent !important;
+    border: 0 !important;
+    flex: 0 0 34px !important;
+    width: 34px !important;
+    min-width: 34px !important;
+    padding: 0 8px 0 0 !important;
+}
+
+[data-testid="stSelectbox"] [role="group"] > button svg,
+[data-testid="stMultiSelect"] [role="group"] > button svg {
+    color: var(--ft-accent) !important;
+    fill: var(--ft-accent) !important;
+    width: 20px;
+    height: 20px;
+}
+
+/* Menu aperto: foglio pieno con ombra, voci alte e comode da toccare. */
+[data-testid$="VirtualDropdown"] {
+    margin-top: 6px !important;
+    padding: 6px !important;
+    border-radius: 18px !important;
+    border: 1px solid var(--ft-border) !important;
+    background: var(--ft-menu-bg) !important;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45) !important;
+    overflow: hidden !important;
+}
+
+[data-testid$="VirtualDropdown"] [role="listbox"] {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    max-height: min(56dvh, 420px) !important;
+    overscroll-behavior: contain;
+}
+
+[data-testid$="VirtualDropdown"] [role="option"] {
+    min-height: 48px !important;
+    display: flex !important;
+    align-items: center !important;
+    padding: 0 16px !important;
+    margin: 1px 0 !important;
+    border-radius: 12px !important;
+    background: transparent !important;
+    color: var(--ft-text) !important;
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    box-sizing: border-box !important;
+    -webkit-tap-highlight-color: transparent;
+}
+
+[data-testid$="VirtualDropdown"] [role="option"] > div {
+    padding: 0 !important;
+    flex: 1 1 auto;
+    min-width: 0;
+    background: transparent !important;
+    color: inherit !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+[data-testid$="VirtualDropdown"] [role="option"][data-focused],
+[data-testid$="VirtualDropdown"] [role="option"][data-hovered],
+[data-testid$="VirtualDropdown"] [role="option"][data-pressed] {
+    background: rgba(var(--ft-accent-rgb), 0.10) !important;
+}
+
+[data-testid$="VirtualDropdown"] [role="option"][aria-selected="true"] {
+    background: rgba(var(--ft-accent-rgb), 0.16) !important;
+    color: var(--ft-accent) !important;
+}
+
+[data-testid$="VirtualDropdown"] [role="option"][aria-selected="true"]::after {
+    content: "✓";
+    flex: 0 0 auto;
+    margin-left: 10px;
+    font-weight: 800;
+    color: var(--ft-accent);
+}
+
+/* Multiselect: voci scelte come pillole dell'app. */
+[data-testid="stMultiSelect"] [data-baseweb="tag"],
+[data-testid="stMultiSelect"] [role="group"] [data-testid="stMultiSelectTag"] {
+    border-radius: 999px !important;
+    background: rgba(var(--ft-accent-rgb), 0.16) !important;
+    color: var(--ft-accent) !important;
+}
+
 /* 16px evita lo zoom automatico del browser quando si tocca un campo. */
 input, textarea, select, [data-testid="stSelectbox"] input {
     font-size: 16px !important;
@@ -325,9 +498,32 @@ input, textarea, select, [data-testid="stSelectbox"] input {
         max-width: 100% !important;
     }
 
-    .ft-kpi-card {
-        min-height: 98px !important;
+    /* Tutte le card piccole (KPI e info) hanno la stessa identica misura. */
+    .ft-kpi-card,
+    .ft-info-card {
+        height: 172px !important;
+        min-height: 172px !important;
+        max-height: 172px !important;
         padding: 14px 14px !important;
+        overflow: hidden !important;
+        justify-content: flex-start !important;
+        container-type: inline-size;
+    }
+
+    /* KPI: contenuto centrato in verticale, con o senza confronto. */
+    .ft-kpi-card {
+        justify-content: center !important;
+    }
+
+    .ft-info-card-value {
+        display: -webkit-box !important;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden !important;
+    }
+
+    .ft-info-card.ft-savings-rate-card {
+        padding-bottom: 44px !important;
     }
 
     .ft-kpi-value {
@@ -342,12 +538,6 @@ input, textarea, select, [data-testid="stSelectbox"] input {
         font-size: clamp(13px, 10cqi, 20px) !important;
     }
 
-    /* Stessa altezza per tutte le card (il tasso di risparmio ha anche la casella). */
-    .ft-info-card {
-        min-height: 178px !important;
-        padding: 14px 14px !important;
-        container-type: inline-size;
-    }
 
     .ft-info-card-amount {
         font-size: clamp(16px, 12cqi, 22px) !important;
