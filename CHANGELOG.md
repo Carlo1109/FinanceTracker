@@ -19,6 +19,7 @@
 - Android: tutte le card della dashboard (Entrate, Uscite, Investimenti, Liquidità e le card informative) hanno la stessa identica misura; confronti più brevi («vs prec.»)
 - Android: menu a tendina rinnovati, con campo unico arrotondato e la voce scelta evidenziata con ✓; le ultime voci degli elenchi lunghi (es. Disinvestimenti, Anticipi & Recuperi) si vedono sempre
 - Android: date con il mese in numero (es. 07 / 11 / 2026), sempre leggibili per intero
+- Android: nel grafico mensile l’asse mostra solo il primo e l’ultimo mese (il mese di ogni punto compare toccandolo)
 - Android: riquadro «Vuoi tornare indietro?» sopra la barra in basso, a tutta larghezza; nelle finestre il titolo resta fisso in alto e la ✕ non copre più i movimenti di un anticipo
 - Android: tasso di risparmio solo con la percentuale, la casella «Escludi rimborsi» non copre più nulla
 - Android: le spiegazioni dei «?» restano dentro lo schermo e vanno a capo

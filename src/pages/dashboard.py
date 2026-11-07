@@ -577,17 +577,24 @@ def _monthly_figure(
         # Touch: tocco = dettaglio, niente zoom/trascinamento che blocca lo scroll.
         fig2.update_layout(dragmode=False, height=340)
 
-        # Schermo stretto: al massimo 5 etichette dei mesi, sempre leggibili.
-        step = max(1, -(-len(month_order) // 5))
-        visible_months = month_order[::-1][::step][::-1]
+        # Schermo stretto: solo il primo e l'ultimo mese, agli estremi dell'asse.
+        # Il mese di ogni punto si legge comunque toccando il grafico.
+        visible_months = (
+            [month_order[0], month_order[-1]]
+            if len(month_order) > 1
+            else list(month_order)
+        )
         fig2.update_xaxes(
             tickvals=visible_months,
-            # "Nov 2026" -> "Nov '26": etichette brevi che non si sovrappongono.
+            # "Nov 2026" -> "Nov '26".
             ticktext=[
                 f"{label[:3]} '{label[-2:]}" if label[-4:].isdigit() else label
                 for label in visible_months
             ],
+            tickfont=dict(size=13),
+            automargin=True,
         )
+        fig2.update_layout(margin=dict(l=16, r=28, t=18, b=34))
 
     return fig2
 
