@@ -99,6 +99,55 @@
       display: none;
     }
 
+    /* Primo avvio: scelta della cartella dei dati. */
+    #ft-setup {
+      display: none;
+      max-width: 340px;
+      padding: 0 24px;
+      text-align: center;
+    }
+
+    #ft-splash.is-setup #ft-setup { display: block; }
+    #ft-splash.is-setup .ft-bar,
+    #ft-splash.is-setup .ft-step { display: none; }
+
+    #ft-setup h2 {
+      margin: 6px 0 10px;
+      font: 700 21px "Fraunces", Georgia, serif;
+      letter-spacing: -0.02em;
+    }
+
+    #ft-setup p {
+      margin: 0 0 18px;
+      color: #94a3b8;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    #ft-setup button {
+      display: block;
+      width: 100%;
+      margin: 0 0 10px;
+      padding: 13px 18px;
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: transparent;
+      color: #eef3ff;
+      font: 700 15px "Manrope", system-ui, sans-serif;
+    }
+
+    #ft-setup button.is-primary {
+      border: 0;
+      background: #60a5fa;
+      color: #04203a;
+    }
+
+    #ft-setup .ft-setup-error {
+      min-height: 18px;
+      color: #f87171;
+      font-size: 13px;
+    }
+
     @keyframes ft-slide {
       from { transform: translateX(-100%); }
       to { transform: translateX(250%); }
@@ -116,13 +165,24 @@
     <div class="ft-name">Finance<span>Tracker</span></div>
     <div class="ft-bar"></div>
     <div class="ft-step" id="ft-step">Avvio…</div>
+    <div id="ft-setup">
+      <h2>Dove salvo i tuoi dati?</h2>
+      <p>Scegli una cartella del telefono, per esempio <b>Documenti/FinanceTracker</b>:
+        lì trovi database, categorie e backup, come sul PC, e restano anche se
+        disinstalli l'app. Se ci sono già dati FinanceTracker, li carico.</p>
+      <button type="button" class="is-primary" id="ft-setup-pick">Scegli una cartella</button>
+      <button type="button" id="ft-setup-skip">Più tardi (solo memoria dell'app)</button>
+      <div class="ft-setup-error" id="ft-setup-error"></div>
+    </div>
     <button type="button" onclick="location.reload()">Riprova</button>
   </div>
   <div id="root"></div>
 
   <script src="/android-bridge.js"></script>
+  <script src="/touch.js"></script>
   <script type="module">
     import { mount } from "/stlite/stlite.js";
+    import * as native from "/native.js";
 
     const splash = document.getElementById("ft-splash");
     const step = document.getElementById("ft-step");
@@ -136,9 +196,12 @@
       [18000, "Apertura del database…"],
       [30000, "Quasi pronto…"],
     ];
-    const timers = steps.map(([delay, text]) =>
-      setTimeout(() => { step.textContent = text; }, delay)
-    );
+    let timers = [];
+    function startBootMessages() {
+      timers = steps.map(([delay, text]) =>
+        setTimeout(() => { step.textContent = text; }, delay)
+      );
+    }
 
     function hideSplash() {
       timers.forEach(clearTimeout);
@@ -157,13 +220,27 @@
     observer.observe(document.body, { childList: true, subtree: true });
 
     // Se dopo 3 minuti non è partita, mostra un messaggio e "Riprova".
-    setTimeout(() => {
-      if (document.getElementById("ft-splash") && !document.querySelector(".ft-mtop")) {
-        timers.forEach(clearTimeout);
-        splash.classList.add("is-error");
-        step.textContent = "L'avvio sta impiegando troppo. Riprova.";
-      }
-    }, 180000);
+    function startBootTimeout() {
+      setTimeout(() => {
+        if (document.getElementById("ft-splash") && !document.querySelector(".ft-mtop")) {
+          timers.forEach(clearTimeout);
+          splash.classList.add("is-error");
+          step.textContent = "L'avvio sta impiegando troppo. Riprova.";
+        }
+      }, 180000);
+    }
+
+    // Primo avvio: scelta della cartella dei dati (solo nell'app Android).
+    await native.firstRunFolderChoice({
+      pick: document.getElementById("ft-setup-pick"),
+      skip: document.getElementById("ft-setup-skip"),
+      error: document.getElementById("ft-setup-error"),
+      show: () => splash.classList.add("is-setup"),
+      hide: () => splash.classList.remove("is-setup"),
+    });
+
+    startBootMessages();
+    startBootTimeout();
 
     const manifest = await (await fetch("/app-manifest.json")).json();
 
@@ -171,6 +248,9 @@
     for (const path of manifest.files) {
       files[path] = { url: abs(`/app/${path}`) };
     }
+
+    // Dati dalla cartella scelta (se c'è): prevalgono sulla copia interna.
+    Object.assign(files, native.loadInitialFiles());
 
     window.__ftStlite = mount(
       {
@@ -196,6 +276,8 @@
       },
       document.getElementById("root"),
     );
+
+    native.start(window.__ftStlite);
   </script>
 </body>
 </html>

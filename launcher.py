@@ -117,6 +117,8 @@ def run_streamlit_cli(port: int) -> None:
         f"--browser.serverPort={port}",
         "--browser.gatherUsageStats=false",
         "--client.toolbarMode=minimal",
+        # Font inclusi in static/ (servono offline, vedi src/theme/style.py).
+        "--server.enableStaticServing=true",
     ]
 
     streamlit_main()

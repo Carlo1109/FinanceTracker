@@ -22,3 +22,7 @@ font = "sans serif"
 baseRadius = "0.75rem"
 buttonRadius = "0.75rem"
 showWidgetBorder = false
+
+# Serve la cartella static/ (font inclusi nell'app) su /app/static.
+[server]
+enableStaticServing = true

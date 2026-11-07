@@ -28,6 +28,8 @@ datas = [
     (str(PROJECT_ROOT / "config" / "categories.json"), "config"),
     (str(PROJECT_ROOT / "assets"), "assets"),
     (str(PROJECT_ROOT / ".streamlit"), ".streamlit"),
+    # Accanto ad app.py: Streamlit la serve su /app/static (font offline).
+    (str(PROJECT_ROOT / "static"), "static"),
 ]
 
 datas += streamlit_datas
@@ -54,6 +56,7 @@ hiddenimports = [
     "src.services.analytics",
     "src.services.backup_service",
     "src.services.categories",
+    "src.services.loans",
     "src.services.settings_service",
     "src.services.imports",
     "src.services.imports.base",
@@ -65,10 +68,12 @@ hiddenimports = [
     "src.services.movement_service",
     "src.theme.style",
     "src.theme.colors",
+    "src.theme.mobile",
     "src.theme.tokens",
     "src.utils",
     "src.utils.export_excel",
     "src.utils.formatting",
+    "src.utils.platform",
     "src.utils.version",
     "openpyxl",
     "openpyxl.cell",

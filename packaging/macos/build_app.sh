@@ -22,7 +22,7 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
 fi
 
 if [[ ! -x "$ROOT/.venv/bin/pyinstaller" ]]; then
-  echo "Manca PyInstaller nel venv. Attiva .venv e: pip install -r requirements.txt"
+  echo "Manca PyInstaller nel venv. Attiva .venv e: pip install -r requirements-build.txt"
   exit 1
 fi
 

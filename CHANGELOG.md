@@ -1,5 +1,33 @@
 # Changelog
 
+## v1.7.0
+
+### Funzionalità
+
+- Backup: oltre a **Sostituisci tutto** c’è **Unisci al database**, che aggiunge solo i movimenti e le categorie mancanti (riconosciuti come negli import) senza cancellare nulla. I collegamenti dei prestiti restano corretti. Serve per allineare PC e telefono
+- **Promemoria backup** in Dashboard se l’ultimo backup ha più di 14 giorni o non è mai stato fatto, con **Crea backup ora** e **Più tardi**
+- Android: **cartella dei dati sul telefono**, scelta al primo avvio (es. Documenti/FinanceTracker). Database, categorie e backup sono lì, visibili dall’app File come sul PC, e **restano anche disinstallando l’app**. Se un’altra app (es. una sincronizzazione) cambia il file, FinanceTracker non lo sovrascrive e chiede cosa fare
+- Android: **blocco con impronta, volto o PIN** del telefono, all’apertura e dopo 30 secondi in background; con il blocco attivo screenshot e anteprima nelle app recenti sono nascosti
+- Android: **Opzioni → Dati** mostra la cartella dei dati (con «Cambia cartella»), dove finiscono backup ed export e il blocco dell’app
+
+### Interfaccia
+
+- Riattivati gli stili che con Streamlit 1.58 non venivano più applicati: righe movimento compatte con barra colorata per entrate/uscite, pannelli di dashboard e impostazioni, pulsanti a pillola (**Modifica**, **Esporta**, **Rimuovi**)
+- Font Manrope e Fraunces inclusi nell’app: l’aspetto è corretto anche senza internet (prima venivano da Google Fonts)
+- Android, popup e tocco: dialog a tutto schermo che scorrono al loro interno, pulsante di chiusura grande e sempre visibile, pulsanti affiancati (Conferma/Annulla), griglia delle icone su più colonne, ✕ delle parole chiave piccolo e accanto alla parola, menu a tendina che non aprono la tastiera, messaggi in basso che non coprono i dialog, dettaglio dei grafici che sparisce da solo dopo il tocco
+- Messaggi di conferma (es. «Movimento salvato»): fondo pieno e leggibile, un solo bordo con barra colorata, testo più grande (anche su desktop)
+- Card della dashboard (spesa principale, fonte principale, spesa media, tasso di risparmio): sempre della stessa altezza, anche con testi su più righe
+
+### Prestazioni
+
+- I grafici a ciambella non si ricaricano più a ogni interazione se i dati non cambiano
+
+### Build
+
+- Test automatici (`pytest`) su import delle banche, calcoli, movimenti e backup; girano nella Release prima della pubblicazione
+- `requirements.txt` contiene solo l’app; `requirements-build.txt` aggiunge PyInstaller, `requirements-dev.txt` aggiunge i test
+- La build Android usa gli stessi font del desktop (`static/fonts`)
+
 ## v1.6.0
 
 ### Funzionalità

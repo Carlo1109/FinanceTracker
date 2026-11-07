@@ -1444,7 +1444,6 @@ def show_movements() -> None:
     if selected_types:
         found_suffix += f" · {types_chip_label(selected_types)}"
 
-    export_df = filtered_df
     loan_chip_practices = loan_practices(df)
     list_df = collapse_closed_loan_rows(
         filtered_df,

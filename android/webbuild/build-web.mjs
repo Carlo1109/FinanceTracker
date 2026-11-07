@@ -5,14 +5,15 @@
  *
  * Output (default): android/app/src/main/assets/web
  *
- *   index.html, android-bridge.js     pagina che avvia l'app (android/web)
+ *   index.html, android-bridge.js,    pagina che avvia l'app (android/web)
+ *   native.js, touch.js               cartella dei dati e blocco; ritocchi per il touch
  *   stlite/                           Streamlit per il browser (@stlite/browser)
  *   pyodide/                          Python 3.14 WebAssembly + SOLO i pacchetti
  *                                     necessari + pyodide-lock.json "congelato"
  *   app/                              il codice Python dell'app (app.py, src/, ...)
  *   app-manifest.json                 elenco file da montare + requisiti
  *   vendor/plotly.min.js              plotly.js per il grafico a ciambella
- *   fonts/                            Manrope e Fraunces (niente Google Fonts)
+ *   fonts/                            Manrope e Fraunces (da static/fonts, come il desktop)
  *
  * Come funziona l'offline: qui (con internet) si avvia Pyodide in Node,
  * si installano Streamlit (versione stlite), plotly e openpyxl con micropip,
@@ -43,10 +44,8 @@ const APP_FILE_PATTERNS = [
   "src/**/*.py",
 ];
 
-const FONT_FILES = [
-  ["@fontsource/manrope", "Manrope", [400, 500, 600, 700, 800]],
-  ["@fontsource/fraunces", "Fraunces", [600, 700]],
-];
+// Font: gli stessi file della versione desktop (static/fonts nella repo).
+const FONT_DIR_IN_REPO = "static/fonts";
 
 // ---------------------------------------------------------------- paths
 
@@ -145,26 +144,30 @@ function copyTemplateAndStlite() {
   log("Pagina di avvio e stlite");
   copyFile(path.join(WEB_TEMPLATE, "index.html"), path.join(OUT, "index.html"));
   copyFile(path.join(WEB_TEMPLATE, "android-bridge.js"), path.join(OUT, "android-bridge.js"));
+  copyFile(path.join(WEB_TEMPLATE, "native.js"), path.join(OUT, "native.js"));
+  copyFile(path.join(WEB_TEMPLATE, "touch.js"), path.join(OUT, "touch.js"));
   copyDir(STLITE_DIR, path.join(OUT, "stlite"), (p) => !p.endsWith(".map"));
 }
 
 function copyFonts() {
   log("Font locali");
+  const src = path.join(REPO, FONT_DIR_IN_REPO);
   const css = [];
-  for (const [pkg, family, weights] of FONT_FILES) {
-    const short = pkg.split("/")[1];
-    for (const weight of weights) {
-      const file = `${short}-latin-${weight}-normal.woff2`;
-      copyFile(
-        path.join(NODE_MODULES, pkg, "files", file),
-        path.join(OUT, "fonts", file),
-      );
-      css.push(
-        `@font-face{font-family:"${family}";font-style:normal;font-weight:${weight};` +
-          `font-display:swap;src:url("/fonts/${file}") format("woff2");}`,
-      );
+  for (const file of fs.readdirSync(src).sort()) {
+    if (file.endsWith(".txt")) {
+      copyFile(path.join(src, file), path.join(OUT, "fonts", file)); // licenze OFL
+      continue;
     }
+    const match = /^([a-z]+)-latin-(\d+)-normal\.woff2$/.exec(file);
+    if (!match) continue;
+    const family = match[1][0].toUpperCase() + match[1].slice(1);
+    copyFile(path.join(src, file), path.join(OUT, "fonts", file));
+    css.push(
+      `@font-face{font-family:"${family}";font-style:normal;font-weight:${match[2]};` +
+        `font-display:swap;src:url("/fonts/${file}") format("woff2");}`,
+    );
   }
+  if (!css.length) throw new Error(`Nessun font trovato in ${FONT_DIR_IN_REPO}`);
   fs.writeFileSync(path.join(OUT, "fonts", "fonts.css"), css.join("\n") + "\n");
 }
 

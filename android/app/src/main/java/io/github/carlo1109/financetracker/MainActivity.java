@@ -1,23 +1,33 @@
 package io.github.carlo1109.financetracker;
 
 import android.app.Activity;
+import android.app.KeyguardManager;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.graphics.Color;
+import android.hardware.biometrics.BiometricManager;
+import android.hardware.biometrics.BiometricPrompt;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.CancellationSignal;
 import android.os.Environment;
+import android.os.SystemClock;
+import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.util.Base64;
 import android.util.Log;
+import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
+import android.view.WindowManager;
 import android.webkit.ConsoleMessage;
 import android.webkit.JavascriptInterface;
 import android.webkit.RenderProcessGoneDetail;
@@ -30,8 +40,15 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -49,9 +66,12 @@ import java.util.Map;
  * stanno nell'APK (assets/web) e vengono serviti da qui sotto l'indirizzo
  * https://appassets.androidplatform.net/ : nessun accesso a internet.
  *
- * I dati (database e categorie) vivono nell'IndexedDB della WebView,
- * legato a quell'indirizzo fisso, quindi restano tra un avvio e l'altro
- * e dopo gli aggiornamenti dell'app.
+ * Dati: una copia interna (IndexedDB della WebView) per la velocità e,
+ * se l'utente l'ha scelta, la cartella sul telefono (FolderStorage), dove
+ * la pagina copia database e categorie dopo ogni modifica.
+ *
+ * Blocco: se attivo, l'app chiede impronta/volto/PIN del telefono
+ * all'avvio e quando torna in primo piano dopo un po'.
  */
 public class MainActivity extends Activity {
 
@@ -59,7 +79,18 @@ public class MainActivity extends Activity {
     private static final String HOST = "appassets.androidplatform.net";
     private static final String START_URL = "https://" + HOST + "/";
     private static final String ASSET_ROOT = "web/";
+    private static final String BACKUP_PREFIX = "FinanceTracker_Backup_";
+
     private static final int FILE_CHOOSER_REQUEST = 4101;
+    private static final int FOLDER_PICKER_REQUEST = 4102;
+
+    private static final String PREFS = "ft_prefs";
+    private static final String KEY_LOCK = "lock_enabled";
+    private static final long RELOCK_AFTER_MS = 30_000;
+
+    private static final int AUTH_UNLOCK = 0;
+    private static final int AUTH_ENABLE = 1;
+    private static final int AUTH_DISABLE = 2;
 
     private static final Map<String, String> MIME_TYPES = new HashMap<>();
 
@@ -87,7 +118,15 @@ public class MainActivity extends Activity {
 
     private FrameLayout root;
     private WebView webView;
+    private View lockOverlay;
     private ValueCallback<Uri[]> pendingFileCallback;
+    private FolderStorage storage;
+    private SharedPreferences prefs;
+
+    private boolean locked;
+    private boolean authInProgress;
+    private boolean skipRelockOnce;
+    private long pausedAt;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -95,6 +134,9 @@ public class MainActivity extends Activity {
 
         boolean debuggable = (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
         WebView.setWebContentsDebuggingEnabled(debuggable);
+
+        storage = new FolderStorage(this);
+        prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
 
         root = new FrameLayout(this);
         root.setBackgroundColor(Color.parseColor("#0B1220"));
@@ -106,16 +148,24 @@ public class MainActivity extends Activity {
         }
         setContentView(root);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            ServiceWorkerController.getInstance().setServiceWorkerClient(new ServiceWorkerClient() {
-                @Override
-                public WebResourceResponse shouldInterceptRequest(WebResourceRequest request) {
-                    return serveAsset(request.getUrl());
-                }
-            });
-        }
+        ServiceWorkerController.getInstance().setServiceWorkerClient(new ServiceWorkerClient() {
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebResourceRequest request) {
+                return serveAsset(request.getUrl());
+            }
+        });
 
         createWebView();
+        lockOverlay = buildLockOverlay();
+        root.addView(lockOverlay, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+
+        if (isLockEnabled()) {
+            setSecureWindow(true);
+            lock();
+        }
+
         webView.loadUrl(START_URL);
     }
 
@@ -146,7 +196,8 @@ public class MainActivity extends Activity {
         webView.setWebViewClient(new AppWebViewClient());
         webView.setWebChromeClient(new AppChromeClient());
 
-        root.addView(webView, new FrameLayout.LayoutParams(
+        // Indice 0: la WebView resta sotto la schermata di blocco.
+        root.addView(webView, 0, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
     }
@@ -159,6 +210,15 @@ public class MainActivity extends Activity {
         }
         createWebView();
         webView.loadUrl(START_URL);
+    }
+
+    private void callJs(String function, JSONObject payload) {
+        String script = "window." + function + " && window." + function + "(" + payload + ")";
+        runOnUiThread(() -> {
+            if (webView != null) {
+                webView.evaluateJavascript(script, null);
+            }
+        });
     }
 
     private class AppWebViewClient extends WebViewClient {
@@ -211,14 +271,12 @@ public class MainActivity extends Activity {
                 intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
             }
 
-            try {
-                startActivityForResult(intent, FILE_CHOOSER_REQUEST);
+            if (startForResult(intent, FILE_CHOOSER_REQUEST)) {
                 return true;
-            } catch (ActivityNotFoundException e) {
-                pendingFileCallback = null;
-                callback.onReceiveValue(null);
-                return false;
             }
+            pendingFileCallback = null;
+            callback.onReceiveValue(null);
+            return false;
         }
 
         @Override
@@ -230,16 +288,33 @@ public class MainActivity extends Activity {
         }
     }
 
+    private boolean startForResult(Intent intent, int requestCode) {
+        try {
+            startActivityForResult(intent, requestCode);
+            return true;
+        } catch (ActivityNotFoundException e) {
+            return false;
+        }
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode != FILE_CHOOSER_REQUEST) {
+        // Rientro da un selettore aperto dall'app: non è un "ritorno" da bloccare.
+        skipRelockOnce = true;
+
+        if (requestCode == FILE_CHOOSER_REQUEST) {
+            deliverChosenFiles(resultCode, data);
+        } else if (requestCode == FOLDER_PICKER_REQUEST) {
+            deliverChosenFolder(resultCode, data);
+        } else {
             super.onActivityResult(requestCode, resultCode, data);
-            return;
         }
+    }
+
+    private void deliverChosenFiles(int resultCode, Intent data) {
         if (pendingFileCallback == null) {
             return;
         }
-
         Uri[] result = null;
         if (resultCode == RESULT_OK && data != null) {
             ClipData clip = data.getClipData();
@@ -252,9 +327,28 @@ public class MainActivity extends Activity {
                 result = new Uri[]{data.getData()};
             }
         }
-
         pendingFileCallback.onReceiveValue(result);
         pendingFileCallback = null;
+    }
+
+    private void deliverChosenFolder(int resultCode, Intent data) {
+        JSONObject result = new JSONObject();
+        try {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+                storage.setTree(data.getData());
+                result.put("ok", true);
+                result.put("label", storage.label());
+                result.put("hasData", storage.exists("finance_tracker.db"));
+            } else {
+                result.put("ok", false);
+                result.put("cancelled", true);
+            }
+        } catch (RuntimeException | JSONException e) {
+            Log.e(TAG, "Scelta cartella non riuscita", e);
+            putQuietly(result, "ok", false);
+            putQuietly(result, "error", "Non riesco a usare questa cartella: " + e.getMessage());
+        }
+        callJs("__ftFolderPicked", result);
     }
 
     // ------------------------------------------------------------------ assets
@@ -321,15 +415,25 @@ public class MainActivity extends Activity {
 
     // ------------------------------------------------------------------ ponte JS
 
-    /** Metodi chiamati dalla pagina (android-bridge.js) come window.FTAndroid.*. */
+    /** Metodi chiamati dalla pagina come window.FTAndroid.* (sempre stringhe/JSON). */
     public class Bridge {
+
+        // --- download (Excel, backup) ---
+
         @JavascriptInterface
         public void saveFile(String fileName, String mimeType, String base64) {
             String name = sanitizeFileName(fileName);
             try {
                 byte[] bytes = Base64.decode(base64, Base64.DEFAULT);
                 String savedAs = saveToDownloads(name, mimeType, bytes);
-                showToast("Salvato in Download: " + savedAs);
+                String message = "Salvato in Download: " + savedAs;
+
+                // I backup finiscono anche nella cartella dei dati, come sul PC.
+                if (name.startsWith(BACKUP_PREFIX) && storage.isConfigured()) {
+                    storage.write("backups/" + name, bytes);
+                    message += " e nella cartella dei dati";
+                }
+                showToast(message);
             } catch (Exception e) {
                 Log.e(TAG, "Salvataggio non riuscito", e);
                 showToast("Salvataggio non riuscito: " + e.getMessage());
@@ -345,7 +449,134 @@ public class MainActivity extends Activity {
         public void appReady() {
             Log.i(TAG, "Interfaccia pronta");
         }
+
+        // --- cartella dei dati ---
+
+        @JavascriptInterface
+        public String storageState() {
+            JSONObject state = new JSONObject();
+            boolean configured = storage.isConfigured();
+            putQuietly(state, "configured", configured);
+            putQuietly(state, "prompted", storage.wasPrompted());
+            putQuietly(state, "label", configured ? storage.label() : "");
+            return state.toString();
+        }
+
+        @JavascriptInterface
+        public void pickFolder() {
+            runOnUiThread(() -> {
+                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+                intent.addFlags(FolderStorage.GRANT_FLAGS
+                        | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                        | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+                intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, DocumentsContract.buildDocumentUri(
+                        "com.android.externalstorage.documents", "primary:Documents"));
+                if (!startForResult(intent, FOLDER_PICKER_REQUEST)) {
+                    JSONObject result = new JSONObject();
+                    putQuietly(result, "ok", false);
+                    putQuietly(result, "error", "Su questo telefono non c'è un selettore di cartelle.");
+                    callJs("__ftFolderPicked", result);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void skipFolderPrompt() {
+            storage.markPrompted();
+        }
+
+        @JavascriptInterface
+        public String folderRead(String relativePath) {
+            JSONObject result = new JSONObject();
+            try {
+                byte[] data = storage.read(relativePath);
+                putQuietly(result, "ok", true);
+                if (data == null) {
+                    putQuietly(result, "missing", true);
+                } else {
+                    FolderStorage.FileInfo info = storage.info(relativePath);
+                    putQuietly(result, "data", Base64.encodeToString(data, Base64.NO_WRAP));
+                    putQuietly(result, "size", info != null ? info.size : data.length);
+                    putQuietly(result, "modified", info != null ? info.modified : 0);
+                }
+            } catch (IOException | RuntimeException e) {
+                putQuietly(result, "ok", false);
+                putQuietly(result, "error", String.valueOf(e.getMessage()));
+            }
+            return result.toString();
+        }
+
+        @JavascriptInterface
+        public String folderInfo(String relativePath) {
+            JSONObject result = new JSONObject();
+            try {
+                FolderStorage.FileInfo info = storage.info(relativePath);
+                putQuietly(result, "ok", true);
+                putQuietly(result, "exists", info != null);
+                if (info != null) {
+                    putQuietly(result, "size", info.size);
+                    putQuietly(result, "modified", info.modified);
+                }
+            } catch (IOException | RuntimeException e) {
+                putQuietly(result, "ok", false);
+                putQuietly(result, "error", String.valueOf(e.getMessage()));
+            }
+            return result.toString();
+        }
+
+        @JavascriptInterface
+        public String folderWrite(String relativePath, String base64) {
+            JSONObject result = new JSONObject();
+            try {
+                storage.write(relativePath, Base64.decode(base64, Base64.DEFAULT));
+                FolderStorage.FileInfo info = storage.info(relativePath);
+                putQuietly(result, "ok", true);
+                putQuietly(result, "size", info != null ? info.size : -1);
+                putQuietly(result, "modified", info != null ? info.modified : 0);
+            } catch (IOException | RuntimeException e) {
+                Log.e(TAG, "Scrittura nella cartella non riuscita", e);
+                putQuietly(result, "ok", false);
+                putQuietly(result, "error", String.valueOf(e.getMessage()));
+            }
+            return result.toString();
+        }
+
+        // --- blocco con impronta / PIN ---
+
+        @JavascriptInterface
+        public String lockState() {
+            JSONObject state = new JSONObject();
+            putQuietly(state, "available", isDeviceSecure());
+            putQuietly(state, "enabled", isLockEnabled());
+            return state.toString();
+        }
+
+        @JavascriptInterface
+        public void setLockEnabled(boolean enabled) {
+            runOnUiThread(() -> {
+                if (!isDeviceSecure()) {
+                    JSONObject result = new JSONObject();
+                    putQuietly(result, "ok", false);
+                    putQuietly(result, "enabled", isLockEnabled());
+                    putQuietly(result, "error",
+                            "Imposta prima un blocco schermo (PIN, sequenza o impronta) nelle impostazioni del telefono.");
+                    callJs("__ftLockChanged", result);
+                    return;
+                }
+                authenticate(enabled ? AUTH_ENABLE : AUTH_DISABLE);
+            });
+        }
     }
+
+    private static void putQuietly(JSONObject object, String key, Object value) {
+        try {
+            object.put(key, value);
+        } catch (JSONException ignored) {
+            // Le chiavi sono fisse: non succede.
+        }
+    }
+
+    // ------------------------------------------------------------------ download
 
     private String saveToDownloads(String name, String mimeType, byte[] bytes) throws IOException {
         ContentResolver resolver = getContentResolver();
@@ -395,6 +626,147 @@ public class MainActivity extends Activity {
         runOnUiThread(() -> Toast.makeText(this, message, Toast.LENGTH_LONG).show());
     }
 
+    // ------------------------------------------------------------------ blocco
+
+    private boolean isLockEnabled() {
+        return prefs.getBoolean(KEY_LOCK, false);
+    }
+
+    private boolean isDeviceSecure() {
+        KeyguardManager keyguard = getSystemService(KeyguardManager.class);
+        return keyguard != null && keyguard.isDeviceSecure();
+    }
+
+    /** Con il blocco attivo: niente screenshot e anteprima nascosta tra le app recenti. */
+    private void setSecureWindow(boolean secure) {
+        if (secure) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        } else {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        }
+    }
+
+    private void lock() {
+        locked = true;
+        lockOverlay.setVisibility(View.VISIBLE);
+    }
+
+    private void unlock() {
+        locked = false;
+        lockOverlay.setVisibility(View.GONE);
+    }
+
+    private void authenticate(int purpose) {
+        if (authInProgress) {
+            return;
+        }
+        authInProgress = true;
+
+        String subtitle = purpose == AUTH_UNLOCK
+                ? "Usa impronta, volto o PIN del telefono"
+                : purpose == AUTH_ENABLE
+                ? "Conferma per attivare il blocco dell'app"
+                : "Conferma per disattivare il blocco dell'app";
+
+        BiometricPrompt.Builder builder = new BiometricPrompt.Builder(this)
+                .setTitle("FinanceTracker")
+                .setSubtitle(subtitle);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            builder.setAllowedAuthenticators(
+                    BiometricManager.Authenticators.BIOMETRIC_WEAK
+                            | BiometricManager.Authenticators.DEVICE_CREDENTIAL);
+        } else {
+            builder.setDeviceCredentialAllowed(true);
+        }
+
+        try {
+            builder.build().authenticate(new CancellationSignal(), getMainExecutor(),
+                    new BiometricPrompt.AuthenticationCallback() {
+                        @Override
+                        public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
+                            authInProgress = false;
+                            handleAuthSuccess(purpose);
+                        }
+
+                        @Override
+                        public void onAuthenticationError(int errorCode, CharSequence message) {
+                            authInProgress = false;
+                            handleAuthFailure(purpose, String.valueOf(message));
+                        }
+                    });
+        } catch (RuntimeException e) {
+            authInProgress = false;
+            Log.e(TAG, "Autenticazione non disponibile", e);
+            handleAuthFailure(purpose, "Autenticazione non disponibile su questo telefono.");
+        }
+    }
+
+    private void handleAuthSuccess(int purpose) {
+        if (purpose == AUTH_UNLOCK) {
+            unlock();
+            return;
+        }
+        boolean enable = purpose == AUTH_ENABLE;
+        prefs.edit().putBoolean(KEY_LOCK, enable).apply();
+        setSecureWindow(enable);
+
+        JSONObject result = new JSONObject();
+        putQuietly(result, "ok", true);
+        putQuietly(result, "enabled", enable);
+        callJs("__ftLockChanged", result);
+        showToast(enable ? "Blocco attivato" : "Blocco disattivato");
+    }
+
+    private void handleAuthFailure(int purpose, String message) {
+        if (purpose == AUTH_UNLOCK) {
+            // La schermata di blocco resta: si riprova con "Sblocca".
+            return;
+        }
+        JSONObject result = new JSONObject();
+        putQuietly(result, "ok", false);
+        putQuietly(result, "enabled", isLockEnabled());
+        putQuietly(result, "error", message);
+        callJs("__ftLockChanged", result);
+    }
+
+    private View buildLockOverlay() {
+        LinearLayout overlay = new LinearLayout(this);
+        overlay.setOrientation(LinearLayout.VERTICAL);
+        overlay.setGravity(Gravity.CENTER);
+        overlay.setBackgroundColor(Color.parseColor("#0B1220"));
+        overlay.setClickable(true); // blocca i tocchi verso l'app sotto
+        overlay.setVisibility(View.GONE);
+
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.mipmap.ic_launcher);
+        int logoSize = dp(88);
+        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(logoSize, logoSize);
+        logoParams.bottomMargin = dp(20);
+        overlay.addView(logo, logoParams);
+
+        TextView title = new TextView(this);
+        title.setText("FinanceTracker è bloccata");
+        title.setTextColor(Color.parseColor("#EEF3FF"));
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        title.setGravity(Gravity.CENTER);
+        overlay.addView(title);
+
+        Button unlockButton = new Button(this);
+        unlockButton.setText("Sblocca");
+        unlockButton.setAllCaps(false);
+        unlockButton.setOnClickListener(v -> authenticate(AUTH_UNLOCK));
+        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        buttonParams.topMargin = dp(24);
+        overlay.addView(unlockButton, buttonParams);
+
+        return overlay;
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
     // ------------------------------------------------------------------ sistema
 
     /** Il contenuto resta fuori da barra di stato, barra di navigazione e tastiera (Android 11+). */
@@ -411,7 +783,7 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) {
+        if (!locked && webView != null && webView.canGoBack()) {
             webView.goBack();
         } else {
             // Come le app native: torna alla home senza chiudere Python,
@@ -426,10 +798,22 @@ public class MainActivity extends Activity {
         if (webView != null) {
             webView.onResume();
         }
+
+        if (isLockEnabled()) {
+            boolean away = pausedAt > 0 && SystemClock.elapsedRealtime() - pausedAt > RELOCK_AFTER_MS;
+            if (!locked && away && !skipRelockOnce) {
+                lock();
+            }
+            if (locked) {
+                authenticate(AUTH_UNLOCK);
+            }
+        }
+        skipRelockOnce = false;
     }
 
     @Override
     protected void onPause() {
+        pausedAt = SystemClock.elapsedRealtime();
         if (webView != null) {
             webView.onPause();
         }

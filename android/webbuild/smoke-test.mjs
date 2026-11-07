@@ -6,7 +6,9 @@
  * Apre l'app in Chromium (telefono simulato) con internet BLOCCATO:
  *  - l'app deve avviarsi solo con i file locali (prova dell'offline);
  *  - ogni pagina deve aprirsi senza errori Python;
- *  - un movimento salvato deve esserci ancora dopo il riavvio (persistenza).
+ *  - un movimento salvato deve esserci ancora dopo il riavvio (persistenza);
+ *  - con la cartella dei dati (ponte nativo simulato) i dati vanno nella
+ *    cartella e tornano da lì dopo una "reinstallazione".
  * Salva uno screenshot per pagina. Esce con codice 1 se qualcosa non va.
  */
 
@@ -162,10 +164,108 @@ int((df["descrizione"] == "SMOKE TEST").sum()) if len(df) else 0
 } catch (error) {
   failures.push(`Errore durante la prova: ${error.stack || error}`);
   await shot("99-errore").catch(() => {});
-} finally {
-  await browser.close();
-  server.close();
 }
+
+// ---------------------------------------------------------------------------
+// Cartella dei dati (app Android): ponte nativo simulato, Python vero.
+//  1. primo avvio: scelta della cartella, poi un movimento viene salvato lì;
+//  2. "reinstallazione" (memoria interna vuota): i dati tornano dalla cartella.
+// ---------------------------------------------------------------------------
+
+function fakeNativeBridge({ configured, folder }) {
+  const store = folder || {};
+  let state = { configured, prompted: configured };
+  let clock = 1;
+  window.__ftFakeFolder = store;
+  window.FTAndroid = {
+    storageState: () => JSON.stringify({ ...state, label: state.configured ? "Telefono › Documents/FinanceTracker" : "" }),
+    pickFolder: () => setTimeout(() => {
+      state = { configured: true, prompted: true };
+      window.__ftFolderPicked({ ok: true, label: "Telefono › Documents/FinanceTracker", hasData: !!store["finance_tracker.db"] });
+    }, 50),
+    skipFolderPrompt: () => { state.prompted = true; },
+    folderRead: (n) => JSON.stringify(store[n]
+      ? { ok: true, data: store[n].data, size: store[n].size, modified: store[n].modified }
+      : { ok: true, missing: true }),
+    folderInfo: (n) => JSON.stringify(store[n]
+      ? { ok: true, exists: true, size: store[n].size, modified: store[n].modified }
+      : { ok: true, exists: false }),
+    folderWrite: (n, data) => {
+      store[n] = { data, size: atob(data).length, modified: ++clock };
+      return JSON.stringify({ ok: true, size: store[n].size, modified: store[n].modified });
+    },
+    lockState: () => JSON.stringify({ available: false, enabled: false }),
+    setLockEnabled: () => {},
+    saveFile: () => {},
+    toast: () => {},
+    appReady: () => {},
+  };
+}
+
+async function folderPage(options) {
+  const ctx = await browser.newContext({ ...devices["Pixel 7"] });
+  await ctx.route("**/*", (route) => {
+    const url = route.request().url();
+    return url.startsWith(BASE) || url.startsWith("data:") || url.startsWith("blob:")
+      ? route.continue()
+      : route.abort();
+  });
+  await ctx.addInitScript(fakeNativeBridge, options);
+  const folderPg = await ctx.newPage();
+  folderPg.on("pageerror", (err) => console.log("  [pageerror]", err.message));
+  return { ctx, folderPg };
+}
+
+if (!failures.length) {
+  try {
+    console.log("Cartella dei dati: primo avvio...");
+    const first = await folderPage({ configured: false, folder: {} });
+    await first.folderPg.goto(BASE + "/");
+    await first.folderPg.locator("#ft-setup-pick").click({ timeout: 30_000 });
+    await first.folderPg.waitForSelector(".ft-mtop", { timeout: BOOT_TIMEOUT });
+    await first.folderPg.evaluate((c) => window.__ftStlite.runPython(c), `
+import sys, datetime
+if "/home/pyodide" not in sys.path: sys.path.insert(0, "/home/pyodide")
+from src.services.movement_service import add_manual_movement
+add_manual_movement(datetime.date(2026, 2, 2), "CARTELLA TEST", 4.5, "Altro", "Uscita", "Fineco")
+`);
+    await first.folderPg.waitForFunction(() => {
+      const db = window.__ftFakeFolder["finance_tracker.db"];
+      return db && atob(db.data).includes("CARTELLA TEST");
+    }, null, { timeout: 30_000 });
+    console.log("  ok: il movimento è stato salvato nella cartella");
+
+    await first.folderPg.locator(".st-key-ft_mobile_tabbar a", { hasText: "Opzioni" }).first().click();
+    await first.folderPg.getByRole("tab", { name: "Dati" }).click();
+    await first.folderPg.waitForTimeout(1500);
+    const widget = await first.folderPg.locator('[data-ft-widget="storage"]').innerText();
+    if (!widget.includes("Documents/FinanceTracker")) failures.push(`Opzioni → Dati non mostra la cartella: ${widget}`);
+    await first.folderPg.screenshot({ path: path.join(SHOTS, "07-cartella-dati.png") });
+
+    const savedFolder = await first.folderPg.evaluate(() => window.__ftFakeFolder);
+    await first.ctx.close();
+
+    console.log("Cartella dei dati: reinstallazione (memoria interna vuota)...");
+    const second = await folderPage({ configured: true, folder: savedFolder });
+    await second.folderPg.goto(BASE + "/");
+    await second.folderPg.waitForSelector(".ft-mtop", { timeout: BOOT_TIMEOUT });
+    const restored = await second.folderPg.evaluate((c) => window.__ftStlite.runPython(c), `
+import sys
+if "/home/pyodide" not in sys.path: sys.path.insert(0, "/home/pyodide")
+from src.services.movement_service import load_movements
+df = load_movements()
+int((df["descrizione"] == "CARTELLA TEST").sum()) if len(df) else 0
+`);
+    if (Number(restored) < 1) failures.push("Cartella dei dati: dopo la reinstallazione il movimento non c'è");
+    else console.log("  ok: dopo la reinstallazione i dati tornano dalla cartella");
+    await second.ctx.close();
+  } catch (error) {
+    failures.push(`Errore nella prova della cartella dei dati: ${error.stack || error}`);
+  }
+}
+
+await browser.close();
+server.close();
 
 if (external.size) {
   console.log("Richieste esterne bloccate (l'app funziona comunque offline):", [...external].join(", "));
@@ -175,4 +275,4 @@ if (failures.length) {
   console.error("\nPROVA FALLITA:\n" + failures.map((f) => " - " + f).join("\n"));
   process.exit(1);
 }
-console.log("\nProva superata: avvio offline, tutte le pagine, persistenza.");
+console.log("\nProva superata: avvio offline, tutte le pagine, persistenza, cartella dei dati.");

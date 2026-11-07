@@ -51,6 +51,35 @@ def _sync_streamlit_native_theme(theme_id: str) -> None:
     )
 
 
+_FONT_FILES = (
+    ("Manrope", 400, "manrope-latin-400-normal.woff2"),
+    ("Manrope", 500, "manrope-latin-500-normal.woff2"),
+    ("Manrope", 600, "manrope-latin-600-normal.woff2"),
+    ("Manrope", 700, "manrope-latin-700-normal.woff2"),
+    ("Manrope", 800, "manrope-latin-800-normal.woff2"),
+    ("Fraunces", 600, "fraunces-latin-600-normal.woff2"),
+    ("Fraunces", 700, "fraunces-latin-700-normal.woff2"),
+)
+
+
+def _font_faces_css() -> str:
+    """
+    Font inclusi nell'app (static/fonts), così funzionano anche offline.
+
+    Su desktop li serve Streamlit da /app/static (enableStaticServing).
+    Su Android li dichiara già la pagina di avvio (android/web).
+    """
+    if IS_ANDROID:
+        return ""
+
+    return "\n".join(
+        f'@font-face {{ font-family: "{family}"; font-style: normal; '
+        f"font-weight: {weight}; font-display: swap; "
+        f'src: url("/app/static/fonts/{file}") format("woff2"); }}'
+        for family, weight, file in _FONT_FILES
+    )
+
+
 def apply_theme(
     theme_id: str | None = None,
     accent_id: str | None = None,
@@ -74,7 +103,7 @@ def apply_theme(
     st.markdown(
         f"""
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap');
+        {_font_faces_css()}
 
         :root {{
             --ft-bg-0: {theme.bg_0};
@@ -257,7 +286,7 @@ def apply_theme(
         }}
 
         [data-testid="stColumn"]:has(.ft-navigation-anchor)
-        [data-testid="stVerticalBlockBorderWrapper"] {{
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-navigation-anchor) {{
             min-height: 100%;
             padding: 0.85rem;
             border-radius: 22px;
@@ -359,20 +388,25 @@ def apply_theme(
             background: transparent !important;
         }}
 
-        /* Info card: stessa altezza anche con nomi lunghi (2 righe max). */
+        /* Info card: tutte le card di una riga alte come la più alta
+           (testi su più righe, tasso di risparmio con la casella). */
         [data-testid="stHorizontalBlock"]:has(.ft-info-card) {{
             align-items: stretch !important;
         }}
 
-        [data-testid="stHorizontalBlock"]:has(.ft-info-card)
-        [data-testid="column"] {{
+        [data-testid="stHorizontalBlock"]:has(.ft-info-card) > [data-testid="stColumn"],
+        [data-testid="stHorizontalBlock"]:has(.ft-info-card) > [data-testid="stColumn"] > [data-testid="stVerticalBlock"],
+        [data-testid="stElementContainer"]:has(> [data-testid="stMarkdown"] .ft-info-card),
+        [data-testid="stElementContainer"]:has(> [data-testid="stMarkdown"] .ft-info-card) > [data-testid="stMarkdown"],
+        [data-testid="stElementContainer"]:has(> [data-testid="stMarkdown"] .ft-info-card) > [data-testid="stMarkdown"] > div,
+        [data-testid="stMarkdownContainer"]:has(> .ft-info-card) {{
             display: flex !important;
             flex-direction: column !important;
+            flex: 1 1 auto !important;
         }}
 
-        [data-testid="stHorizontalBlock"]:has(.ft-info-card)
-        [data-testid="column"] > div {{
-            height: 100%;
+        .ft-info-card {{
+            flex: 1 1 auto;
         }}
 
         .ft-info-card {{
@@ -476,14 +510,11 @@ def apply_theme(
             padding-bottom: 52px !important;
         }}
 
-        [data-testid="stColumn"]:has(.ft-savings-rate-card),
-        [data-testid="column"]:has(.ft-savings-rate-card) {{
+        [data-testid="stColumn"]:has(.ft-savings-rate-card) {{
             position: relative;
         }}
 
         [data-testid="stColumn"]:has(.ft-savings-rate-card)
-        [data-testid="stElementContainer"]:has([data-testid="stCheckbox"]),
-        [data-testid="column"]:has(.ft-savings-rate-card)
         [data-testid="stElementContainer"]:has([data-testid="stCheckbox"]) {{
             position: absolute;
             left: 18px;
@@ -496,16 +527,12 @@ def apply_theme(
         }}
 
         [data-testid="stColumn"]:has(.ft-savings-rate-card)
-        [data-testid="stCheckbox"],
-        [data-testid="column"]:has(.ft-savings-rate-card)
         [data-testid="stCheckbox"] {{
             min-height: 0 !important;
             padding: 0 !important;
         }}
 
         [data-testid="stColumn"]:has(.ft-savings-rate-card)
-        [data-testid="stCheckbox"] label p,
-        [data-testid="column"]:has(.ft-savings-rate-card)
         [data-testid="stCheckbox"] label p {{
             font-size: 12px;
             font-weight: 650;
@@ -513,13 +540,6 @@ def apply_theme(
         }}
 
         /* ---- Content surfaces ---- */
-
-        [data-testid="stVerticalBlockBorderWrapper"] {{
-            border-radius: var(--ft-radius);
-            border-color: var(--ft-border);
-            background: var(--ft-panel-soft);
-            animation: ft-fade-up 240ms ease-out;
-        }}
 
         .stButton > button {{
             border-radius: 12px;
@@ -1210,15 +1230,32 @@ def apply_theme(
         [data-testid="stAlert"],
         [data-testid="stAlert"] > div,
         [data-testid="stNotification"],
-        [data-testid="stToast"],
-        [data-testid="stToast"] > div,
-        div[data-testid="toastContainer"] [data-testid="stToast"] {{
-            border-radius: 14px !important;
+        /* Messaggi (toast): fondo pieno, un solo bordo, barra colorata a sinistra. */
+        [data-testid="stToast"] {{
+            border-radius: 16px !important;
             border: 1px solid var(--ft-border) !important;
-            background: {theme.panel} !important;
-            background-color: {theme.input_bg} !important;
+            border-left: 4px solid var(--ft-accent) !important;
+            background-color: {menu_bg} !important;
+            background-image: linear-gradient(
+                rgba(var(--ft-accent-rgb), 0.10),
+                rgba(var(--ft-accent-rgb), 0.10)
+            ) !important;
             color: {theme.text} !important;
-            box-shadow: var(--ft-shadow) !important;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.32) !important;
+            padding: 14px 16px !important;
+        }}
+
+        [data-testid="stToast"] > div {{
+            background: transparent !important;
+            border: 0 !important;
+            box-shadow: none !important;
+        }}
+
+        [data-testid="stToastText"],
+        [data-testid="stToastText"] p {{
+            font-size: 15px !important;
+            font-weight: 650 !important;
+            line-height: 1.4 !important;
         }}
 
         [data-testid="stAlert"] p,
@@ -1483,23 +1520,15 @@ def apply_theme(
         }}
 
         /* Card pannello: distribuzione + grafici dashboard */
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-distribution-anchor),
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-chart-card-anchor),
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-panel-anchor),
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor),
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor),
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-distribution-anchor),
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-chart-card-anchor),
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-panel-anchor),
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-movement-anchor),
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-settings-anchor),
         div[class*="st-key-ft_dashboard_chart_card"],
         div[class*="st-key-ft_dashboard_distribution_card"],
         div[class*="st-key-ft_dashboard_expense_distribution"],
-        div[class*="st-key-ft_dashboard_income_distribution"],
-        div[class*="st-key-ft_dashboard_chart_card"]
-            [data-testid="stVerticalBlockBorderWrapper"],
-        div[class*="st-key-ft_dashboard_distribution_card"]
-            [data-testid="stVerticalBlockBorderWrapper"],
-        div[class*="st-key-ft_dashboard_expense_distribution"]
-            [data-testid="stVerticalBlockBorderWrapper"],
-        div[class*="st-key-ft_dashboard_income_distribution"]
-            [data-testid="stVerticalBlockBorderWrapper"] {{
+        div[class*="st-key-ft_dashboard_income_distribution"] {{
             background:
                 radial-gradient(
                     circle at 12% 0%,
@@ -1520,8 +1549,8 @@ def apply_theme(
         div[class*="st-key-ft_dashboard_distribution_card"] > div,
         div[class*="st-key-ft_dashboard_expense_distribution"] > div,
         div[class*="st-key-ft_dashboard_income_distribution"] > div,
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-chart-card-anchor) > div,
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-distribution-anchor) > div {{
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-chart-card-anchor) > div,
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-distribution-anchor) > div {{
             background: transparent !important;
             background-color: transparent !important;
         }}
@@ -1530,19 +1559,19 @@ def apply_theme(
         div[class*="st-key-ft_dashboard_chart_card"] .stPlotlyChart,
         div[class*="st-key-ft_dashboard_chart_card"] .js-plotly-plot,
         div[class*="st-key-ft_dashboard_chart_card"] .plot-container,
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-chart-card-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-chart-card-anchor)
             [data-testid="stPlotlyChart"],
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-chart-card-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-chart-card-anchor)
             .stPlotlyChart,
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-chart-card-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-chart-card-anchor)
             .js-plotly-plot,
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-distribution-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-distribution-anchor)
             iframe {{
             background: transparent !important;
             background-color: transparent !important;
         }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor) {{
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-movement-anchor) {{
             padding: 9px 12px 9px 13px !important;
             margin-bottom: 6px !important;
             border-radius: 14px !important;
@@ -1550,61 +1579,61 @@ def apply_theme(
             box-shadow: none !important;
         }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-loan-leg) {{
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-movement-anchor):has(.ft-loan-leg) {{
             padding: 5px 14px 11px 13px !important;
         }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-tone.is-income) {{
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-movement-anchor):has(.ft-movement-tone.is-income) {{
             box-shadow: inset 3px 0 0 var(--ft-income) !important;
         }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-tone.is-expense) {{
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-movement-anchor):has(.ft-movement-tone.is-expense) {{
             box-shadow: inset 3px 0 0 var(--ft-danger) !important;
         }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-tone.is-investment) {{
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-movement-anchor):has(.ft-movement-tone.is-investment) {{
             box-shadow: inset 3px 0 0 var(--ft-investment) !important;
         }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-tone.is-transfer) {{
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-movement-anchor):has(.ft-movement-tone.is-transfer) {{
             box-shadow: inset 3px 0 0 var(--ft-muted) !important;
         }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-movement-anchor)
         [data-testid="stVerticalBlock"] {{
             gap: 0 !important;
         }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-movement-anchor)
         [data-testid="stHorizontalBlock"] {{
             gap: 10px !important;
         }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-movement-anchor)
         [data-testid="stCheckbox"] {{
             min-height: 0 !important;
             padding-top: 2px !important;
         }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-movement-anchor)
         [data-testid="stElementContainer"],
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-movement-anchor)
         [data-testid="stMarkdownContainer"] {{
             margin: 0 !important;
             padding: 0 !important;
         }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-movement-anchor)
         [data-testid="stElementContainer"]:has(.ft-movement-anchor):not(:has(.ft-movement-card)) {{
             display: none !important;
         }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-movement-anchor)
         div[class*="st-key-open_edit_"] {{
             margin-top: 0 !important;
         }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-movement-anchor)
         div[class*="st-key-open_edit_"] button,
         div[class*="st-key-movements_show_more"] button {{
             min-height: 28px !important;
@@ -1619,7 +1648,7 @@ def apply_theme(
             box-shadow: none !important;
         }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-movement-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-movement-anchor)
         div[class*="st-key-open_edit_"] button:hover,
         div[class*="st-key-movements_show_more"] button:hover {{
             background: rgba(var(--ft-accent-rgb), 0.18) !important;
@@ -1751,7 +1780,7 @@ def apply_theme(
             font-weight: 600;
         }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor) {{
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-settings-anchor) {{
             padding: 9px 12px 9px 13px !important;
             margin-bottom: 6px !important;
             border-radius: 14px !important;
@@ -1759,36 +1788,36 @@ def apply_theme(
             box-shadow: none !important;
         }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-settings-anchor)
         [data-testid="stVerticalBlock"] {{
             gap: 0 !important;
         }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-settings-anchor)
         [data-testid="stHorizontalBlock"] {{
             gap: 10px !important;
         }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-settings-anchor)
         [data-testid="stElementContainer"],
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-settings-anchor)
         [data-testid="stMarkdownContainer"] {{
             margin: 0 !important;
             padding: 0 !important;
         }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-settings-anchor)
         [data-testid="stElementContainer"]:has(.ft-settings-anchor):not(:has(.ft-settings-row)) {{
             display: none !important;
         }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-settings-anchor)
         div[class*="st-key-open_cat_"] button,
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-settings-anchor)
         div[class*="st-key-export_account_"] button,
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-settings-anchor)
         div[class*="st-key-delete_account_"] button,
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-settings-anchor)
         div[class*="st-key-recalculate_categories"] button {{
             min-height: 28px !important;
             padding: 0 11px !important;
@@ -1801,7 +1830,7 @@ def apply_theme(
             box-shadow: none !important;
         }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-settings-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-settings-anchor)
         div[class*="st-key-delete_account_"] button {{
             border-color: rgba(248, 113, 113, 0.40) !important;
             background: rgba(248, 113, 113, 0.10) !important;
@@ -1838,7 +1867,7 @@ def apply_theme(
             border-radius: 10px !important;
         }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-distribution-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-distribution-anchor)
         [data-testid="stHorizontalBlock"]
         > div[data-testid="stColumn"]:first-child,
         div[class*="st-key-ft_dashboard_distribution_card"]
@@ -1854,7 +1883,7 @@ def apply_theme(
             padding-right: 12px;
         }}
 
-        [data-testid="stVerticalBlockBorderWrapper"]:has(.ft-distribution-anchor)
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .ft-distribution-anchor)
         [data-testid="stHorizontalBlock"]
         > div[data-testid="stColumn"]:last-child,
         div[class*="st-key-ft_dashboard_distribution_card"]

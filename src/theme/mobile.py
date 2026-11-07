@@ -167,9 +167,24 @@ button, [data-testid="stPageLink"] a, [role="tab"], label {
 }
 
 /* Con un dialog aperto la barra in basso si nasconde (non copre i pulsanti). */
-body:has(div[role="dialog"]) .st-key-ft_mobile_tabbar,
 body:has([data-testid="stDialog"]) .st-key-ft_mobile_tabbar {
     display: none !important;
+}
+
+/* Messaggi (toast) in basso, sopra la barra: non coprono titoli e pulsanti di chiusura. */
+[data-testid="stToastContainer"] {
+    top: auto !important;
+    bottom: calc(84px + env(safe-area-inset-bottom)) !important;
+    left: 12px !important;
+    right: 12px !important;
+    width: auto !important;
+    align-items: stretch !important;
+}
+
+[data-testid="stToastContainer"] li,
+[data-testid="stToast"] {
+    width: 100% !important;
+    max-width: none !important;
 }
 
 /* ---------- Controlli comodi per il dito ---------- */
@@ -180,7 +195,7 @@ body:has([data-testid="stDialog"]) .st-key-ft_mobile_tabbar {
     min-height: 46px;
 }
 
-[data-baseweb="select"] > div,
+[data-testid="stSelectbox"] [role="combobox"],
 [data-baseweb="input"],
 [data-testid="stDateInput"] input,
 [data-testid="stNumberInput"] input,
@@ -189,7 +204,7 @@ body:has([data-testid="stDialog"]) .st-key-ft_mobile_tabbar {
 }
 
 /* 16px evita lo zoom automatico del browser quando si tocca un campo. */
-input, textarea, select, [data-baseweb="select"] input {
+input, textarea, select, [data-testid="stSelectbox"] input {
     font-size: 16px !important;
 }
 
@@ -304,8 +319,9 @@ input, textarea, select, [data-baseweb="select"] input {
         font-size: clamp(13px, 10cqi, 20px) !important;
     }
 
+    /* Stessa altezza per tutte le card (il tasso di risparmio ha anche la casella). */
     .ft-info-card {
-        min-height: 150px !important;
+        min-height: 178px !important;
         padding: 14px 14px !important;
         container-type: inline-size;
     }
@@ -508,12 +524,110 @@ input, textarea, select, [data-baseweb="select"] input {
         padding-bottom: 6px !important;
     }
 
-    /* Dialog a tutta larghezza. */
-    div[role="dialog"] {
-        width: calc(100vw - 20px) !important;
-        max-width: calc(100vw - 20px) !important;
-        margin: 10px !important;
+    /* Dialog: foglio a tutta larghezza, quasi a tutta altezza, che scorre al suo interno. */
+    [data-testid="stDialog"] [role="dialog"] {
+        width: calc(100vw - 16px) !important;
+        max-width: calc(100vw - 16px) !important;
+        max-height: calc(100dvh - 24px) !important;
+        margin: 12px 8px !important;
+        padding-left: 18px !important;
+        padding-right: 18px !important;
+        padding-bottom: calc(18px + env(safe-area-inset-bottom)) !important;
         border-radius: 22px !important;
+        overscroll-behavior: contain;
+    }
+
+    [data-testid="stDialog"] [role="dialog"] h2 {
+        padding-right: 44px !important;
+        font-size: 22px !important;
+    }
+
+    /* Pulsante di chiusura: resta in vista e si tocca facilmente (44 px). */
+    [data-testid="stDialog"] [role="dialog"] > button:first-child {
+        position: fixed !important;
+        top: 20px !important;
+        right: 16px !important;
+        z-index: 5 !important;
+        width: 44px !important;
+        height: 44px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        border-radius: 999px !important;
+        background: color-mix(in srgb, var(--ft-panel) 92%, transparent) !important;
+        border: 1px solid var(--ft-border) !important;
+    }
+
+    [data-testid="stDialog"] [role="dialog"] > button:first-child svg {
+        width: 18px !important;
+        height: 18px !important;
+    }
+
+    /* File di soli pulsanti (Conferma/Annulla, griglia icone): restano affiancati.
+       (:has non si può annidare, quindi si escludono le file con altri elementi.) */
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .stButton, > [data-testid="stColumn"] .stDownloadButton):not(:has(> [data-testid="stColumn"] [data-testid="stMarkdown"], > [data-testid="stColumn"] [data-testid="stHtml"], > [data-testid="stColumn"] [data-testid="stCaptionContainer"], > [data-testid="stColumn"] [data-testid="stTextInput"], > [data-testid="stColumn"] [data-testid="stTextArea"], > [data-testid="stColumn"] [data-testid="stSelectbox"], > [data-testid="stColumn"] [data-testid="stMultiSelect"], > [data-testid="stColumn"] [data-testid="stNumberInput"], > [data-testid="stColumn"] [data-testid="stCheckbox"], > [data-testid="stColumn"] [data-testid="stToggle"], > [data-testid="stColumn"] [data-testid="stRadio"], > [data-testid="stColumn"] [data-testid="stPills"], > [data-testid="stColumn"] [data-testid="stImage"], > [data-testid="stColumn"] [data-testid="stPlotlyChart"], > [data-testid="stColumn"] [data-testid="stIFrame"], > [data-testid="stColumn"] [data-testid="stFileUploader"], > [data-testid="stColumn"] [data-testid="stAlert"], > [data-testid="stColumn"] [data-testid="stHorizontalBlock"])) {
+        flex-wrap: nowrap !important;
+        gap: 8px !important;
+    }
+
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .stButton, > [data-testid="stColumn"] .stDownloadButton):not(:has(> [data-testid="stColumn"] [data-testid="stMarkdown"], > [data-testid="stColumn"] [data-testid="stHtml"], > [data-testid="stColumn"] [data-testid="stCaptionContainer"], > [data-testid="stColumn"] [data-testid="stTextInput"], > [data-testid="stColumn"] [data-testid="stTextArea"], > [data-testid="stColumn"] [data-testid="stSelectbox"], > [data-testid="stColumn"] [data-testid="stMultiSelect"], > [data-testid="stColumn"] [data-testid="stNumberInput"], > [data-testid="stColumn"] [data-testid="stCheckbox"], > [data-testid="stColumn"] [data-testid="stToggle"], > [data-testid="stColumn"] [data-testid="stRadio"], > [data-testid="stColumn"] [data-testid="stPills"], > [data-testid="stColumn"] [data-testid="stImage"], > [data-testid="stColumn"] [data-testid="stPlotlyChart"], > [data-testid="stColumn"] [data-testid="stIFrame"], > [data-testid="stColumn"] [data-testid="stFileUploader"], > [data-testid="stColumn"] [data-testid="stAlert"], > [data-testid="stColumn"] [data-testid="stHorizontalBlock"]))
+    > [data-testid="stColumn"] {
+        flex: 1 1 0 !important;
+        width: auto !important;
+        min-width: 0 !important;
+    }
+
+    /* ...le colonne vuote usate come spaziatura non servono sul telefono. */
+    [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:not(:has([data-testid="stElementContainer"])) {
+        display: none !important;
+    }
+
+    /* Griglia icone: pulsanti compatti, emoji ben visibili. */
+    div[class*="st-key-category_icon_"] button,
+    div[class*="st-key-settings_new_category_icon_"] button {
+        min-height: 40px !important;
+        height: 40px !important;
+        padding: 0 !important;
+        font-size: 20px !important;
+    }
+
+    [data-testid="stHorizontalBlock"]:has(div[class*="st-key-category_icon_"]),
+    [data-testid="stHorizontalBlock"]:has(div[class*="st-key-settings_new_category_icon_"]) {
+        gap: 4px !important;
+    }
+
+    /* Parole chiave: etichetta e piccolo ✕ sulla stessa riga. */
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .ft-keyword-chip) {
+        flex-wrap: nowrap !important;
+        align-items: center !important;
+        gap: 8px !important;
+    }
+
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .ft-keyword-chip) > [data-testid="stColumn"]:first-child {
+        flex: 1 1 auto !important;
+        width: auto !important;
+        min-width: 0 !important;
+    }
+
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .ft-keyword-chip) > [data-testid="stColumn"]:last-child {
+        flex: 0 0 40px !important;
+        width: 40px !important;
+        min-width: 40px !important;
+    }
+
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .ft-keyword-chip) [data-testid="stMarkdownContainer"] {
+        margin-bottom: 0 !important;
+    }
+
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .ft-keyword-chip) .stButton > button {
+        min-height: 36px !important;
+        height: 36px !important;
+        width: 36px !important;
+        padding: 0 !important;
+        border-radius: 999px !important;
+        color: var(--ft-danger) !important;
+        border-color: rgba(248, 113, 113, 0.35) !important;
+        background: rgba(248, 113, 113, 0.08) !important;
     }
 }
 """

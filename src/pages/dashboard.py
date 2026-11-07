@@ -56,13 +56,20 @@ from src.services.analytics import (
     top_income_category,
     types_chip_label,
 )
-from src.services.backup_service import restore_backup
+from src.services.backup_service import (
+    build_backup_bytes,
+    create_backup,
+    days_since_last_backup,
+    mark_backup_done,
+    restore_backup,
+)
 from src.services.categories import get_category_icon, load_category_definitions
 from src.services.movement_service import load_movements
 from src.theme.colors import get_category_colors
 from src.theme.tokens import resolve_semantic
 from src.utils.formatting import euro, signed_euro
-from src.utils.platform import IS_ANDROID, PLOTLY_JS_URL
+from src.utils.file_save import save_and_reveal
+from src.utils.platform import IS_ANDROID, PLOTLY_JS_URL, ZIP_MIME
 
 
 
@@ -134,6 +141,9 @@ def render_category_pie_chart(
         # Su Android plotly.js (4-5 MB) è un file locale dell'app:
         # niente libreria intera rigenerata e inviata a ogni interazione.
         include_plotlyjs=PLOTLY_JS_URL or True,
+        # ID fisso: con gli stessi dati l'HTML resta identico e il browser
+        # non ricarica il grafico a ogni interazione.
+        div_id=f"{root_id}-plot",
         full_html=False,
         config={"displayModeBar": False, "responsive": True},
     )
@@ -202,10 +212,27 @@ def render_category_pie_chart(
             if (!gd || gd._ftPieHoverBound) return;
             gd._ftPieHoverBound = true;
             let last = -1;
+            let resetTimer = null;
+
+            // Touch: nessun "mouse fuori", quindi la fetta evidenziata
+            // e il dettaglio si tolgono da soli dopo qualche secondo.
+            const touch = window.matchMedia && window.matchMedia('(hover: none)').matches;
+
+            function reset() {{
+              clearTimeout(resetTimer);
+              if (last === -1) return;
+              last = -1;
+              try {{ Plotly.Fx.unhover(gd); }} catch (error) {{}}
+              setActive(gd, -1);
+            }}
 
             gd.on('plotly_hover', function (ev) {{
               if (!ev.points || !ev.points.length) return;
               const index = ev.points[0].pointNumber;
+              if (touch) {{
+                clearTimeout(resetTimer);
+                resetTimer = setTimeout(reset, 2500);
+              }}
               if (index === last) return;
               last = index;
               setActive(gd, index);
@@ -215,6 +242,12 @@ def render_category_pie_chart(
               last = -1;
               setActive(gd, -1);
             }});
+
+            if (touch) {{
+              document.addEventListener('touchstart', function (ev) {{
+                if (!ev.target.closest('.pielayer')) reset();
+              }}, {{ passive: true }});
+            }}
           }}
 
           function tryBind(left) {{
@@ -369,7 +402,9 @@ def _close_restore_dialog() -> None:
 @st.dialog("Parti da un backup", on_dismiss=_close_restore_dialog)
 def _restore_backup_dialog() -> None:
     st.caption(
-        "Sostituisce database e categorie con lo zip di backup. "
+        "Carica database e categorie dallo zip di backup."
+        if IS_ANDROID
+        else "Sostituisce database e categorie con lo zip di backup. "
         "Se la cartella sembra vuota, scegli «Tutti i file»."
     )
     uploaded = st.file_uploader(
@@ -392,6 +427,65 @@ def _restore_backup_dialog() -> None:
     if st.button("Annulla", width="stretch"):
         _close_restore_dialog()
         st.rerun()
+
+
+BACKUP_REMINDER_DAYS = 14
+_BACKUP_REMINDER_DISMISSED = "dashboard_backup_reminder_dismissed"
+
+
+def _render_backup_reminder() -> None:
+    """Avviso discreto se l'ultimo backup è vecchio (o non c'è mai stato)."""
+    if st.session_state.get(_BACKUP_REMINDER_DISMISSED):
+        return
+
+    days = days_since_last_backup()
+    if days is not None and days < BACKUP_REMINDER_DAYS:
+        return
+
+    when = "Non hai ancora fatto un backup" if days is None else f"Ultimo backup {days} giorni fa"
+    render_html(
+        f"""
+        <div class="ft-backup-reminder" style="
+            margin:4px 0 6px 0;
+            padding:12px 16px;
+            border-radius:14px;
+            border:1px solid rgba(var(--ft-accent-rgb), 0.30);
+            background:rgba(var(--ft-accent-rgb), 0.08);
+            font-size:14px;
+            line-height:1.45;
+            color:var(--ft-text);
+        ">
+            💾 <b>{html.escape(when)}.</b>
+            <span style="color:var(--ft-muted);">
+                Uno zip con movimenti e categorie ti protegge da guasti e cambi di dispositivo.
+            </span>
+        </div>
+        """
+    )
+
+    backup_col, later_col, _ = st.columns([1.2, 1, 2.8])
+    with backup_col:
+        if IS_ANDROID:
+            name, data = build_backup_bytes()
+            st.download_button(
+                "Crea backup ora",
+                data=data,
+                file_name=name,
+                mime=ZIP_MIME,
+                type="primary",
+                width="stretch",
+                on_click=mark_backup_done,
+                key="dashboard_backup_now",
+            )
+        elif st.button("Crea backup ora", type="primary", width="stretch", key="dashboard_backup_now"):
+            backup_path = create_backup()
+            saved = save_and_reveal(backup_path.read_bytes(), backup_path.name)
+            st.toast(f"Salvato in Download: {saved.name}")
+            st.rerun()
+    with later_col:
+        if st.button("Più tardi", width="stretch", key="dashboard_backup_later"):
+            st.session_state[_BACKUP_REMINDER_DISMISSED] = True
+            st.rerun()
 
 
 def show_dashboard() -> None:
@@ -496,6 +590,8 @@ def show_dashboard() -> None:
         )
     else:
         st.caption("Panoramica generale delle tue finanze.")
+
+    _render_backup_reminder()
 
     months = sorted(df["mese"].dropna().unique(), reverse=True)
     accounts = sorted(df["account"].dropna().unique().tolist())

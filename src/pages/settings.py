@@ -16,6 +16,8 @@ from src.database.db import DB_PATH
 from src.services.backup_service import (
     build_backup_bytes,
     create_backup,
+    mark_backup_done,
+    merge_backup,
     restore_backup,
 )
 from src.utils.platform import IS_ANDROID, ZIP_MIME
@@ -685,6 +687,74 @@ def _account_delete_dialog(account: str, df) -> None:
             st.rerun()
 
 
+def _render_desktop_storage_paths() -> None:
+    st.caption("Percorsi locali e backup di sicurezza.")
+
+    db_path = DB_PATH.resolve()
+    config_path = USER_CATEGORY_CONFIG_PATH.resolve()
+
+    col_db, col_config = st.columns(2)
+
+    with col_db:
+        with styled_panel():
+            _settings_section_header("Database", chip="SQLite")
+            _render_copyable_path(str(db_path), key="db")
+            st.caption(
+                "Contiene i movimenti e le categorie assegnate."
+            )
+
+    with col_config:
+        with styled_panel():
+            _settings_section_header("Configurazione categorie", chip="JSON")
+            _render_copyable_path(str(config_path), key="categories")
+            st.caption(
+                "Contiene icone e regole automatiche "
+                "personalizzate."
+            )
+
+
+def _render_android_storage_info() -> None:
+    """
+    Su Android: cartella dei dati, backup e blocco dell'app.
+
+    I due riquadri interattivi li riempie la parte nativa dell'app
+    (android/web/native.js) al posto dei segnaposto data-ft-widget.
+    """
+    st.caption("Dove sono i tuoi dati sul telefono.")
+
+    with styled_panel():
+        _settings_section_header("Cartella dei dati", chip="Telefono")
+        st.html(
+            '<div data-ft-widget="storage">'
+            "I dati sono nella memoria dell'app."
+            "</div>"
+        )
+
+    with styled_panel():
+        _settings_section_header("Backup ed export", chip="Download")
+        render_html(
+            """
+            <div style="font-size:14px;line-height:1.5;color:var(--ft-text);">
+              I backup (.zip) e gli export Excel si salvano nella cartella
+              <b>Download</b> del telefono; i backup anche in <b>backups/</b>
+              dentro la cartella dei dati, se l'hai scelta.
+            </div>
+            """
+        )
+        st.caption(
+            "Dal PC al telefono: crea un backup nella versione desktop, "
+            "copialo sul telefono e uniscilo qui sotto."
+        )
+
+    with styled_panel():
+        _settings_section_header("Blocco dell'app", chip="Sicurezza")
+        st.html(
+            '<div data-ft-widget="lock">'
+            "Disponibile nell'app Android."
+            "</div>"
+        )
+
+
 def show_settings() -> None:
     st.title("Impostazioni")
     st.caption(f"Aspetto, conti, categorie e dati — tutto su {_DEVICE}.")
@@ -925,29 +995,10 @@ def show_settings() -> None:
                     st.rerun()
 
     with tab_data:
-        st.caption("Percorsi locali e backup di sicurezza.")
-
-        db_path = DB_PATH.resolve()
-        config_path = USER_CATEGORY_CONFIG_PATH.resolve()
-
-        col_db, col_config = st.columns(2)
-
-        with col_db:
-            with styled_panel():
-                _settings_section_header("Database", chip="SQLite")
-                _render_copyable_path(str(db_path), key="db")
-                st.caption(
-                    "Contiene i movimenti e le categorie assegnate."
-                )
-
-        with col_config:
-            with styled_panel():
-                _settings_section_header("Configurazione categorie", chip="JSON")
-                _render_copyable_path(str(config_path), key="categories")
-                st.caption(
-                    "Contiene icone e regole automatiche "
-                    "personalizzate."
-                )
+        if IS_ANDROID:
+            _render_android_storage_info()
+        else:
+            _render_desktop_storage_paths()
 
         movements_count = 0 if df.empty else len(df)
         with styled_panel():
@@ -988,7 +1039,7 @@ def show_settings() -> None:
                     mime=ZIP_MIME,
                     width="stretch",
                     type="primary",
-                    on_click="ignore",
+                    on_click=mark_backup_done,
                     key="android_backup_download",
                 )
             elif st.button(
@@ -1003,11 +1054,18 @@ def show_settings() -> None:
                 )
                 st.toast(f"Salvato in Download: {saved.name}")
 
-            st.caption(
-                "Ripristino: sostituisce database e categorie. "
-                "Se la cartella sembra vuota, scegli «Tutti i file» "
-                "oppure trascina lo zip qui."
-            )
+            if IS_ANDROID:
+                st.caption(
+                    "Da un backup puoi **unire** (aggiunge solo ciò che manca) "
+                    "o **sostituire** tutto. Scegli lo zip da Download, da Drive "
+                    "o da un'altra app."
+                )
+            else:
+                st.caption(
+                    "Da un backup puoi **unire** (aggiunge solo ciò che manca) "
+                    "o **sostituire** tutto. Se la cartella sembra vuota, "
+                    "scegli «Tutti i file» oppure trascina lo zip qui."
+                )
 
             uploaded_backup = st.file_uploader(
                 "Seleziona un backup (.zip)",
@@ -1022,12 +1080,32 @@ def show_settings() -> None:
                     uploaded_backup = None
 
             if uploaded_backup is not None:
-                if st.button(
-                    "♻️ Ripristina backup",
-                    width="stretch",
-                    type="primary",
-                ):
-                    success, message = restore_backup(uploaded_backup)
+                merge_col, replace_col = st.columns(2)
+
+                with merge_col:
+                    merge_clicked = st.button(
+                        "➕ Unisci al database",
+                        width="stretch",
+                        type="primary",
+                        help=(
+                            "Aggiunge solo i movimenti e le categorie che mancano. "
+                            "Non cancella nulla: utile per allineare PC e telefono."
+                        ),
+                    )
+
+                with replace_col:
+                    replace_clicked = st.button(
+                        "♻️ Sostituisci tutto",
+                        width="stretch",
+                        type="secondary",
+                        help="Cancella i dati attuali e mette al loro posto quelli del backup.",
+                    )
+
+                if merge_clicked or replace_clicked:
+                    if merge_clicked:
+                        success, message = merge_backup(uploaded_backup)
+                    else:
+                        success, message = restore_backup(uploaded_backup)
 
                     if success:
                         st.toast(message)

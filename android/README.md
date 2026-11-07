@@ -45,21 +45,30 @@ git push && git push --tags
   aggiorna sempre quello installato. Ricostruire lo stesso commit dà lo stesso numero: Android lo reinstalla senza problemi.
 
 Nella run trovi anche l'artifact **screenshot-prova**. Prima di creare l'APK, l'app viene avviata in un telefono simulato
-**con internet bloccato**: la prova controlla l'avvio offline, tutte le pagine e il salvataggio dei dati dopo un riavvio.
+**con internet bloccato**: la prova controlla l'avvio offline, tutte le pagine, il salvataggio dei dati dopo un riavvio e la cartella dei dati
+(i dati tornano dopo una "reinstallazione").
 Se qualcosa non va, la run si ferma lì e il log dice cosa.
 
 ## Uso sul telefono
 
 - **Primo avvio e riaperture "a freddo":** 10–30 secondi, il tempo di caricare Python. Se l'app resta in background,
   la riapertura è immediata. Il tasto Indietro, dalla Home, la mette in background senza chiuderla.
-- **Dati:** restano nella memoria privata dell'app. Non vanno su internet e sono esclusi dal backup automatico di Google.
-  Se disinstalli l'app o cancelli i dati dalle impostazioni di Android, **si perdono**: usa
-  *Opzioni → Dati → Crea backup completo* ogni tanto.
-- **Backup ed export Excel** finiscono nella cartella **Download** del telefono.
+- **Dati:** al primo avvio scegli una cartella del telefono, per esempio `Documenti/FinanceTracker`. Lì trovi
+  `finance_tracker.db`, `categories.json` e `backups/`, come sul PC: li vedi dall'app File e **restano anche se
+  disinstalli l'app**. Reinstallando e scegliendo la stessa cartella, ritrovi tutto. L'app salva nella cartella
+  circa 2 secondi dopo ogni modifica e quando va in background. Se un'altra app (per esempio una sincronizzazione)
+  cambia il file, FinanceTracker non lo sovrascrive e ti chiede cosa fare. Puoi cambiare cartella da
+  *Opzioni → Dati*. Senza cartella i dati restano solo nella memoria interna e si perdono disinstallando.
+  In ogni caso non vanno su internet e sono esclusi dal backup automatico di Google.
+- **Blocco:** da *Opzioni → Dati* puoi attivare lo sblocco con impronta, volto o PIN del telefono (serve un blocco
+  schermo impostato). L'app lo chiede all'apertura e quando ci torni dopo 30 secondi; con il blocco attivo
+  screenshot e anteprima nelle app recenti sono nascosti.
+- **Backup ed export Excel** finiscono nella cartella **Download** del telefono; i backup anche in `backups/`
+  dentro la cartella dei dati.
 - **Import:** *Importa* apre il selettore file di Android, quindi puoi usare estratti conto scaricati sul telefono
   o presi da Drive.
-- **Dal PC al telefono:** fai un backup sul PC (*Impostazioni → Dati*), copia lo zip sul telefono e ripristinalo
-  da *Opzioni → Dati*.
+- **Dal PC al telefono:** fai un backup sul PC (*Impostazioni → Dati*), copia lo zip sul telefono e, da
+  *Opzioni → Dati*, scegli **Unisci al database** (aggiunge solo ciò che manca) o **Sostituisci tutto**.
 
 Requisiti: Android 10 o successivo.
 
@@ -69,9 +78,11 @@ Requisiti: Android 10 o successivo.
 |---|---|
 | `web/index.html` | Pagina di avvio: schermata di caricamento e avvio di stlite |
 | `web/android-bridge.js` | Inoltra i download (Excel, backup) all'app nativa |
+| `web/native.js` | Cartella dei dati (lettura all'avvio, salvataggi, avviso di conflitto) e controlli del blocco |
+| `web/touch.js` | Ritocchi per il touch: menu senza tastiera, dettaglio dei grafici che si chiude da solo |
 | `webbuild/build-web.mjs` | Costruisce il bundle offline: Python, pacchetti, codice, font |
 | `webbuild/smoke-test.mjs` | Prova offline nel browser prima di creare l'APK |
-| `app/` | Progetto Android (Java, nessuna dipendenza): WebView, file, download |
+| `app/` | Progetto Android (Java, nessuna dipendenza): WebView, file, download, cartella dati (`FolderStorage`), blocco |
 | `../.github/workflows/android.yml` | Build dell'APK (a mano, o richiamata da `release.yml` sui tag) |
 | `../src/theme/mobile.py` | Stile per smartphone: barra in basso, griglie, tocco |
 | `../src/utils/platform.py` | `IS_ANDROID`: le differenze per il telefono sono attive solo lì |

@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Nessun permesso: niente internet, niente accesso ai file.
-         Import: l'utente sceglie il file dal selettore di sistema.
+    <!-- Sblocco con impronta/volto/PIN del telefono (blocco app facoltativo). -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+
+    <!-- Nessun altro permesso: niente internet, niente accesso a tutti i file.
+         Import e cartella dei dati: scelti dall'utente col selettore di sistema.
          Export: i file vanno in Download tramite MediaStore. -->
 
     <application
