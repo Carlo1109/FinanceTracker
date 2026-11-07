@@ -1014,21 +1014,17 @@ def show_dashboard() -> None:
         savings_label = f"{rate:.1f}".replace(".", ",") + "%"
         savings_color = INCOME_COLOR if rate >= 0 else EXPENSE_COLOR
         spent_share = f"{(100.0 - rate):.1f}".replace(".", ",")
-        # Sul telefono la card è stretta e sotto c'è la casella: testo breve.
-        if rate > 0:
+        if IS_ANDROID:
+            # Sul telefono la card è stretta: basta la percentuale.
+            savings_footer = None
+        elif rate > 0:
             savings_footer = (
-                f"{spent_share}% delle entrate speso"
-                if IS_ANDROID
-                else f"{spent_share}% delle entrate è andato in uscite"
+                f"{spent_share}% delle entrate è andato in uscite"
             )
         elif rate == 0:
-            savings_footer = "tutto speso" if IS_ANDROID else "tutto è andato in uscite"
+            savings_footer = "tutto è andato in uscite"
         else:
-            savings_footer = (
-                "speso più delle entrate"
-                if IS_ANDROID
-                else "hai speso più di quanto è entrato"
-            )
+            savings_footer = "hai speso più di quanto è entrato"
 
     if comparison_caption:
         st.caption(f"Confronto: {comparison_caption}")

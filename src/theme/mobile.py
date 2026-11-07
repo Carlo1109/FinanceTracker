@@ -306,6 +306,47 @@ body:has(.ft-undo-anchor) [data-testid="stToastContainer"] {
     bottom: calc(260px + env(safe-area-inset-bottom)) !important;
 }
 
+/* Spiegazioni (?): sempre dentro lo schermo, testo che va a capo. */
+[role="tooltip"]:has([data-testid="stTooltipContent"]),
+[data-baseweb="tooltip"]:has([data-testid="stTooltipContent"]) {
+    width: max-content !important;
+    max-width: calc(100vw - 16px) !important;
+    height: auto !important;
+    min-height: max-content !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+}
+
+[data-testid="stTooltipContent"] {
+    max-width: 100% !important;
+    flex: none !important;
+    min-height: max-content !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+    padding: 10px 14px 12px !important;
+    border-radius: 14px !important;
+}
+
+[data-testid="stTooltipContent"] *,
+[data-baseweb="tooltip"] [data-testid="stMarkdownContainer"] {
+    max-width: 100% !important;
+    white-space: normal !important;
+    overflow-wrap: break-word !important;
+}
+
+/* Streamlit dà al testo un margine negativo in basso: l'ultima riga usciva dal riquadro. */
+[data-testid="stTooltipContent"] [data-testid="stMarkdownContainer"],
+[data-testid="stTooltipContent"] p {
+    margin: 0 !important;
+    font-size: 14px !important;
+    line-height: 1.45 !important;
+}
+
 /* ---------- Tendine (selectbox e multiselect) ---------- */
 
 /* Campo chiuso: un solo blocco arrotondato, freccia nel colore dell'app. */
