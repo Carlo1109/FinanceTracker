@@ -6,6 +6,7 @@ from typing import Any
 
 import streamlit as st
 
+from src.utils.platform import IS_ANDROID
 from src.utils.version import get_app_version
 
 
@@ -138,6 +139,71 @@ def render_navigation(
         st.page_link(item.page, label=item.label, icon=item.icon)
 
 
+MOBILE_TAB_LABELS = {
+    "Dashboard": "Home",
+    "Movimenti": "Movimenti",
+    "Nuovo movimento": "Nuovo",
+    "Importa dati": "Importa",
+    "Impostazioni": "Opzioni",
+}
+
+
+@st.cache_data(show_spinner=False)
+def _logo_data_uri(logo_path: str, mtime: float) -> str:
+    import base64
+
+    data = Path(logo_path).read_bytes()
+    return "data:image/png;base64," + base64.b64encode(data).decode("ascii")
+
+
+def render_mobile_shell(
+    navigation: Any,
+    items: list[NavItem],
+    *,
+    logo_path: Path,
+    app_version: str | None = None,
+) -> None:
+    """
+    Guscio per smartphone (app Android): barra superiore compatta
+    e barra di navigazione fissa in basso, come un'app nativa.
+    Il contenuto delle pagine è lo stesso della versione desktop.
+    """
+    version = app_version or get_app_version()
+
+    logo_html = ""
+    if logo_path.exists():
+        uri = _logo_data_uri(str(logo_path), logo_path.stat().st_mtime)
+        logo_html = f'<img class="ft-mtop-logo" src="{uri}" alt="" />'
+
+    st.html(
+        f"""
+        <div class="ft-mtop">
+          {logo_html}
+          <div class="ft-mtop-title">
+            <span class="ft-brand-finance">Finance</span><span class="ft-brand-tracker">Tracker</span>
+          </div>
+          <span class="ft-version-chip ft-mtop-version">{version}</span>
+        </div>
+        """
+    )
+
+    navigation.run()
+
+    current_path = getattr(navigation, "url_path", None)
+
+    with st.container(key="ft_mobile_tabbar", horizontal=True):
+        for index, item in enumerate(items):
+            is_current = getattr(item.page, "url_path", None) == current_path
+            state = "on" if is_current else "off"
+
+            with st.container(key=f"ft_mtab_{index}_{state}"):
+                st.page_link(
+                    item.page,
+                    label=MOBILE_TAB_LABELS.get(item.label, item.label),
+                    icon=item.icon,
+                )
+
+
 def render_app_shell(
     navigation: Any,
     items: list[NavItem],
@@ -145,6 +211,15 @@ def render_app_shell(
     logo_path: Path,
     app_version: str | None = None,
 ) -> None:
+    if IS_ANDROID:
+        render_mobile_shell(
+            navigation,
+            items,
+            logo_path=logo_path,
+            app_version=app_version,
+        )
+        return
+
     ensure_navigation_state()
 
     if is_navigation_open():

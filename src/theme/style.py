@@ -5,7 +5,9 @@ from __future__ import annotations
 import streamlit as st
 
 from src.services.settings_service import get_accent, get_theme_mode
+from src.theme.mobile import MOBILE_CSS
 from src.theme.tokens import resolve_palette
+from src.utils.platform import IS_ANDROID
 
 
 def _sync_streamlit_native_theme(theme_id: str) -> None:
@@ -1911,3 +1913,9 @@ def apply_theme(
         """,
         unsafe_allow_html=True,
     )
+
+    if IS_ANDROID:
+        st.markdown(
+            f"<style>{MOBILE_CSS}</style>",
+            unsafe_allow_html=True,
+        )

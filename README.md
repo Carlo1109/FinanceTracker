@@ -16,6 +16,11 @@ FinanceTracker è un'app desktop sviluppata in Python per gestire le proprie fin
 - 💾 Backup / ripristino e export Excel brandizzato
 - 🔒 Tutti i dati rimangono sul proprio PC
 
+## 📱 Android
+
+C'è anche un'app Android offline, con le stesse pagine e lo stesso stile, pensata per il touch.
+Come creare l'APK e installarlo: **[android/README.md](android/README.md)**.
+
 ## 🖥️ Tecnologie
 
 - Python

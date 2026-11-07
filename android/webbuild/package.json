@@ -1,0 +1,20 @@
+{
+  "name": "financetracker-android-build",
+  "private": true,
+  "type": "module",
+  "description": "Costruisce il bundle web offline (stlite + Pyodide) dell'app Android.",
+  "scripts": {
+    "build": "node build-web.mjs",
+    "smoke": "node smoke-test.mjs"
+  },
+  "dependencies": {
+    "@stlite/browser": "1.12.0",
+    "pyodide": "314.0.3",
+    "@fontsource/manrope": "5.3.0",
+    "@fontsource/fraunces": "5.3.0",
+    "fflate": "0.8.2"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

@@ -62,6 +62,7 @@ from src.services.movement_service import load_movements
 from src.theme.colors import get_category_colors
 from src.theme.tokens import resolve_semantic
 from src.utils.formatting import euro, signed_euro
+from src.utils.platform import IS_ANDROID, PLOTLY_JS_URL
 
 
 
@@ -130,7 +131,9 @@ def render_category_pie_chart(
 
     chart_html = pio.to_html(
         fig,
-        include_plotlyjs=True,
+        # Su Android plotly.js (4-5 MB) è un file locale dell'app:
+        # niente libreria intera rigenerata e inviata a ogni interazione.
+        include_plotlyjs=PLOTLY_JS_URL or True,
         full_html=False,
         config={"displayModeBar": False, "responsive": True},
     )
@@ -348,7 +351,7 @@ def _render_category_breakdown_section(
         total_label=euro(total_amount),
         render_pie=lambda: render_category_pie_chart(
             fig,
-            height=420,
+            height=330 if IS_ANDROID else 420,
             root_id=pie_root_id,
         ),
         list_max_height=360,
@@ -1277,6 +1280,22 @@ def show_dashboard() -> None:
         ),
     )
 
+    if IS_ANDROID:
+        # Touch: tocco = dettaglio, niente zoom/trascinamento che blocca lo scroll.
+        fig2.update_layout(dragmode=False, height=340)
+
+        # Schermo stretto: al massimo 5 etichette dei mesi, sempre leggibili.
+        step = max(1, -(-len(month_order) // 5))
+        visible_months = month_order[::-1][::step][::-1]
+        fig2.update_xaxes(
+            tickvals=visible_months,
+            # "Nov 2026" -> "Nov '26": etichette brevi che non si sovrappongono.
+            ticktext=[
+                f"{label[:3]} '{label[-2:]}" if label[-4:].isdigit() else label
+                for label in visible_months
+            ],
+        )
+
     render_chart_card(
         lambda: st.plotly_chart(
             fig2,
@@ -1285,6 +1304,7 @@ def show_dashboard() -> None:
             config={
                 "displayModeBar": False,
                 "responsive": True,
+                "scrollZoom": False,
             },
         )
     )

@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.6.0
+
+### Funzionalità
+
+- **App Android** offline: stesse pagine e stesso stile del desktop, con Python e Streamlit dentro l’app (nessuna connessione). I dati restano sul telefono, esclusi dal backup automatico di Google
+- Android: Excel e backup si salvano in **Download**; import estratti conto e ripristino backup dal selettore file del telefono
+- Per passare i dati dal PC al telefono: backup dal desktop, ripristino da **Opzioni → Dati**
+
+### Interfaccia
+
+- Android: barra di navigazione in basso, card KPI in griglia 2×2, righe movimento compatte, data su una riga, dialog a tutta larghezza
+- Android: grafici pensati per il tocco (dettaglio al tocco, niente zoom che blocca lo scroll, etichette dei mesi leggibili)
+- Android: font Manrope e Fraunces inclusi nell’app
+
+### Prestazioni
+
+- Movimenti tenuti in memoria e ricaricati solo quando il database cambia; date lette in blocco. Ogni interazione è molto più rapida, anche su desktop (circa 2 s → 0,1–0,3 s con 1.500 movimenti)
+
+### Build
+
+- Nuovo workflow **Android APK** (`android.yml`): bundle offline, prova nel browser con internet bloccato, APK firmato
+- `release.yml` crea anche l’APK e pubblica **una sola Release** con Windows, Linux, macOS e Android
+
 ## v1.5.6
 
 ### Build

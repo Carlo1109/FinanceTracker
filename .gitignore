@@ -59,3 +59,16 @@ finance_tracker.db
 .DS_Store
 Thumbs.db
 desktop.ini
+# ==========================================
+# Android (generati dalla build)
+# ==========================================
+android/.gradle/
+android/app/build/
+android/local.properties
+android/app/src/main/assets/web/
+android/webbuild/node_modules/
+android/webbuild/.cache/
+android/webbuild/smoke-screenshots/
+android/keystore/
+*.jks
+*.keystore

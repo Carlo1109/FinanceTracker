@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import sys
+import threading
 from pathlib import Path
 
 
@@ -8,6 +9,12 @@ APP_NAME = "FinanceTracker"
 
 
 def get_app_data_dir() -> Path:
+    # Override esplicito (usato dall'app Android: cartella persistente IndexedDB).
+    override = os.getenv("FT_DATA_DIR", "").strip()
+
+    if override:
+        return Path(override)
+
     if sys.platform == "win32":
         local_app_data = os.getenv("LOCALAPPDATA")
 
@@ -34,6 +41,51 @@ def get_app_data_dir() -> Path:
 
 DATA_DIR = get_app_data_dir()
 DB_PATH = DATA_DIR / "finance_tracker.db"
+
+
+_probe_lock = threading.Lock()
+_probe_connection: sqlite3.Connection | None = None
+_probe_identity: tuple[int, int] | None = None
+
+
+def database_version() -> object:
+    """
+    Identificativo che cambia a ogni scrittura sul database.
+
+    Usa PRAGMA data_version su una connessione "sonda" separata:
+    SQLite lo incrementa quando un'altra connessione salva modifiche.
+    I metadati del file coprono il caso del ripristino da backup.
+    Serve a tenere in cache i dati letti senza rischiare dati vecchi.
+    """
+    global _probe_connection, _probe_identity
+
+    try:
+        stat = DB_PATH.stat()
+    except OSError:
+        return object()
+
+    identity = (stat.st_dev, stat.st_ino)
+
+    with _probe_lock:
+        try:
+            if _probe_connection is None or _probe_identity != identity:
+                if _probe_connection is not None:
+                    _probe_connection.close()
+
+                _probe_connection = sqlite3.connect(
+                    DB_PATH,
+                    check_same_thread=False,
+                )
+                _probe_identity = identity
+
+            data_version = _probe_connection.execute(
+                "PRAGMA data_version"
+            ).fetchone()[0]
+        except sqlite3.Error:
+            _probe_connection = None
+            return object()
+
+    return (identity, stat.st_size, stat.st_mtime_ns, data_version)
 
 
 def get_connection() -> sqlite3.Connection:

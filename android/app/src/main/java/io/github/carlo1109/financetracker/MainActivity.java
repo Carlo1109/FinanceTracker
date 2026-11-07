@@ -1,0 +1,448 @@
+package io.github.carlo1109.financetracker;
+
+import android.app.Activity;
+import android.content.ActivityNotFoundException;
+import android.content.ClipData;
+import android.content.ContentResolver;
+import android.content.ContentValues;
+import android.content.Intent;
+import android.content.pm.ApplicationInfo;
+import android.graphics.Color;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Environment;
+import android.provider.MediaStore;
+import android.util.Base64;
+import android.util.Log;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.WindowInsets;
+import android.webkit.ConsoleMessage;
+import android.webkit.JavascriptInterface;
+import android.webkit.RenderProcessGoneDetail;
+import android.webkit.ServiceWorkerClient;
+import android.webkit.ServiceWorkerController;
+import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
+import android.widget.Toast;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
+
+/**
+ * Involucro nativo di FinanceTracker.
+ *
+ * L'interfaccia è l'app Streamlit originale, eseguita dentro la WebView
+ * con stlite (Streamlit + Python/Pyodide in WebAssembly). Tutti i file
+ * stanno nell'APK (assets/web) e vengono serviti da qui sotto l'indirizzo
+ * https://appassets.androidplatform.net/ : nessun accesso a internet.
+ *
+ * I dati (database e categorie) vivono nell'IndexedDB della WebView,
+ * legato a quell'indirizzo fisso, quindi restano tra un avvio e l'altro
+ * e dopo gli aggiornamenti dell'app.
+ */
+public class MainActivity extends Activity {
+
+    private static final String TAG = "FinanceTracker";
+    private static final String HOST = "appassets.androidplatform.net";
+    private static final String START_URL = "https://" + HOST + "/";
+    private static final String ASSET_ROOT = "web/";
+    private static final int FILE_CHOOSER_REQUEST = 4101;
+
+    private static final Map<String, String> MIME_TYPES = new HashMap<>();
+
+    static {
+        MIME_TYPES.put("html", "text/html");
+        MIME_TYPES.put("js", "text/javascript");
+        MIME_TYPES.put("mjs", "text/javascript");
+        MIME_TYPES.put("css", "text/css");
+        MIME_TYPES.put("json", "application/json");
+        MIME_TYPES.put("wasm", "application/wasm");
+        MIME_TYPES.put("whl", "application/zip");
+        MIME_TYPES.put("zip", "application/zip");
+        MIME_TYPES.put("tar", "application/x-tar");
+        MIME_TYPES.put("png", "image/png");
+        MIME_TYPES.put("jpg", "image/jpeg");
+        MIME_TYPES.put("svg", "image/svg+xml");
+        MIME_TYPES.put("ico", "image/x-icon");
+        MIME_TYPES.put("woff2", "font/woff2");
+        MIME_TYPES.put("woff", "font/woff");
+        MIME_TYPES.put("ttf", "font/ttf");
+        MIME_TYPES.put("py", "text/plain");
+        MIME_TYPES.put("toml", "text/plain");
+        MIME_TYPES.put("txt", "text/plain");
+    }
+
+    private FrameLayout root;
+    private WebView webView;
+    private ValueCallback<Uri[]> pendingFileCallback;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        boolean debuggable = (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+        WebView.setWebContentsDebuggingEnabled(debuggable);
+
+        root = new FrameLayout(this);
+        root.setBackgroundColor(Color.parseColor("#0B1220"));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Da Android 11 gestiamo noi gli spazi di barre e tastiera
+            // (su Android 15 è comunque obbligatorio: edge-to-edge).
+            getWindow().setDecorFitsSystemWindows(false);
+            applySystemBarInsets(root);
+        }
+        setContentView(root);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            ServiceWorkerController.getInstance().setServiceWorkerClient(new ServiceWorkerClient() {
+                @Override
+                public WebResourceResponse shouldInterceptRequest(WebResourceRequest request) {
+                    return serveAsset(request.getUrl());
+                }
+            });
+        }
+
+        createWebView();
+        webView.loadUrl(START_URL);
+    }
+
+    // ------------------------------------------------------------------ WebView
+
+    private void createWebView() {
+        webView = new WebView(this);
+        webView.setBackgroundColor(Color.parseColor("#0B1220"));
+        webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setDatabaseEnabled(true);
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
+        settings.setSupportMultipleWindows(false);
+        settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        settings.setMediaPlaybackRequiresUserGesture(true);
+        settings.setBuiltInZoomControls(false);
+        settings.setDisplayZoomControls(false);
+        settings.setSupportZoom(false);
+        settings.setTextZoom(100);
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        settings.setOffscreenPreRaster(true);
+
+        webView.addJavascriptInterface(new Bridge(), "FTAndroid");
+        webView.setWebViewClient(new AppWebViewClient());
+        webView.setWebChromeClient(new AppChromeClient());
+
+        root.addView(webView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+    }
+
+    /** Se Android chiude il motore della WebView (poca memoria), lo ricreiamo. */
+    private void recreateWebView() {
+        if (webView != null) {
+            root.removeView(webView);
+            webView.destroy();
+        }
+        createWebView();
+        webView.loadUrl(START_URL);
+    }
+
+    private class AppWebViewClient extends WebViewClient {
+        @Override
+        public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+            return serveAsset(request.getUrl());
+        }
+
+        @Override
+        public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+            Uri uri = request.getUrl();
+            if (HOST.equals(uri.getHost())) {
+                return false;
+            }
+            // Link esterni (es. help): si aprono nel browser del telefono.
+            String scheme = uri.getScheme();
+            if ("http".equals(scheme) || "https".equals(scheme) || "mailto".equals(scheme)) {
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, uri));
+                } catch (ActivityNotFoundException ignored) {
+                    // Nessuna app per aprire il link.
+                }
+            }
+            return true;
+        }
+
+        @Override
+        public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+            Log.w(TAG, "Processo WebView terminato, riavvio dell'interfaccia");
+            recreateWebView();
+            return true;
+        }
+    }
+
+    private class AppChromeClient extends WebChromeClient {
+        @Override
+        public boolean onShowFileChooser(WebView view,
+                                         ValueCallback<Uri[]> callback,
+                                         FileChooserParams params) {
+            if (pendingFileCallback != null) {
+                pendingFileCallback.onReceiveValue(null);
+            }
+            pendingFileCallback = callback;
+
+            // */* perché i CSV/XLSX delle banche arrivano con tipi MIME molto vari.
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType("*/*");
+            if (params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE) {
+                intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+            }
+
+            try {
+                startActivityForResult(intent, FILE_CHOOSER_REQUEST);
+                return true;
+            } catch (ActivityNotFoundException e) {
+                pendingFileCallback = null;
+                callback.onReceiveValue(null);
+                return false;
+            }
+        }
+
+        @Override
+        public boolean onConsoleMessage(ConsoleMessage message) {
+            if (message.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                Log.e(TAG, message.message() + " (" + message.sourceId() + ":" + message.lineNumber() + ")");
+            }
+            return true;
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode != FILE_CHOOSER_REQUEST) {
+            super.onActivityResult(requestCode, resultCode, data);
+            return;
+        }
+        if (pendingFileCallback == null) {
+            return;
+        }
+
+        Uri[] result = null;
+        if (resultCode == RESULT_OK && data != null) {
+            ClipData clip = data.getClipData();
+            if (clip != null && clip.getItemCount() > 0) {
+                result = new Uri[clip.getItemCount()];
+                for (int i = 0; i < clip.getItemCount(); i++) {
+                    result[i] = clip.getItemAt(i).getUri();
+                }
+            } else if (data.getData() != null) {
+                result = new Uri[]{data.getData()};
+            }
+        }
+
+        pendingFileCallback.onReceiveValue(result);
+        pendingFileCallback = null;
+    }
+
+    // ------------------------------------------------------------------ assets
+
+    /** Serve i file da assets/web per l'indirizzo interno dell'app. */
+    private WebResourceResponse serveAsset(Uri uri) {
+        if (uri == null || !HOST.equals(uri.getHost())) {
+            return null;
+        }
+
+        String path = uri.getPath();
+        if (path == null || path.isEmpty() || "/".equals(path)) {
+            path = "/index.html";
+        }
+        path = path.substring(1);
+
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Access-Control-Allow-Origin", "*");
+        headers.put("Cache-Control", "no-cache");
+
+        if (path.contains("..")) {
+            return notFound(headers);
+        }
+
+        InputStream stream = openAsset(path);
+
+        // Pagine dell'app (/movimenti, /impostazioni, ...): stessa index.html.
+        if (stream == null && extensionOf(path).isEmpty()) {
+            path = "index.html";
+            stream = openAsset(path);
+        }
+        if (stream == null) {
+            return notFound(headers);
+        }
+
+        String mime = mimeTypeOf(path);
+        String encoding = mime.startsWith("text/") || mime.equals("application/json") ? "utf-8" : null;
+        return new WebResourceResponse(mime, encoding, 200, "OK", headers, stream);
+    }
+
+    private InputStream openAsset(String path) {
+        try {
+            return getAssets().open(ASSET_ROOT + path);
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    private static WebResourceResponse notFound(Map<String, String> headers) {
+        return new WebResourceResponse("text/plain", "utf-8", 404, "Not Found", headers,
+                new ByteArrayInputStream(new byte[0]));
+    }
+
+    private static String extensionOf(String path) {
+        int slash = path.lastIndexOf('/');
+        int dot = path.lastIndexOf('.');
+        return dot > slash ? path.substring(dot + 1).toLowerCase(Locale.ROOT) : "";
+    }
+
+    private static String mimeTypeOf(String path) {
+        String mime = MIME_TYPES.get(extensionOf(path));
+        return mime != null ? mime : "application/octet-stream";
+    }
+
+    // ------------------------------------------------------------------ ponte JS
+
+    /** Metodi chiamati dalla pagina (android-bridge.js) come window.FTAndroid.*. */
+    public class Bridge {
+        @JavascriptInterface
+        public void saveFile(String fileName, String mimeType, String base64) {
+            String name = sanitizeFileName(fileName);
+            try {
+                byte[] bytes = Base64.decode(base64, Base64.DEFAULT);
+                String savedAs = saveToDownloads(name, mimeType, bytes);
+                showToast("Salvato in Download: " + savedAs);
+            } catch (Exception e) {
+                Log.e(TAG, "Salvataggio non riuscito", e);
+                showToast("Salvataggio non riuscito: " + e.getMessage());
+            }
+        }
+
+        @JavascriptInterface
+        public void toast(String message) {
+            showToast(message);
+        }
+
+        @JavascriptInterface
+        public void appReady() {
+            Log.i(TAG, "Interfaccia pronta");
+        }
+    }
+
+    private String saveToDownloads(String name, String mimeType, byte[] bytes) throws IOException {
+        ContentResolver resolver = getContentResolver();
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.Downloads.DISPLAY_NAME, name);
+        values.put(MediaStore.Downloads.MIME_TYPE,
+                mimeType == null || mimeType.isEmpty() ? "application/octet-stream" : mimeType);
+        values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+        values.put(MediaStore.Downloads.IS_PENDING, 1);
+
+        Uri item = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+        if (item == null) {
+            throw new IOException("impossibile creare il file in Download");
+        }
+
+        try (OutputStream out = resolver.openOutputStream(item)) {
+            if (out == null) {
+                throw new IOException("impossibile scrivere il file");
+            }
+            out.write(bytes);
+        } catch (IOException e) {
+            resolver.delete(item, null, null);
+            throw e;
+        }
+
+        ContentValues done = new ContentValues();
+        done.put(MediaStore.Downloads.IS_PENDING, 0);
+        resolver.update(item, done, null, null);
+
+        // Android può rinominare il file se esiste già (es. "file (1).xlsx").
+        String finalName = name;
+        try (android.database.Cursor cursor = resolver.query(item,
+                new String[]{MediaStore.Downloads.DISPLAY_NAME}, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                finalName = cursor.getString(0);
+            }
+        }
+        return finalName;
+    }
+
+    private static String sanitizeFileName(String name) {
+        String cleaned = name == null ? "" : name.replaceAll("[\\\\/:*?\"<>|\\x00-\\x1f]", "_").trim();
+        return cleaned.isEmpty() ? "FinanceTracker_download" : cleaned;
+    }
+
+    private void showToast(String message) {
+        runOnUiThread(() -> Toast.makeText(this, message, Toast.LENGTH_LONG).show());
+    }
+
+    // ------------------------------------------------------------------ sistema
+
+    /** Il contenuto resta fuori da barra di stato, barra di navigazione e tastiera (Android 11+). */
+    private static void applySystemBarInsets(View view) {
+        view.setOnApplyWindowInsetsListener((v, insets) -> {
+            android.graphics.Insets bars = insets.getInsets(
+                    WindowInsets.Type.systemBars()
+                            | WindowInsets.Type.displayCutout()
+                            | WindowInsets.Type.ime());
+            v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+            return WindowInsets.CONSUMED;
+        });
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (webView != null && webView.canGoBack()) {
+            webView.goBack();
+        } else {
+            // Come le app native: torna alla home senza chiudere Python,
+            // così riaprendo l'app è subito pronta.
+            moveTaskToBack(true);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (webView != null) {
+            webView.onResume();
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        if (webView != null) {
+            webView.onPause();
+        }
+        super.onPause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (webView != null) {
+            root.removeView(webView);
+            webView.destroy();
+            webView = null;
+        }
+        super.onDestroy();
+    }
+}

@@ -10,6 +10,7 @@ import streamlit as st
 from src.components.cards import render_html
 from src.utils.export_excel import movements_to_export_bytes
 from src.utils.file_save import save_and_reveal
+from src.utils.platform import IS_ANDROID, XLSX_MIME
 
 
 EXPORT_DIALOG_KEY = "ft_export_dialog"
@@ -99,6 +100,33 @@ def _export_confirm_dialog(
     )
 
     confirm_col, cancel_col = st.columns(2)
+
+    if IS_ANDROID:
+        # Su Android il file arriva al telefono tramite download
+        # (il wrapper lo salva in Download e mostra un avviso).
+        with confirm_col:
+            st.download_button(
+                "Conferma e scarica",
+                data=movements_to_export_bytes(df),
+                file_name=file_name,
+                mime=XLSX_MIME,
+                type="primary",
+                width="stretch",
+                on_click="ignore",
+                key=f"export_dialog_save_{dialog_key}",
+            )
+
+        with cancel_col:
+            if st.button(
+                "Chiudi",
+                width="stretch",
+                type="secondary",
+                key=f"export_dialog_cancel_{dialog_key}",
+            ):
+                _close_export_dialog()
+                st.rerun()
+        return
+
     with confirm_col:
         if st.button(
             "Conferma e scarica",

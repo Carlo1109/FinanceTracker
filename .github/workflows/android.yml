@@ -1,0 +1,111 @@
+name: Android APK
+
+# Crea l'APK Android (app offline: Streamlit + Python dentro l'app).
+#
+# - A mano, per le prove: Actions > Android APK > Run workflow
+#   (l'APK si scarica dagli artifact della run).
+# - Nei rilasci: con un tag v* lo richiama release.yml, che pubblica
+#   una sola Release con Windows, Linux, macOS e Android insieme.
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    name: APK Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # serve la storia completa per il numero di versione
+
+      # Numero interno di versione = numero di commit: cresce sempre,
+      # uguale per build manuali e per i rilasci da tag.
+      - name: Numero di versione
+        run: echo "FT_VERSION_CODE=$(git rev-list --count HEAD)" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: android/webbuild/package-lock.json
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache pacchetti Pyodide
+        uses: actions/cache@v4
+        with:
+          path: android/webbuild/.cache
+          key: pyodide-pkgs-${{ hashFiles('android/webbuild/package-lock.json', 'android/webbuild/build-web.mjs') }}
+
+      - name: Dipendenze build web
+        working-directory: android/webbuild
+        run: npm ci
+
+      - name: Bundle web offline (stlite + Python + app)
+        working-directory: android/webbuild
+        run: node build-web.mjs
+
+      - name: Prova offline nel browser (telefono simulato, internet bloccato)
+        working-directory: android/webbuild
+        run: |
+          npx playwright install --with-deps chromium
+          node smoke-test.mjs
+
+      - name: Screenshot della prova
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-prova
+          path: android/webbuild/smoke-screenshots
+          if-no-files-found: ignore
+
+      - name: Chiave di firma
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "FT_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "Firma con la chiave di rilascio."
+          else
+            echo "::warning::Secret ANDROID_KEYSTORE_BASE64 assente: APK firmato con chiave di debug. Vedi android/README.md."
+          fi
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Compila APK
+        working-directory: android
+        env:
+          FT_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          FT_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          FT_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Rinomina APK
+        id: apk
+        run: |
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          VERSION="${VERSION#v}"
+          OUT="FinanceTracker-${VERSION}-android.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk "$OUT"
+          ls -lh "$OUT"
+          echo "Versione ${VERSION} (codice ${FT_VERSION_CODE})"
+          echo "file=$OUT" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FinanceTracker-android
+          path: ${{ steps.apk.outputs.file }}
+          if-no-files-found: error

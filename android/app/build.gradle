@@ -1,0 +1,57 @@
+plugins {
+    id "com.android.application"
+}
+
+// Versione: VERSION nella radice della repo (es. v1.5.6) + numero di commit (FT_VERSION_CODE, dalla CI).
+def versionFile = rootProject.file("../VERSION")
+def appVersion = versionFile.exists() ? versionFile.text.trim().replaceFirst(/^v/, "") : "1.0.0"
+def buildNumber = (System.getenv("FT_VERSION_CODE") ?: "1") as Integer
+
+// Firma: chiave stabile da variabili d'ambiente (GitHub Secrets).
+// Senza chiave si usa quella di debug: l'APK si installa, ma gli aggiornamenti
+// futuri richiederebbero di disinstallare (perdendo i dati). Vedi android/README.md.
+def keystorePath = System.getenv("FT_KEYSTORE_PATH")
+def hasReleaseKey = keystorePath != null && new File(keystorePath).exists()
+
+android {
+    namespace "io.github.carlo1109.financetracker"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "io.github.carlo1109.financetracker"
+        minSdk 29
+        targetSdk 35
+        versionCode buildNumber
+        versionName appVersion
+    }
+
+    signingConfigs {
+        if (hasReleaseKey) {
+            release {
+                storeFile file(keystorePath)
+                storePassword System.getenv("FT_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("FT_KEY_ALIAS")
+                keyPassword System.getenv("FT_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            shrinkResources false
+            signingConfig hasReleaseKey ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    // Wheel, zip, font e immagini sono già compressi: niente doppia compressione,
+    // così l'app li legge più in fretta all'avvio.
+    androidResources {
+        noCompress "whl", "zip", "woff2", "png"
+    }
+}

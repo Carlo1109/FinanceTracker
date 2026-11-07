@@ -13,7 +13,14 @@ from src.components.cards import (
     styled_panel,
 )
 from src.database.db import DB_PATH
-from src.services.backup_service import create_backup, restore_backup
+from src.services.backup_service import (
+    build_backup_bytes,
+    create_backup,
+    restore_backup,
+)
+from src.utils.platform import IS_ANDROID, ZIP_MIME
+
+_DEVICE = "questo telefono" if IS_ANDROID else "questo PC"
 from src.services.categories import (
     USER_CATEGORY_CONFIG_PATH,
     add_category,
@@ -680,7 +687,7 @@ def _account_delete_dialog(account: str, df) -> None:
 
 def show_settings() -> None:
     st.title("Impostazioni")
-    st.caption("Aspetto, conti, categorie e dati — tutto su questo PC.")
+    st.caption(f"Aspetto, conti, categorie e dati — tutto su {_DEVICE}.")
     render_pending_export_dialog()
 
     df = load_movements()
@@ -700,7 +707,7 @@ def show_settings() -> None:
     )
 
     with tab_appearance:
-        st.caption("Tema e colori restano salvati su questo PC.")
+        st.caption(f"Tema e colori restano salvati su {_DEVICE}.")
 
         current_theme = get_theme_mode()
         current_accent = get_accent()
@@ -972,7 +979,19 @@ def show_settings() -> None:
                 "Crea uno zip con database e categorie e lo salva in Download."
             )
 
-            if st.button(
+            if IS_ANDROID:
+                backup_name, backup_bytes = build_backup_bytes()
+                st.download_button(
+                    "📦 Crea backup completo",
+                    data=backup_bytes,
+                    file_name=backup_name,
+                    mime=ZIP_MIME,
+                    width="stretch",
+                    type="primary",
+                    on_click="ignore",
+                    key="android_backup_download",
+                )
+            elif st.button(
                 "📦 Crea backup completo",
                 width="stretch",
                 type="primary",
@@ -1018,7 +1037,9 @@ def show_settings() -> None:
 
     with tab_info:
         st.caption(
-            "App desktop offline: dati sul computer, senza account e senza cloud."
+            "App Android offline: dati sul telefono, senza account e senza cloud."
+            if IS_ANDROID
+            else "App desktop offline: dati sul computer, senza account e senza cloud."
         )
 
         with styled_panel():

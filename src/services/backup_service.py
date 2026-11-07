@@ -1,4 +1,5 @@
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 import shutil
 import tempfile
@@ -39,6 +40,27 @@ def create_backup() -> Path:
             )
 
     return backup_path
+
+
+def build_backup_bytes() -> tuple[str, bytes]:
+    """
+    Come create_backup, ma interamente in memoria (usato su Android,
+    dove il file viene consegnato con un download invece che scritto su disco).
+    """
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    file_name = f"FinanceTracker_Backup_{timestamp}.zip"
+
+    categories_path = ensure_category_config()
+    buffer = BytesIO()
+
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        if DB_PATH.exists():
+            zip_file.write(DB_PATH, arcname="finance_tracker.db")
+
+        if categories_path.exists():
+            zip_file.write(categories_path, arcname="categories.json")
+
+    return file_name, buffer.getvalue()
 
 
 def restore_backup(uploaded_file) -> tuple[bool, str]:

@@ -7,7 +7,7 @@ from typing import Any
 
 import pandas as pd
 
-from src.database.db import get_connection
+from src.database.db import database_version, get_connection
 from src.services.analytics import INVESTMENT_CATEGORY, is_loan_category
 from src.services.categories import categorize
 from src.services.loans import (
@@ -103,6 +103,40 @@ def _parse_date_value(value: Any) -> pd.Timestamp:
         )
 
     return parsed_value
+
+
+_EMPTY_DATE_TOKENS = ["", "-", "--", "None", "none", "nan", "NaN", "NaT"]
+
+
+def _parse_date_series(series: pd.Series) -> pd.Series:
+    """
+    Versione vettoriale di _parse_date_value (stesso risultato, molto più veloce).
+
+    Prova in blocco i formati ISO del database e usa il parsing
+    elemento per elemento solo per gli eventuali valori rimasti.
+    """
+    text = series.astype("string").str.strip()
+    text = text.mask(text.isin(_EMPTY_DATE_TOKENS))
+
+    parsed = pd.to_datetime(text, format="%Y-%m-%d %H:%M:%S", errors="coerce")
+
+    missing = parsed.isna() & text.notna()
+    if missing.any():
+        parsed.loc[missing] = pd.to_datetime(
+            text[missing],
+            format="%Y-%m-%d",
+            errors="coerce",
+        )
+
+    missing = parsed.isna() & text.notna()
+    if missing.any():
+        parsed.loc[missing] = pd.to_datetime(
+            text[missing].map(_parse_date_value),
+            errors="coerce",
+        )
+
+    # Stessa risoluzione della versione elemento per elemento.
+    return parsed.astype("datetime64[us]")
 
 
 def _serialize_date(value: Any) -> str:
@@ -952,7 +986,32 @@ def save_movements(
     return inserted, skipped, updated
 
 
+_movements_cache: tuple[Any, pd.DataFrame] | None = None
+
+
 def load_movements() -> pd.DataFrame:
+    """
+    Movimenti dal database, con cache in memoria.
+
+    La cache si invalida da sola a ogni scrittura sul database
+    (vedi database_version), quindi i dati restano sempre aggiornati.
+    Restituisce sempre una copia: chi la modifica non tocca la cache.
+    """
+    global _movements_cache
+
+    version = database_version()
+    cached = _movements_cache
+
+    if cached is not None and cached[0] == version:
+        return cached[1].copy()
+
+    df = _load_movements_uncached()
+    _movements_cache = (version, df)
+
+    return df.copy()
+
+
+def _load_movements_uncached() -> pd.DataFrame:
     with get_connection() as conn:
         df = pd.read_sql_query(
             """
@@ -991,7 +1050,7 @@ def load_movements() -> pd.DataFrame:
     ]
 
     for column in date_columns:
-        df[column] = df[column].apply(_parse_date_value)
+        df[column] = _parse_date_series(df[column])
 
     df["speciale"] = (
         pd.to_numeric(df["speciale"], errors="coerce")
