@@ -261,6 +261,13 @@ int((df["descrizione"] == "CARTELLA TEST").sum()) if len(df) else 0
     await second.ctx.close();
   } catch (error) {
     failures.push(`Errore nella prova della cartella dei dati: ${error.stack || error}`);
+    for (const ctx of browser.contexts()) {
+      for (const pg of ctx.pages()) {
+        await pg.screenshot({ path: path.join(SHOTS, "99-errore-cartella.png") }).catch(() => {});
+        const splash = await pg.locator("#ft-splash").innerText().catch(() => "");
+        if (splash) console.log("  schermata di avvio:", splash.replace(/\s+/g, " ").slice(0, 300));
+      }
+    }
   }
 }
 

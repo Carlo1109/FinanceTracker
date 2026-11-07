@@ -159,13 +159,43 @@ export function loadInitialFiles() {
   return files;
 }
 
-async function readFromPython(name) {
-  try {
-    const content = await kernel.readFile(`/data/${name}`);
-    return typeof content === "string" ? new TextEncoder().encode(content) : new Uint8Array(content);
-  } catch (error) {
-    return null; // non ancora creato
-  }
+// Lettura dei file di Python tramite un piccolo codice Python: se il file
+// non esiste ancora restituisce "" invece di un errore (la lettura diretta
+// del filesystem di stlite, in quel caso, non risponde più).
+const PY_STAT = (path) => `
+import os
+_ft_p = ${JSON.stringify(path)}
+"" if not os.path.exists(_ft_p) else f"{os.stat(_ft_p).st_size}:{os.stat(_ft_p).st_mtime_ns}"
+`;
+
+const PY_READ = (path) => `
+import os, base64
+_ft_p = ${JSON.stringify(path)}
+"" if not os.path.exists(_ft_p) else base64.b64encode(open(_ft_p, "rb").read()).decode("ascii")
+`;
+
+const pythonStat = {}; // file -> "dimensione:modifica" dell'ultima lettura
+
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
+  ]);
+}
+
+/**
+ * Contenuto del file in Python: { bytes, stat }, oppure null se non esiste
+ * o se non è cambiato dall'ultimo salvataggio riuscito.
+ */
+async function readFromPython(name, { force = false } = {}) {
+  const path = `/data/${name}`;
+  const stat = String(await withTimeout(kernel.runPython(PY_STAT(path)), 10000) ?? "");
+  if (!stat) return null;
+  if (!force && pythonStat[name] === stat) return null;
+
+  const base64 = String(await withTimeout(kernel.runPython(PY_READ(path)), 10000) ?? "");
+  if (!base64) return null;
+  return { bytes: base64ToBytes(base64), stat };
 }
 
 /** True se il file nella cartella non è quello che ci aspettiamo. */
@@ -193,11 +223,20 @@ export async function mirrorOnce({ force = false } = {}) {
   mirrorRunning = true;
   try {
     for (const name of DATA_FILES) {
-      const bytes = await readFromPython(name);
-      if (!bytes) continue;
+      let snapshot;
+      try {
+        snapshot = await readFromPython(name, { force });
+      } catch (error) {
+        continue; // Python occupato o non ancora pronto: si riprova al giro dopo
+      }
+      if (!snapshot) continue;
+      const { bytes, stat } = snapshot;
 
       const hash = fingerprint(bytes);
-      if (!force && sync.known[name]?.hash === hash) continue;
+      if (!force && sync.known[name]?.hash === hash) {
+        pythonStat[name] = stat; // già uguale nella cartella
+        continue;
+      }
 
       if (!force) {
         const info = call("folderInfo", name);
@@ -214,6 +253,7 @@ export async function mirrorOnce({ force = false } = {}) {
       const result = call("folderWrite", name, bytesToBase64(bytes));
       if (result.ok) {
         sync.known[name] = { size: result.size, modified: result.modified, hash };
+        pythonStat[name] = stat; // salvato: fino alla prossima modifica non serve rileggerlo
         sync.lastSaved = new Date();
         sync.lastError = null;
       } else {
@@ -482,8 +522,22 @@ export function start(stlite) {
   });
   observer.observe(document.body, { childList: true, subtree: true });
 
-  setInterval(() => mirrorOnce(), SYNC_INTERVAL_MS);
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) mirrorOnce();
-  });
+  // I salvataggi nella cartella partono solo ad app pronta (mai durante l'avvio).
+  const startMirroring = () => {
+    setInterval(() => mirrorOnce(), SYNC_INTERVAL_MS);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) mirrorOnce();
+    });
+  };
+  if (document.querySelector(".ft-mtop")) {
+    startMirroring();
+  } else {
+    const ready = new MutationObserver(() => {
+      if (document.querySelector(".ft-mtop")) {
+        ready.disconnect();
+        startMirroring();
+      }
+    });
+    ready.observe(document.body, { childList: true, subtree: true });
+  }
 }

@@ -355,7 +355,16 @@ public class MainActivity extends Activity {
 
     /** Serve i file da assets/web per l'indirizzo interno dell'app. */
     private WebResourceResponse serveAsset(Uri uri) {
-        if (uri == null || !HOST.equals(uri.getHost())) {
+        if (uri == null) {
+            return null;
+        }
+        if (!HOST.equals(uri.getHost())) {
+            // App offline: nessuna richiesta di rete verso l'esterno
+            // (es. i controlli di stlite verso "stlite.invalid").
+            String scheme = uri.getScheme();
+            if ("http".equals(scheme) || "https".equals(scheme)) {
+                return notFound(new HashMap<>());
+            }
             return null;
         }
 
