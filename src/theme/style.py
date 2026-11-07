@@ -111,6 +111,7 @@ def apply_theme(
             --ft-bg-2: {theme.bg_2};
             --ft-panel: {theme.panel};
             --ft-panel-soft: {theme.panel_soft};
+            --ft-menu-bg: {menu_bg};
             --ft-border: {theme.border};
             --ft-text: {theme.text};
             --ft-muted: {theme.muted};
@@ -540,6 +541,20 @@ def apply_theme(
         }}
 
         /* ---- Content surfaces ---- */
+
+        .stButton > button p,
+        .stDownloadButton > button p,
+        [data-testid="stDownloadButton"] button p,
+        [data-testid="stFormSubmitButton"] > button p {{
+            font-weight: inherit !important;
+        }}
+
+        [data-testid="stFormSubmitButton"] > button,
+        [data-testid="stDownloadButton"] button {{
+            border-radius: 12px;
+            font-weight: 700 !important;
+            font-family: var(--ft-font) !important;
+        }}
 
         .stButton > button {{
             border-radius: 12px;
@@ -1227,7 +1242,14 @@ def apply_theme(
         }}
 
         /* Alert / info / warning / toast */
-        [data-testid="stAlert"],
+        /* Un solo riquadro: lo stile va sul contenitore interno, quello esterno resta neutro. */
+        [data-testid="stAlert"] {{
+            background: transparent !important;
+            border: 0 !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+        }}
+
         [data-testid="stAlert"] > div,
         [data-testid="stNotification"],
         /* Messaggi (toast): fondo pieno, un solo bordo, barra colorata a sinistra. */

@@ -18,6 +18,7 @@ from src.services.categories import get_category_icon
 from src.services.imports import get_importer_by_label, list_importers
 from src.services.movement_service import preview_movements, save_movements
 from src.utils.formatting import euro
+from src.utils.platform import IS_ANDROID
 
 
 IMPORT_RESULT_KEY = "import_last_result"
@@ -225,7 +226,14 @@ def show_import_data() -> None:
             f"File {info.label}",
             type=None,
         )
-        st.caption(info.help_text)
+        if IS_ANDROID:
+            # Sul telefono niente trascinamento: basta dire dove prendere il file.
+            st.caption(
+                info.help_text.split(" Se la cartella")[0]
+                + " Scegli il file da Download, da Drive o da un'altra app."
+            )
+        else:
+            st.caption(info.help_text)
 
         if uploaded_file:
             suffix = Path(uploaded_file.name).suffix.lower()
@@ -269,7 +277,8 @@ def show_import_data() -> None:
             expected = ", ".join(sorted(allowed_extensions))
             st.info(
                 f"Seleziona un file {info.label} ({expected}) per vedere "
-                "l’anteprima. Puoi anche trascinarlo sulla zona di upload."
+                "l’anteprima."
+                + ("" if IS_ANDROID else " Puoi anche trascinarlo sulla zona di upload.")
             )
 
     if not uploaded_file:

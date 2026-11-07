@@ -181,10 +181,33 @@ body:has([data-testid="stDialog"]) .st-key-ft_mobile_tabbar {
     align-items: stretch !important;
 }
 
+[data-testid="stToastContainer"] {
+    margin: 0 !important;
+    max-width: calc(100vw - 24px) !important;
+    box-sizing: border-box !important;
+    transform: none !important;
+}
+
+[data-testid="stToastContainer"] ol {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
 [data-testid="stToastContainer"] li,
 [data-testid="stToast"] {
+    box-sizing: border-box !important;
     width: 100% !important;
-    max-width: none !important;
+    min-width: 0 !important;
+    max-width: calc(100vw - 24px) !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+}
+
+/* Caricamento file: sul telefono basta il pulsante (niente "trascina qui" e limite in MB). */
+[data-testid="stFileUploaderDropzoneInstructions"] {
+    display: none !important;
 }
 
 /* ---------- Controlli comodi per il dito ---------- */
@@ -525,28 +548,76 @@ input, textarea, select, [data-testid="stSelectbox"] input {
     }
 
     /* Dialog: foglio a tutta larghezza, quasi a tutta altezza, che scorre al suo interno. */
-    [data-testid="stDialog"] [role="dialog"] {
+    /* Il contenitore esterno ha margini fissi di Streamlit e overflow nascosto:
+       lo allarghiamo noi e il foglio lo riempie (niente bordo destro tagliato). */
+    [data-testid="stDialog"] > div:has(> section[role="dialog"]) {
+        box-sizing: border-box !important;
         width: calc(100vw - 16px) !important;
+        min-width: 0 !important;
         max-width: calc(100vw - 16px) !important;
-        max-height: calc(100dvh - 24px) !important;
-        margin: 12px 8px !important;
-        padding-left: 18px !important;
-        padding-right: 18px !important;
-        padding-bottom: calc(18px + env(safe-area-inset-bottom)) !important;
+        flex: 0 0 auto !important;
+        margin: 10px 8px !important;
+        left: 0 !important;
+        right: 0 !important;
+        background: transparent !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+
+    [data-testid="stDialog"] section[role="dialog"] {
+        box-sizing: border-box !important;
+        display: flex !important;
+        flex-direction: column !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        max-height: calc(100dvh - 20px) !important;
+        margin: 0 !important;
+        padding: 0 0 calc(10px + env(safe-area-inset-bottom)) 0 !important;
         border-radius: 22px !important;
+        /* Fondo pieno: dietro al foglio non si intravedono le card della pagina. */
+        background:
+            radial-gradient(circle at 12% 0%, rgba(var(--ft-accent-rgb), 0.12), transparent 42%),
+            var(--ft-menu-bg) !important;
+        background-color: var(--ft-menu-bg) !important;
+        overflow-x: hidden !important;
         overscroll-behavior: contain;
     }
 
-    [data-testid="stDialog"] [role="dialog"] h2 {
-        padding-right: 44px !important;
+    [data-testid="stDialog"] section[role="dialog"] > h2 {
+        padding: 22px 64px 8px 18px !important;
         font-size: 22px !important;
+        line-height: 1.2 !important;
+    }
+
+    [data-testid="stDialog"] section[role="dialog"] > h2 * {
+        margin: 0 !important;
+        overflow-wrap: anywhere;
+    }
+
+    [data-testid="stDialog"] section[role="dialog"] > div {
+        padding: 8px 18px 16px 18px !important;
+        min-width: 0 !important;
+    }
+
+    [data-testid="stDialog"] section[role="dialog"] [data-testid="stVerticalBlock"],
+    [data-testid="stDialog"] section[role="dialog"] [data-testid="stElementContainer"],
+    [data-testid="stDialog"] section[role="dialog"] [data-testid="stHorizontalBlock"],
+    [data-testid="stDialog"] section[role="dialog"] [data-testid="stColumn"] {
+        min-width: 0 !important;
+        max-width: 100% !important;
     }
 
     /* Pulsante di chiusura: resta in vista e si tocca facilmente (44 px). */
-    [data-testid="stDialog"] [role="dialog"] > button:first-child {
-        position: fixed !important;
-        top: 20px !important;
-        right: 16px !important;
+    /* Resta in alto a destra del foglio anche scorrendo (sticky), mai fuori dal bordo. */
+    [data-testid="stDialog"] section[role="dialog"] > button:first-child {
+        position: sticky !important;
+        top: 12px !important;
+        right: auto !important;
+        left: auto !important;
+        align-self: flex-end !important;
+        flex: 0 0 auto !important;
+        margin: 12px 12px -56px auto !important;
         z-index: 5 !important;
         width: 44px !important;
         height: 44px !important;
@@ -558,7 +629,7 @@ input, textarea, select, [data-testid="stSelectbox"] input {
         border: 1px solid var(--ft-border) !important;
     }
 
-    [data-testid="stDialog"] [role="dialog"] > button:first-child svg {
+    [data-testid="stDialog"] section[role="dialog"] > button:first-child svg {
         width: 18px !important;
         height: 18px !important;
     }
