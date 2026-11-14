@@ -19,7 +19,10 @@ Nuova grafica, app più leggera sul telefono, pagina Report e passaggio dei dati
 - Grafica rinnovata, chiara e scura: superfici più pulite, card KPI con icona e variazione in un’etichetta colorata, card principale con il bilancio degli ultimi 12 mesi, importi con cifre allineate (Manrope), investimenti in viola
 - Nuovi grafici (ciambella, andamento mensile, barre, calendario) disegnati in SVG, con il dettaglio al passaggio del mouse o al tocco; stesso aspetto su PC e telefono
 - Menu laterale più compatto sul PC; filtri della dashboard su una riga
-- Android: barra in basso con **Report** e il pulsante **Nuovo** in evidenza; filtri di Home e Movimenti in un riquadro richiudibile (la ricerca resta sempre visibile); card più basse
+- Android: barra in basso con **Report**; «Nuovo» con un + semplice (l'emoji ➕ su alcuni telefoni, es. Samsung, è un quadrato blu); filtri di Home e Movimenti in un riquadro richiudibile (la ricerca resta sempre visibile); card più basse
+- Android: logo non più deformato nella schermata di caricamento e nella barra in alto; su Android 12+ anche la schermata di avvio di sistema mostra il logo intero
+- Android: nei menu a tendina (es. Categoria nella modifica di un movimento) le ultime voci non restano più tagliate fuori
+- Android: tabella delle categorie del report più compatta, entra nello schermo
 
 ### Prestazioni
 
@@ -35,7 +38,7 @@ Nuova grafica, app più leggera sul telefono, pagina Report e passaggio dei dati
 - `build-web.mjs` genera `ft.css` e non include più plotly; la prova offline controlla anche lista movimenti, grafici e Report
 - Test per i report (`tests/test_reports.py`) e per l'unione dei backup e la cartella condivisa (`tests/test_backup_merge.py`)
 - Database: nuove colonne `uid` e `updated_at`, tabella `sync_tombstones` e trigger che le tengono aggiornate (migrazione automatica al primo avvio)
-- Android: nuovo metodo nativo `saveFileAs` («Salva in…» per mettere il backup su Drive)
+- Android: «☁️ Salva su Drive» usa la condivisione di Android (nuovo `ShareProvider`, metodo nativo `shareFile`): lì c'è sempre «Salva su Drive», mentre «Salva in…» su molti telefoni non mostra Drive
 
 ## v1.7.0
 

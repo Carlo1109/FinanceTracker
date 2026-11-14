@@ -158,7 +158,7 @@ PC e telefono si allineano con i **backup** passando da una cartella di **Google
 
 **Dal telefono al PC**
 
-1. Telefono: Opzioni → Dati → **☁️ Salva su Drive** → nella finestra «Salva in…» scegli Drive e la cartella FinanceTracker.
+1. Telefono: Opzioni → Dati → **☁️ Salva su Drive** → nella condivisione scegli **Drive** («Salva su Drive»), poi la cartella FinanceTracker e **Salva**.
 2. PC: Impostazioni → Dati → Backup → *Da dove?* **Dalla cartella condivisa** → scegli il backup (📱 = telefono, dal più recente) → **Unisci**.
 
 **Dal PC al telefono**

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+: schermata di avvio di sistema con il logo intero (non tagliato
+         dal cerchio) sullo stesso fondo scuro della schermata di caricamento dell'app. -->
+    <style name="AppTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/ft_background</item>
+        <item name="android:statusBarColor">@color/ft_background</item>
+        <item name="android:navigationBarColor">@color/ft_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowSplashScreenBackground">@color/ft_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icon</item>
+    </style>
+</resources>

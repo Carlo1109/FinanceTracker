@@ -51,6 +51,12 @@ def is_navigation_open() -> bool:
     return bool(st.session_state.get(NAVIGATION_OPEN_KEY, True))
 
 
+def _square_logo(logo_path: Path) -> Path:
+    """Versione quadrata del logo (quella originale è rettangolare)."""
+    square = logo_path.with_name("ft_logo_square.png")
+    return square if square.exists() else logo_path
+
+
 @st.cache_data(show_spinner=False)
 def _logo_data_uri(logo_path: str, mtime: float) -> str:
     import base64
@@ -65,8 +71,9 @@ def render_brand(logo_path: Path, app_version: str | None = None) -> None:
     brand_col, toggle_col = st.columns([5, 1], vertical_alignment="center")
     with brand_col:
         logo_html = ""
-        if logo_path.exists():
-            uri = _logo_data_uri(str(logo_path), logo_path.stat().st_mtime)
+        square = _square_logo(logo_path)
+        if square.exists():
+            uri = _logo_data_uri(str(square), square.stat().st_mtime)
             logo_html = f'<img src="{uri}" alt="" />'
         st.html(
             f"""
@@ -135,8 +142,9 @@ def render_mobile_shell(
     version = app_version or get_app_version()
 
     logo_html = ""
-    if logo_path.exists():
-        uri = _logo_data_uri(str(logo_path), logo_path.stat().st_mtime)
+    square = _square_logo(logo_path)
+    if square.exists():
+        uri = _logo_data_uri(str(square), square.stat().st_mtime)
         logo_html = f'<img class="ft-mtop-logo" src="{uri}" alt="" />'
 
     st.html(

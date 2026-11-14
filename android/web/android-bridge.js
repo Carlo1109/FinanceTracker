@@ -82,8 +82,8 @@
     });
   }
 
-  // Nome che inizia con questo prefisso = "Salva in…" di Android (si può
-  // scegliere Google Drive) invece del salvataggio in Download.
+  // Nome che inizia con questo prefisso = condivisione di Android (si sceglie
+  // "Salva su Drive") invece del salvataggio in Download.
   // Lo usa il pulsante "☁️ Salva su Drive" del backup (src/pages/settings.py).
   var SAVE_AS_PREFIX = "ft-saveas--";
 
@@ -95,6 +95,12 @@
           var type = result.blob.type || "application/octet-stream";
           if (name.indexOf(SAVE_AS_PREFIX) === 0) {
             name = name.slice(SAVE_AS_PREFIX.length);
+            // Condivisione di Android: lì c'è "Drive – Salva su Drive".
+            // ("Salva in…" su molti telefoni non mostra Google Drive.)
+            if (typeof bridge.shareFile === "function") {
+              bridge.shareFile(name, type, base64);
+              return;
+            }
             if (typeof bridge.saveFileAs === "function") {
               bridge.saveFileAs(name, type, base64);
               return;

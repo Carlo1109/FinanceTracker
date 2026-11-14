@@ -1163,7 +1163,41 @@ div[class*="st-key-ft_report_card"] {
     padding: 14px 12px 10px 12px !important;
 }
 
-/* ---- Barra in basso: 6 voci, "Nuovo" in evidenza ---- */
+/* Tabella categorie del report: entra nello schermo senza scorrere di lato.
+   Il nome della categoria può andare a capo, i numeri restano su una riga. */
+.ft-cmp-table {
+    font-size: 12.5px;
+}
+
+.ft-cmp-table th {
+    padding: 0 4px 8px 4px;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+}
+
+.ft-cmp-table td {
+    padding: 9px 4px;
+}
+
+.ft-cmp-table td:first-child {
+    white-space: normal;
+    line-height: 1.25;
+}
+
+.ft-cmp-cat {
+    gap: 5px;
+}
+
+.ft-cmp-cat i {
+    display: none;
+}
+
+.ft-cmp-table td .ft-delta {
+    font-size: 11px;
+    padding: 2px 6px;
+}
+
+/* ---- Barra in basso: 6 voci ---- */
 
 .st-key-ft_mobile_tabbar {
     gap: 0 !important;
@@ -1187,22 +1221,30 @@ div[class*="st-key-ft_report_card"] {
     border-color: transparent !important;
 }
 
-.st-key-ft_mobile_tabbar [class*="st-key-ft_mtab_2_"] [data-testid="stIconEmoji"] {
-    width: 34px;
-    height: 34px;
-    border-radius: 12px;
-    display: inline-flex !important;
-    align-items: center;
-    justify-content: center;
-    font-size: 17px !important;
-    background: linear-gradient(180deg, var(--ft-accent), var(--ft-accent-strong));
-    box-shadow: 0 8px 18px -8px rgba(var(--ft-accent-rgb), 0.9);
-    filter: none !important;
-    opacity: 1 !important;
+/* Icone Material nella barra in basso (es. "Nuovo"): stessa misura delle emoji. */
+.st-key-ft_mobile_tabbar [data-testid="stIconMaterial"] {
+    font-size: 26px !important;
+    line-height: 1 !important;
+    margin: 0 !important;
+    color: var(--ft-muted) !important;
 }
 
-.st-key-ft_mobile_tabbar [class*="st-key-ft_mtab_2_"] [data-testid="stPageLink"] a {
-    gap: 2px !important;
+.st-key-ft_mobile_tabbar [class*="_on"] [data-testid="stIconMaterial"] {
+    color: var(--ft-accent-strong) !important;
+}
+
+/* Menu a tendina: l'elenco non deve mai essere più alto del riquadro che lo
+   contiene. Quando sotto il campo c'è poco spazio (es. Categoria nella
+   modifica di un movimento) il riquadro si accorcia e prima le ultime voci
+   (Anticipi & Recuperi, Altro) restavano tagliate fuori e irraggiungibili. */
+[data-testid$="VirtualDropdown"] {
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+[data-testid$="VirtualDropdown"] > [role="listbox"] {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
 }
 
 /* Filtri della Home nel riquadro richiudibile. */

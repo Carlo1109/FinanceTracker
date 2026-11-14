@@ -59,7 +59,7 @@ Se qualcosa non va, la run si ferma lì e il log dice cosa.
   screenshot e anteprima nelle app recenti sono nascosti.
 - **Backup ed export Excel** finiscono nella cartella **Download** del telefono: li vedi dall'app File e puoi
   inviarli su Drive, via mail o al PC. Il backup si può salvare anche direttamente su **Google Drive**
-  (☁️ Salva su Drive apre il «Salva in…» di Android).
+  (☁️ Salva su Drive apre la condivisione di Android: si sceglie «Salva su Drive»).
 - **Import:** *Importa* apre il selettore file di Android, quindi puoi usare estratti conto scaricati sul telefono
   o presi da Drive.
 - **PC ↔ telefono:** backup su Google Drive da una parte, poi da *Opzioni → Dati* (o *Impostazioni → Dati*

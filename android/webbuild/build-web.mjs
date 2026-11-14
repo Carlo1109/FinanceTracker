@@ -44,6 +44,7 @@ const APP_FILE_PATTERNS = [
   ".streamlit/config.toml",
   "config/categories.json",
   "assets/icons/ft_logo.png",
+  "assets/icons/ft_logo_square.png",
   "src/**/*.py",
 ];
 

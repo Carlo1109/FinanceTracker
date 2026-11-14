@@ -51,6 +51,8 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -493,8 +495,56 @@ public class MainActivity extends Activity {
         }
 
         /**
-         * "Salva in…" di Android: l'utente sceglie dove (Google Drive, una
-         * cartella, …). Usato per inviare il backup alla cartella condivisa.
+         * Condivisione di Android con il file allegato: tra le app compare
+         * "Drive – Salva su Drive". Usato per mettere il backup su Google Drive
+         * (il selettore "Salva in…" su molti telefoni non mostra Drive).
+         */
+        @JavascriptInterface
+        public void shareFile(String fileName, String mimeType, String base64) {
+            String name = sanitizeFileName(fileName);
+            try {
+                byte[] bytes = Base64.decode(base64, Base64.DEFAULT);
+                File dir = ShareProvider.sharedDir(MainActivity.this);
+                File[] old = dir.listFiles();
+                if (old != null) {
+                    for (File file : old) {
+                        //noinspection ResultOfMethodCallIgnored
+                        file.delete();
+                    }
+                }
+                File target = new File(dir, name);
+                try (FileOutputStream out = new FileOutputStream(target)) {
+                    out.write(bytes);
+                }
+                Uri uri = ShareProvider.uriFor(MainActivity.this, name);
+                String type = mimeType == null || mimeType.isEmpty()
+                        ? ShareProvider.mimeFor(name) : mimeType;
+                runOnUiThread(() -> {
+                    Intent send = new Intent(Intent.ACTION_SEND);
+                    send.setType(type);
+                    send.putExtra(Intent.EXTRA_STREAM, uri);
+                    send.putExtra(Intent.EXTRA_TITLE, name);
+                    send.putExtra(Intent.EXTRA_SUBJECT, name);
+                    send.setClipData(ClipData.newRawUri(name, uri));
+                    send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    Intent chooser = Intent.createChooser(send, "Salva il backup su…");
+                    chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    // Rientro dalla condivisione: non è un "ritorno" da bloccare.
+                    skipRelockOnce = true;
+                    try {
+                        startActivity(chooser);
+                    } catch (ActivityNotFoundException e) {
+                        showToast("Nessuna app per condividere il file");
+                    }
+                });
+            } catch (IOException | IllegalArgumentException e) {
+                Log.e(TAG, "Condivisione non riuscita", e);
+                showToast("Condivisione non riuscita: " + e.getMessage());
+            }
+        }
+
+        /**
+         * "Salva in…" di Android: l'utente sceglie dove (una cartella, …).
          */
         @JavascriptInterface
         public void saveFileAs(String fileName, String mimeType, String base64) {

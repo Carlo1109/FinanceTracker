@@ -82,7 +82,9 @@ movements_page = st.Page(
 manual_entry_page = st.Page(
     _manual_entry,
     title="Nuovo movimento",
-    icon="➕",
+    # Icona Material (non emoji): su alcuni telefoni, es. Samsung, l'emoji ➕
+    # è disegnata dentro un quadrato blu.
+    icon=":material/add:",
     url_path="nuovo-movimento",
 )
 
@@ -110,7 +112,7 @@ settings_page = st.Page(
 NAV_ITEMS = [
     NavItem(dashboard_page, "Dashboard", "🏠"),
     NavItem(movements_page, "Movimenti", "💳"),
-    NavItem(manual_entry_page, "Nuovo movimento", "➕"),
+    NavItem(manual_entry_page, "Nuovo movimento", ":material/add:"),
     NavItem(reports_page, "Report", "📊"),
     NavItem(import_page, "Importa dati", "📥"),
     NavItem(settings_page, "Impostazioni", "⚙️"),

@@ -6,7 +6,8 @@
 
     <!-- Nessun altro permesso: niente internet, niente accesso a tutti i file.
          Import e cartella dei dati: scelti dall'utente col selettore di sistema.
-         Export: i file vanno in Download tramite MediaStore. -->
+         Export: i file vanno in Download tramite MediaStore, oppure si
+         condividono (es. Salva su Drive) tramite ShareProvider. -->
 
     <application
         android:allowBackup="false"
@@ -28,5 +29,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- File condivisi con altre app (es. backup → "Salva su Drive"):
+             solo in lettura, permesso concesso file per file. -->
+        <provider
+            android:name=".ShareProvider"
+            android:authorities="io.github.carlo1109.financetracker.share"
+            android:exported="false"
+            android:grantUriPermissions="true" />
     </application>
 </manifest>

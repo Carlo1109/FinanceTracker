@@ -841,7 +841,9 @@ def _render_backup_section() -> None:
     if IS_ANDROID:
         st.caption(
             "Crea uno zip con database e categorie. Salvalo in Download o "
-            "direttamente su Google Drive, per aprirlo poi sul PC."
+            "direttamente su Google Drive, per aprirlo poi sul PC. "
+            "Con ☁️ Salva su Drive si apre la condivisione di Android: scegli "
+            "Drive, poi la cartella FinanceTracker e Salva."
         )
         backup_name, backup_bytes = build_backup_bytes()
         c1, c2 = st.columns(2)
@@ -867,7 +869,7 @@ def _render_backup_section() -> None:
                 width="stretch",
                 on_click=mark_backup_done,
                 key="android_backup_drive",
-                help="Si apre «Salva in…»: scegli Google Drive e la cartella FinanceTracker.",
+                help="Si apre la condivisione: scegli Drive («Salva su Drive») e la cartella FinanceTracker.",
             )
     else:
         st.caption(
