@@ -19,6 +19,8 @@ from typing import Any
 
 import streamlit as st
 
+from src.utils.st_compat import ensure_component_runtime
+
 
 _CSS = r"""
 :host { display: block; }
@@ -254,6 +256,8 @@ export default function (component) {
 }
 """
 
+
+ensure_component_runtime()
 
 _movement_list = st.components.v2.component(
     "ft_movement_list",

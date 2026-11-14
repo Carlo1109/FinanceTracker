@@ -16,6 +16,8 @@ from typing import Any
 
 import streamlit as st
 
+from src.utils.st_compat import ensure_component_runtime
+
 
 _CSS = r"""
 :host { display: block; }
@@ -85,16 +87,22 @@ _CSS = r"""
 
 _JS = r"""
 const NS = "http://www.w3.org/2000/svg";
-const EUR = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const EUR0 = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 0 });
 const touch = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(hover: none)").matches;
 
-function eur(v) { return EUR.format(v || 0); }
+// Stesso formato di Python (src/utils/formatting.py): 5.279,83 €.
+// Intl in italiano non mette il punto nei numeri a 4 cifre (5279,83).
+function group(intPart) { return intPart.replace(/\B(?=(\d{3})+(?!\d))/g, "."); }
+function num(v, decimals) {
+  const fixed = Math.abs(v || 0).toFixed(decimals);
+  const [i, d] = fixed.split(".");
+  return (v < 0 && Number(fixed) !== 0 ? "-" : "") + group(i) + (d ? "," + d : "");
+}
+function eur(v) { return num(v, 2) + "\u00a0€"; }
 function short(v) {
   const a = Math.abs(v);
-  if (a >= 1e6) return (v / 1e6).toFixed(1).replace(".", ",") + " M";
-  if (a >= 1e4) return EUR0.format(v / 1e3) + "k";
-  return EUR0.format(v);
+  if (a >= 1e6) return num(v / 1e6, 1) + " M";
+  if (a >= 1e4) return num(v / 1e3, 0) + "k";
+  return num(v, 0);
 }
 function el(tag, attrs, parent) {
   const n = document.createElementNS(NS, tag);
@@ -418,6 +426,8 @@ export default function (component) {
 }
 """
 
+
+ensure_component_runtime()
 
 _chart = st.components.v2.component(
     "ft_chart",
