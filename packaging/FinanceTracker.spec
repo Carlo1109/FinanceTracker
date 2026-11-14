@@ -36,7 +36,6 @@ datas += streamlit_datas
 datas += webview_datas
 datas += copy_metadata("streamlit")
 datas += copy_metadata("pandas")
-datas += copy_metadata("plotly")
 datas += copy_metadata("pywebview")
 datas += copy_metadata("openpyxl")
 

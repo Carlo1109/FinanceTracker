@@ -1,6 +1,6 @@
 # Manuale FinanceTracker
 
-App offline per le finanze personali. I dati stanno solo sul PC. L’app **propone** (categoria, parola chiave, collegamento prestito); **confermi tu**.
+App offline per le finanze personali, per PC e Android (versione 2.0). I dati stanno sul tuo dispositivo; PC e telefono si allineano con i backup su Google Drive, se lo vuoi. L’app **propone** (categoria, parola chiave, collegamento prestito); **confermi tu**.
 
 ---
 
@@ -117,9 +117,18 @@ Dashboard e Movimenti: più conti, Entrate / Uscite / Investimenti, mese o **int
 
 Anticipi & Recuperi e trasferimenti **non** compaiono se filtri solo Entrate o Uscite: non sono operativi. Per vederli, tipo vuoto (tutti) o categoria Anticipi & Recuperi.
 
+### Report
+
+Pagina **Report**: scegli **Mese** o **Anno** (e, se vuoi, i conti).
+
+- **Mese**: entrate, uscite, risparmio e tasso di risparmio con il confronto col mese prima; tre cose «in evidenza» (la categoria cresciuta di più, quella su cui hai risparmiato, la spesa più grande o i giorni senza spese); il **calendario** colorato in base a quanto hai speso ogni giorno (tocca un giorno per il dettaglio); le spese più grandi; la tabella delle categorie contro il mese prima e lo stesso mese dell’anno scorso.
+- **Anno**: entrate e uscite mese per mese, le **uscite accumulate** contro l’anno prima (anno su anno), mese migliore e più caro, categorie contro l’anno prima con la media mensile.
+
+Valgono le stesse regole della dashboard: trasferimenti, saldo iniziale e anticipi & recuperi restano fuori; gli investimenti sono a parte.
+
 ### Modificare
 
-Data, descrizione, categoria, note, flag speciale. L’hash di import **non** cambia: se cambi il testo e reimporti lo stesso file, non duplica.
+Tocca (o clicca) una riga della lista per aprire la modifica: data, descrizione, categoria, note, flag speciale. L’hash di import **non** cambia: se cambi il testo e reimporti lo stesso file, non duplica.
 
 ### Dividere
 
@@ -127,7 +136,7 @@ Un movimento in **2–4** quote, se appartengono a categorie diverse (stesso seg
 
 ### Unire
 
-Due o più righe **dello stesso conto**. Resta la più vecchia (hash invariato).
+Due o più righe **dello stesso conto**: **Seleziona** sopra la lista, tocca le righe, poi **Unisci**. Resta la più vecchia (hash invariato).
 
 ### Annullare
 
@@ -136,6 +145,30 @@ Dopo elimina / unisci / dividi: popup **Annulla** per 15 secondi, non blocca.
 ### Parole chiave
 
 Dopo un Salva, se c’è qualcosa di nuovo da imparare: proponiamo una keyword. **Aggiungi e ricalcola** aggiorna i movimenti ancora automatici. In Impostazioni le editi a mano.
+
+### PC e telefono con Google Drive
+
+PC e telefono si allineano con i **backup** passando da una cartella di **Google Drive**. Nessun account in FinanceTracker: usi il tuo Drive.
+
+**Una volta sola**
+
+1. In Google Drive crea una cartella, per esempio **FinanceTracker**.
+2. **Sul PC** serve una cartella che si sincronizza con Drive: su Windows e macOS installa *Google Drive per desktop* (Drive compare come disco, es. `G:\Il mio Drive`); su Linux Google non ha un'app ufficiale, usa *Insync* (a pagamento) o *rclone* (gratuito). Poi in Impostazioni → Dati → Backup → **☁️ Cartella condivisa** incolla il percorso della cartella, es. `G:\Il mio Drive\FinanceTracker`.
+3. **Sul telefono** non serve nulla.
+
+**Dal telefono al PC**
+
+1. Telefono: Opzioni → Dati → **☁️ Salva su Drive** → nella finestra «Salva in…» scegli Drive e la cartella FinanceTracker.
+2. PC: Impostazioni → Dati → Backup → *Da dove?* **Dalla cartella condivisa** → scegli il backup (📱 = telefono, dal più recente) → **Unisci**.
+
+**Dal PC al telefono**
+
+1. PC: **Crea backup completo** → alla domanda «Inviarlo anche alla cartella condivisa?» rispondi **Sì, invia**.
+2. Telefono (dopo che Drive l'ha caricato): Opzioni → Dati → *Seleziona un backup* → nel selettore tocca ☰ → Drive → cartella FinanceTracker → scegli lo zip → **Unisci**.
+
+**Unisci** porta tutto quello che è cambiato sull'altro dispositivo: movimenti nuovi, modifiche e cancellazioni. Se lo stesso movimento è stato cambiato su tutti e due, vince la modifica più recente; quello che hai fatto solo qui non si perde. Lo stesso estratto conto importato su entrambi non crea doppioni. Le categorie nuove si aggiungono. (I backup fatti con versioni prima della 2.0 aggiungono solo i movimenti che mancano.) **Sostituisci** invece mette al posto di tutto il contenuto del backup.
+
+Nella cartella condivisa restano gli ultimi 10 backup di ogni dispositivo. Gli orologi di PC e telefono devono essere giusti (decidono quale modifica è la più recente).
 
 ### Export e backup
 

@@ -23,16 +23,27 @@ class ThemePalette:
     bg_2: str
     panel: str
     panel_soft: str
+    panel_solid: str  # superfici piene (menu, dialog, barra in basso)
+    raised: str  # elementi sopra le card (chip, campi, righe al passaggio)
     border: str
+    border_strong: str
     text: str
     muted: str
+    subtle: str  # testo terziario (date, didascalie)
     nav_text: str
     shadow: str
+    shadow_soft: str
     glow_alpha: str
     scrollbar: str
     input_bg: str
-    danger: str = "#f87171"
-    investment: str = "#fbbf24"
+    menu_bg: str
+    field_border: str
+    income: str
+    income_rgb: str
+    danger: str
+    danger_rgb: str
+    investment: str
+    investment_rgb: str
 
 
 @dataclass(frozen=True)
@@ -116,36 +127,62 @@ THEMES: dict[str, ThemePalette] = {
     "dark": ThemePalette(
         id="dark",
         label="Scuro",
-        bg_0="#070b14",
-        bg_1="#0b1220",
-        bg_2="#111a2e",
-        panel="rgba(11, 18, 32, 0.90)",
-        panel_soft="rgba(17, 26, 46, 0.74)",
-        border="rgba(148, 163, 184, 0.16)",
-        text="#eef3ff",
-        muted="#94a3b8",
-        nav_text="#c5d5cc",
-        shadow="0 16px 36px rgba(0, 0, 0, 0.28)",
-        glow_alpha="0.16",
-        scrollbar="#243044",
-        input_bg="rgba(11, 18, 32, 0.55)",
+        bg_0="#060912",
+        bg_1="#0a0f1c",
+        bg_2="#0d1424",
+        panel="rgba(17, 24, 41, 0.78)",
+        panel_soft="rgba(22, 31, 52, 0.62)",
+        panel_solid="#111829",
+        raised="rgba(148, 163, 184, 0.08)",
+        border="rgba(148, 163, 184, 0.12)",
+        border_strong="rgba(148, 163, 184, 0.22)",
+        text="#eef2fb",
+        muted="#93a1b8",
+        subtle="#66758e",
+        nav_text="#c3cde0",
+        shadow="0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 18px 40px -18px rgba(0, 0, 0, 0.65)",
+        shadow_soft="0 10px 24px -14px rgba(0, 0, 0, 0.55)",
+        glow_alpha="0.14",
+        scrollbar="#243046",
+        input_bg="rgba(9, 14, 26, 0.72)",
+        menu_bg="#121a2c",
+        field_border="rgba(148, 163, 184, 0.22)",
+        income="#34d399",
+        income_rgb="52, 211, 153",
+        danger="#fb7185",
+        danger_rgb="251, 113, 133",
+        investment="#a78bfa",
+        investment_rgb="167, 139, 250",
     ),
     "light": ThemePalette(
         id="light",
         label="Chiaro",
-        bg_0="#f3f6fb",
-        bg_1="#e9eef6",
-        bg_2="#e2e9f3",
-        panel="rgba(255, 255, 255, 0.94)",
-        panel_soft="rgba(255, 255, 255, 0.82)",
-        border="rgba(15, 23, 42, 0.10)",
-        text="#0f172a",
-        muted="#64748b",
+        bg_0="#f7f9fc",
+        bg_1="#f1f4f9",
+        bg_2="#eaeff6",
+        panel="rgba(255, 255, 255, 0.92)",
+        panel_soft="rgba(255, 255, 255, 0.76)",
+        panel_solid="#ffffff",
+        raised="rgba(15, 23, 42, 0.04)",
+        border="rgba(15, 23, 42, 0.08)",
+        border_strong="rgba(15, 23, 42, 0.14)",
+        text="#0b1324",
+        muted="#5b6b84",
+        subtle="#8593a8",
         nav_text="#334155",
-        shadow="0 14px 32px rgba(15, 23, 42, 0.10)",
-        glow_alpha="0.22",
+        shadow="0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 32px -16px rgba(15, 23, 42, 0.16)",
+        shadow_soft="0 8px 20px -14px rgba(15, 23, 42, 0.22)",
+        glow_alpha="0.16",
         scrollbar="#cbd5e1",
         input_bg="#ffffff",
+        menu_bg="#ffffff",
+        field_border="#dbe2ec",
+        income="#059669",
+        income_rgb="5, 150, 105",
+        danger="#e11d48",
+        danger_rgb="225, 29, 72",
+        investment="#7c3aed",
+        investment_rgb="124, 58, 237",
     ),
 }
 
@@ -173,7 +210,7 @@ def resolve_semantic(
     accent_id = accent_id or get_accent()
     theme, accent = resolve_palette(theme_id, accent_id)
 
-    income = "#34d399"
+    income = theme.income
     pie_outline = (
         "rgba(255, 255, 255, 0.92)"
         if theme_id == "light"

@@ -1,19 +1,17 @@
-import json
+from __future__ import annotations
+
+import html
 from pathlib import Path
 
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-import plotly.io as pio
 import streamlit as st
-import html
 
 from src.components.cards import (
+    BALANCE_COLOR,
     EXPENSE_COLOR,
     INCOME_COLOR,
     INVESTMENT_COLOR,
     LIQUIDITY_COLOR,
-    BALANCE_COLOR,
     MUTED_COLOR,
     render_chart_card,
     render_expense_distribution_card,
@@ -23,8 +21,10 @@ from src.components.cards import (
     render_kpi_card,
     render_section_title,
 )
+from src.components.charts import donut_chart, xy_chart
 from src.components.date_input import themed_date_input
 from src.components.navigation import switch_to
+from src.database.db import database_version
 from src.services.analytics import (
     MOVEMENT_TYPE_FILTERS,
     PERIOD_CUSTOM,
@@ -62,238 +62,237 @@ from src.services.movement_service import load_movements
 from src.theme.colors import get_category_colors
 from src.theme.tokens import resolve_semantic
 from src.utils.formatting import euro, signed_euro
-from src.utils.platform import IS_ANDROID, PLOTLY_JS_URL
+from src.utils.platform import IS_ANDROID
 
 
+MONTHS_SHORT_IT = (
+    "Gen", "Feb", "Mar", "Apr", "Mag", "Giu",
+    "Lug", "Ago", "Set", "Ott", "Nov", "Dic",
+)
 
-def _mix_rgb(color: str, target: tuple[int, int, int], amount: float) -> str:
-    raw = str(color).strip()
-    if raw.startswith("#"):
-        hex_value = raw[1:]
-        if len(hex_value) == 3:
-            hex_value = "".join(ch * 2 for ch in hex_value)
-        rgb = (
-            int(hex_value[0:2], 16),
-            int(hex_value[2:4], 16),
-            int(hex_value[4:6], 16),
-        )
-    else:
-        parts = [
-            int(part)
-            for part in raw.replace("rgba", "rgb").strip("rgb() ").split(",")[:3]
-        ]
-        rgb = (parts[0], parts[1], parts[2]) if len(parts) == 3 else (128, 128, 128)
+PERIOD_OPTIONS = [
+    "Questo mese",
+    "Mese scorso",
+    "Mese specifico",
+    PERIOD_CUSTOM,
+    "Ultimi 3 mesi",
+    "Ultimi 6 mesi",
+    "Quest'anno",
+    "Tutto",
+]
 
-    mixed = tuple(
-        max(0, min(255, int(round(channel + (goal - channel) * amount))))
-        for channel, goal in zip(rgb, target)
-    )
-    return "rgb({},{},{})".format(*mixed)
+_RESTORE_KEY = "dashboard_restore_open"
 
 
-def render_category_pie_chart(
-    fig: go.Figure,
-    *,
-    height: int = 420,
-    root_id: str = "ft-pie-root",
-) -> None:
-    """Donut in iframe con hover luminoso (WebKit-friendly via Plotly.restyle).
+def month_labels(months: list[str]) -> tuple[list[str], list[str]]:
+    """'2026-11' -> ('Nov 2026', "Nov '26")."""
+    long_labels: list[str] = []
+    short_labels: list[str] = []
+    for value in months:
+        stamp = pd.to_datetime(f"{value}-01", errors="coerce")
+        if pd.isna(stamp):
+            long_labels.append(str(value))
+            short_labels.append(str(value))
+            continue
+        name = MONTHS_SHORT_IT[stamp.month - 1]
+        long_labels.append(f"{name} {stamp.year}")
+        short_labels.append(f"{name} '{str(stamp.year)[-2:]}")
+    return long_labels, short_labels
 
-    Su Android niente iframe: il grafico nativo di Streamlit è trasparente con
-    qualsiasi tema del telefono (l'iframe in WebView poteva avere il fondo
-    bianco) e non ricarica plotly.js a ogni pagina, quindi è anche più veloce.
+
+# ---------------------------------------------------------------- calcoli
+
+
+@st.cache_data(max_entries=24, show_spinner=False)
+def _dashboard_data(
+    db_version: str,
+    period: str,
+    selected_month: str | None,
+    custom_start: pd.Timestamp | None,
+    custom_end: pd.Timestamp | None,
+    selected_accounts: tuple[str, ...],
+    selected_types: tuple[str, ...],
+) -> dict | None:
     """
-    if IS_ANDROID:
-        fig.update_layout(
-            autosize=True,
-            margin=dict(l=4, r=4, t=4, b=4),
-            height=max(height - 20, 280),
-            dragmode=False,
+    Tutti i numeri della dashboard per i filtri scelti.
+
+    In cache finché database e filtri non cambiano: tornando sulla Home
+    da un'altra pagina (o cambiando solo il tema) non si ricalcola nulla.
+    Sul telefono è la differenza tra un attimo e qualche secondo.
+    """
+    del db_version  # serve solo come chiave della cache
+    accounts_filter = list(selected_accounts)
+    types_filter = list(selected_types)
+
+    df = load_movements()
+    dated_all = normalize_date_column(df)
+
+    filtered_df = get_period_df(
+        df,
+        period,
+        selected_month,
+        custom_start=custom_start,
+        custom_end=custom_end,
+    )
+    filtered_df = filter_by_accounts(filtered_df, accounts_filter)
+    filtered_df = filter_by_movement_types(filtered_df, types_filter)
+    if filtered_df.empty:
+        return None
+
+    metrics = calculate_financial_metrics(filtered_df)
+    account_scope = filter_by_accounts(df, accounts_filter)
+    analysis_start, analysis_end = resolve_analysis_bounds(
+        filtered_df,
+        period,
+        selected_month,
+        custom_start=custom_start,
+        custom_end=custom_end,
+    )
+    saldo = calculate_account_balance(account_scope, through=analysis_end)
+
+    period_days = get_period_day_count(
+        filtered_df,
+        period,
+        selected_month,
+        custom_start=custom_start,
+        custom_end=custom_end,
+    )
+    specials_source_df = filter_by_accounts(dated_all, accounts_filter)
+    avg_daily_expense = calculate_daily_expense(
+        filtered_df,
+        period_days,
+        source_df=specials_source_df,
+        period_start=analysis_start,
+        period_end=analysis_end,
+    )
+    special_summary = special_expense_summary(
+        filtered_df,
+        source_df=specials_source_df,
+        period_start=analysis_start,
+        period_end=analysis_end,
+    )
+
+    daily_footer_parts = [f"su {period_days} giorni"]
+    amortized_count = int(special_summary["amortized_count"])
+    amortized_amount = float(special_summary["amortized_amount"])
+    excluded_count = int(special_summary["excluded_count"])
+    excluded_total = float(special_summary["excluded_total"])
+    if amortized_count > 0:
+        noun = "ripartita" if amortized_count == 1 else "ripartite"
+        daily_footer_parts.append(
+            f"{amortized_count} {noun} ({euro(amortized_amount)} nel periodo)"
         )
-        st.plotly_chart(
-            fig,
-            width="stretch",
-            theme=None,
-            key=root_id,
-            config={
-                "displayModeBar": False,
-                "responsive": True,
-                "scrollZoom": False,
-                "doubleClick": False,
-            },
+    if excluded_count > 0:
+        noun = "esclusa" if excluded_count == 1 else "escluse"
+        daily_footer_parts.append(
+            f"{excluded_count} {noun} ({euro(excluded_total)})"
         )
-        return
 
-    trace = fig.data[0] if fig.data else None
-    base_colors = (
-        [str(color) for color in (trace.marker.colors or [])]
-        if trace is not None
-        else []
-    )
-    from src.services.settings_service import get_theme_mode
-
-    is_light = get_theme_mode() == "light"
-    # Sul chiaro: spegnere = scurire (non schiarire verso lo sfondo).
-    if is_light:
-        bright_colors = [
-            _mix_rgb(color, (255, 255, 255), 0.22) for color in base_colors
-        ]
-        dim_colors = [
-            _mix_rgb(color, (15, 23, 42), 0.42) for color in base_colors
-        ]
-    else:
-        bright_colors = [
-            _mix_rgb(color, (255, 255, 255), 0.30) for color in base_colors
-        ]
-        dim_colors = [
-            _mix_rgb(color, (7, 11, 20), 0.38) for color in base_colors
-        ]
-
-    fig.update_layout(
-        autosize=True,
-        margin=dict(l=4, r=4, t=4, b=4),
-        height=max(height - 20, 300),
+    previous_bounds = get_previous_period_bounds(
+        period=period,
+        selected_month=selected_month,
+        custom_start=custom_start,
+        custom_end=custom_end,
     )
 
-    chart_html = pio.to_html(
-        fig,
-        # Su Android plotly.js (4-5 MB) è un file locale dell'app:
-        # niente libreria intera rigenerata e inviata a ogni interazione.
-        include_plotlyjs=PLOTLY_JS_URL or True,
-        # ID fisso: con gli stessi dati l'HTML resta identico e il browser
-        # non ricarica il grafico a ogni interazione.
-        div_id=f"{root_id}-plot",
-        full_html=False,
-        config={"displayModeBar": False, "responsive": True},
-    )
+    deltas: dict[str, tuple[str | None, str]] = {
+        key: (None, MUTED_COLOR)
+        for key in ("bilancio", "entrate", "uscite", "investimenti", "saldo", "daily")
+    }
+    comparison_caption = None
+    if previous_bounds is not None:
+        previous_start, previous_end = previous_bounds
+        comparison_source_df = specials_source_df
+        previous_period_df = comparison_source_df[
+            comparison_source_df["data"].between(
+                previous_start,
+                previous_end,
+                inclusive="both",
+            )
+        ].copy()
+        previous_period_df = filter_by_movement_types(
+            previous_period_df,
+            types_filter,
+        )
+        previous_metrics = calculate_financial_metrics(previous_period_df)
+        previous_daily = calculate_daily_expense(
+            previous_period_df,
+            calculate_period_days(previous_start, previous_end),
+            source_df=comparison_source_df,
+            period_start=previous_start,
+            period_end=previous_end,
+        )
+        deltas["daily"] = get_daily_expense_comparison(
+            current_average=avg_daily_expense,
+            previous_average=previous_daily,
+        )
+        for key, better in (
+            ("bilancio", True),
+            ("entrate", True),
+            ("uscite", False),
+            ("investimenti", True),
+        ):
+            deltas[key] = get_value_comparison(
+                metrics[key],
+                previous_metrics[key],
+                higher_is_better=better,
+            )
+        previous_saldo = calculate_account_balance(
+            account_scope,
+            through=previous_end,
+        )
+        deltas["saldo"] = get_value_comparison(
+            saldo,
+            previous_saldo,
+            higher_is_better=True,
+        )
+        current_bounds = get_current_period_bounds(
+            period,
+            selected_month,
+            custom_start=custom_start,
+            custom_end=custom_end,
+        )
+        if current_bounds is not None:
+            comparison_caption = format_comparison_caption(
+                current_bounds[0],
+                current_bounds[1],
+                previous_start,
+                previous_end,
+            )
 
-    base_json = json.dumps(base_colors)
-    bright_json = json.dumps(bright_colors)
-    dim_json = json.dumps(dim_colors)
+    # Andamento del bilancio negli ultimi 12 mesi (per la card principale).
+    trend_scope = filter_by_movement_types(account_scope, types_filter)
+    trend = monthly_flow_totals(trend_scope)
+    if not trend.empty and analysis_end is not None and pd.notna(analysis_end):
+        last_month = pd.Timestamp(analysis_end).strftime("%Y-%m")
+        trend = trend[trend["mese"].astype(str) <= last_month]
+    trend = trend.tail(12)
+    spark_values = (trend["entrate"] - trend["uscite"]).round(2).tolist()
 
-    st.iframe(
-        f"""
-        <style>
-          /* Stesso color-scheme dell'iframe nella pagina (vedi style.py):
-             se non coincidono il browser dipinge un fondo bianco pieno. */
-          :root {{
-            color-scheme: normal !important;
-          }}
-          html, body {{
-            margin: 0;
-            padding: 0;
-            background: transparent !important;
-            overflow: hidden;
-          }}
-        </style>
-        <div id="{root_id}" style="
-          width:100%;
-          height:100%;
-          filter: drop-shadow(0 8px 14px rgba(0,0,0,0.22));
-        ">
-          {chart_html}
-        </div>
-        <script>
-        (function () {{
-          const BASE = {base_json};
-          const BRIGHT = {bright_json};
-          const DIM = {dim_json};
-          const ROOT = {json.dumps(root_id)};
+    return {
+        "metrics": metrics,
+        "saldo": saldo,
+        "avg_daily_expense": avg_daily_expense,
+        "daily_footer": " · ".join(daily_footer_parts),
+        "deltas": deltas,
+        "comparison_caption": comparison_caption,
+        "top_expense": top_expense_category(filtered_df),
+        "top_income": top_income_category(filtered_df),
+        "refunds": refund_income(filtered_df),
+        "special_overview": special_expenses_overview(
+            specials_source_df,
+            analysis_start,
+            analysis_end,
+        ),
+        "expense_breakdown": category_expense_breakdown(filtered_df),
+        "income_breakdown": category_income_breakdown(filtered_df),
+        "monthly": monthly_flow_totals(filtered_df),
+        "spark_values": spark_values,
+        "spark_months": len(spark_values),
+    }
 
-          function slicePaths(gd) {{
-            let paths = gd.querySelectorAll('.pielayer g.slice path');
-            if (!paths.length) {{
-              paths = gd.querySelectorAll('.pielayer .trace path');
-            }}
-            return paths;
-          }}
 
-          function colorsFor(active) {{
-            if (active < 0) return BASE;
-            return BASE.map(function (_color, index) {{
-              return index === active ? BRIGHT[index] : DIM[index];
-            }});
-          }}
-
-          function paintFills(gd, active) {{
-            const paths = slicePaths(gd);
-            const colors = colorsFor(active);
-            for (let i = 0; i < paths.length && i < colors.length; i++) {{
-              paths[i].setAttribute('fill', colors[i]);
-            }}
-          }}
-
-          function setActive(gd, active) {{
-            const colors = colorsFor(active);
-            Plotly.restyle(gd, {{ 'marker.colors': [colors] }}, [0]).then(function () {{
-              paintFills(gd, active);
-            }}).catch(function () {{
-              paintFills(gd, active);
-            }});
-          }}
-
-          function bind(gd) {{
-            if (!gd || gd._ftPieHoverBound) return;
-            gd._ftPieHoverBound = true;
-            let last = -1;
-            let resetTimer = null;
-
-            // Touch: nessun "mouse fuori", quindi la fetta evidenziata
-            // e il dettaglio si tolgono da soli dopo qualche secondo.
-            const touch = window.matchMedia && window.matchMedia('(hover: none)').matches;
-
-            function reset() {{
-              clearTimeout(resetTimer);
-              if (last === -1) return;
-              last = -1;
-              try {{ Plotly.Fx.unhover(gd); }} catch (error) {{}}
-              setActive(gd, -1);
-            }}
-
-            gd.on('plotly_hover', function (ev) {{
-              if (!ev.points || !ev.points.length) return;
-              const index = ev.points[0].pointNumber;
-              if (touch) {{
-                clearTimeout(resetTimer);
-                resetTimer = setTimeout(reset, 2500);
-              }}
-              if (index === last) return;
-              last = index;
-              setActive(gd, index);
-            }});
-
-            gd.on('plotly_unhover', function () {{
-              last = -1;
-              setActive(gd, -1);
-            }});
-
-            if (touch) {{
-              document.addEventListener('touchstart', function (ev) {{
-                if (!ev.target.closest('.pielayer')) reset();
-              }}, {{ passive: true }});
-            }}
-          }}
-
-          function tryBind(left) {{
-            const plots = document.querySelectorAll('#' + ROOT + ' .js-plotly-plot');
-            const gd = plots[plots.length - 1];
-            if (gd && typeof Plotly !== 'undefined' && gd.data) {{
-              bind(gd);
-              try {{ Plotly.Plots.resize(gd); }} catch (error) {{}}
-              return;
-            }}
-            if (left <= 0) return;
-            setTimeout(function () {{ tryBind(left - 1); }}, 40);
-          }}
-
-          tryBind(50);
-        }})();
-        </script>
-        """,
-        height=height,
-        width="stretch",
-    )
-
+# ---------------------------------------------------------------- sezioni
 
 
 def _render_category_breakdown_section(
@@ -302,7 +301,7 @@ def _render_category_breakdown_section(
     empty_message: str,
     center_caption: str,
     card_key: str,
-    pie_root_id: str,
+    chart_key: str,
 ) -> None:
     if category_df.empty:
         render_html(
@@ -317,106 +316,220 @@ def _render_category_breakdown_section(
         return
 
     category_df = category_df.copy()
-    category_df["label"] = category_df["categoria"].apply(
-        lambda category: f"{get_category_icon(category)} {category}"
-    )
     total_amount = float(category_df["importo"].sum())
-    category_definitions = load_category_definitions()
-    pie_colors = get_category_colors(
+    colors = get_category_colors(
         category_df["categoria"].astype(str).tolist(),
-        category_definitions,
-    )
-    sem = resolve_semantic()
-
-    fig = go.Figure(
-        data=[
-            go.Pie(
-                labels=category_df["label"],
-                values=category_df["importo"],
-                hole=0.68,
-                sort=False,
-                direction="clockwise",
-                textinfo="none",
-                hovertemplate=(
-                    "<b>%{label}</b><br>"
-                    "%{value:.2f} €<br>"
-                    "%{percent}<extra></extra>"
-                ),
-                marker=dict(
-                    colors=pie_colors,
-                    line=dict(
-                        color=sem.pie_outline,
-                        width=2,
-                    ),
-                ),
-                hoverlabel=dict(
-                    bgcolor=sem.hover_bg,
-                    bordercolor=sem.info,
-                    font=dict(
-                        size=13,
-                        color=sem.text,
-                        family="Manrope",
-                    ),
-                ),
-            )
-        ]
+        load_category_definitions(),
     )
 
-    fig.update_layout(
-        height=400,
-        margin=dict(l=0, r=0, t=0, b=0),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font_color=sem.text,
-        showlegend=False,
-        annotations=[
-            dict(
-                text=(
-                    f"<b>{euro(total_amount)}</b><br>"
-                    f"<span style='font-size:12px;color:{sem.muted}'>"
-                    f"{html.escape(center_caption)}"
-                    "</span>"
-                ),
-                x=0.5,
-                y=0.5,
-                font=dict(
-                    size=18,
-                    color=sem.text,
-                    family="Manrope",
-                ),
-                showarrow=False,
-            )
-        ],
-    )
-
-    breakdown_rows = []
-    for _, item in category_df.iterrows():
-        percentage = float(item["importo"]) / total_amount * 100
-        category = str(item["categoria"])
-        breakdown_rows.append(
+    rows = []
+    segments = []
+    for index, item in enumerate(category_df.itertuples(index=False)):
+        category = str(item.categoria)
+        amount = float(item.importo)
+        icon = get_category_icon(category)
+        rows.append(
             {
-                "icon": get_category_icon(category),
+                "icon": icon,
                 "name": category,
-                "amount": euro(float(item["importo"])),
-                "percent": percentage,
-                "color": pie_colors[len(breakdown_rows)],
+                "amount": euro(amount),
+                "percent": amount / total_amount * 100 if total_amount else 0,
+                "color": colors[index],
             }
+        )
+        segments.append(
+            {"label": category, "value": amount, "color": colors[index], "icon": icon}
         )
 
     render_expense_distribution_card(
-        breakdown_rows,
+        rows,
         total_label=euro(total_amount),
-        render_pie=lambda: render_category_pie_chart(
-            fig,
-            height=330 if IS_ANDROID else 420,
-            root_id=pie_root_id,
+        render_pie=lambda: donut_chart(
+            segments,
+            key=chart_key,
+            center_label=center_caption,
+            height=260 if IS_ANDROID else 300,
         ),
-        list_max_height=360,
+        list_max_height=300 if IS_ANDROID else 330,
         key=card_key,
     )
 
 
-_RESTORE_KEY = "dashboard_restore_open"
+def _render_specials(special_overview: pd.DataFrame) -> None:
+    render_section_title("Spese speciali")
+    if special_overview.empty:
+        render_html(
+            """
+            <div class="ft-dashboard-card">
+              <div class="ft-specials-hint" style="margin:0;">
+                Nessuna spesa speciale nel periodo.
+                Puoi segnalarle in Movimenti → Modifica.
+              </div>
+            </div>
+            """
+        )
+        return
+
+    special_count = len(special_overview)
+    special_total = float(special_overview["importo"].sum())
+    rows_html: list[str] = []
+    for item in special_overview.to_dict("records"):
+        date_label = pd.Timestamp(item["data"]).strftime("%d/%m/%Y")
+        title = html.escape(str(item["descrizione"] or "Senza descrizione"))
+        category = str(item["categoria"] or "")
+        account = html.escape(str(item["account"] or ""))
+        mesi_range = html.escape(str(item["mesi_range"] or "—"))
+        amount_label = html.escape(euro(float(item["importo"])))
+        quota = item["quota_mese"]
+        mode_chip = html.escape(str(item["modalita"] or ""))
+
+        if pd.notna(quota):
+            detail = (
+                f'<span class="ft-special-range">{mesi_range}</span>'
+                f'<span class="ft-special-quota">Quota mensile '
+                f"<b>{html.escape(euro(float(quota)))}</b></span>"
+            )
+        else:
+            detail = '<span class="ft-special-quota">Nessuna ripartizione</span>'
+
+        note_text = str(item.get("notes") or "").strip()
+        note_block = (
+            f'<div class="ft-special-note">{html.escape(note_text)}</div>'
+            if note_text
+            else ""
+        )
+        rows_html.append(
+            f"""
+            <div class="ft-special-row">
+              <div class="ft-special-main">
+                <div class="ft-special-title">{title}</div>
+                <div class="ft-special-meta">
+                  <span class="ft-special-cat">{html.escape(get_category_icon(category))} {html.escape(category)}</span>
+                  <span>{html.escape(date_label)}</span>
+                  <span>{account}</span>
+                  <span class="ft-special-mode">{mode_chip}</span>
+                </div>
+                <div class="ft-special-detail">{detail}</div>
+                {note_block}
+              </div>
+              <div class="ft-special-amount">{amount_label}</div>
+            </div>
+            """
+        )
+
+    special_noun = "Spesa speciale" if special_count == 1 else "Spese speciali"
+    summary_label = (
+        f"{special_count} {special_noun} · Totale {euro(special_total)}"
+    )
+    st.html(
+        f"""
+        <div class="ft-dashboard-card">
+          <details class="ft-specials-details">
+            <summary class="ft-specials-summary">
+              <span class="ft-specials-summary-label">
+                {html.escape(summary_label)}
+              </span>
+            </summary>
+            <div class="ft-specials-hint">
+              Nei totali del mese restano come le hai pagate.
+              Nella media giornaliera puoi escluderle
+              oppure spalmarle sui mesi scelti.
+            </div>
+            {"".join(rows_html)}
+          </details>
+        </div>
+        """
+    )
+
+
+def _render_monthly_chart(monthly: pd.DataFrame) -> None:
+    render_section_title("Andamento mensile")
+    if monthly.empty:
+        return
+    monthly = monthly.copy()
+    monthly["mese"] = monthly["mese"].astype(str)
+    monthly = monthly.sort_values("mese", kind="stable")
+    labels, short = month_labels(monthly["mese"].tolist())
+    sem = resolve_semantic()
+    series = [
+        {"name": "Entrate", "color": sem.income, "values": monthly["entrate"].tolist(), "area": True},
+        {"name": "Uscite", "color": sem.expense, "values": monthly["uscite"].tolist(), "area": True},
+    ]
+    if float(monthly["investimenti"].sum()) > 0:
+        series.append(
+            {
+                "name": "Investimenti",
+                "color": sem.investment,
+                "values": monthly["investimenti"].tolist(),
+                "dash": True,
+                "width": 2,
+            }
+        )
+    net = (monthly["entrate"] - monthly["uscite"]).tolist()
+    extra = [("Bilancio", signed_euro(value)) for value in net]
+    kind = "bar" if len(labels) <= 6 else "line"
+    render_chart_card(
+        lambda: xy_chart(
+            labels,
+            series,
+            key="ft_dashboard_monthly",
+            kind=kind,
+            height=260 if IS_ANDROID else 320,
+            short_labels=short,
+            tooltip_extra=extra,
+        )
+    )
+
+
+@st.fragment
+def _savings_card(metrics: dict, refunds: float) -> None:
+    """Card del tasso di risparmio: la casella aggiorna solo questa card."""
+    exclude_refunds = bool(
+        st.session_state.get("dashboard_savings_ex_refunds", False)
+    )
+    rate = savings_rate(
+        metrics,
+        exclude_refunds=exclude_refunds,
+        refunds=refunds,
+    )
+    if rate is None:
+        savings_label = "—"
+        savings_color = MUTED_COLOR
+        if exclude_refunds and refunds > 0:
+            savings_footer = "serve almeno un’entrata oltre i rimborsi"
+        else:
+            savings_footer = "serve almeno un’entrata"
+    else:
+        savings_label = f"{rate:.1f}".replace(".", ",") + "%"
+        savings_color = INCOME_COLOR if rate >= 0 else EXPENSE_COLOR
+        spent_share = f"{(100.0 - rate):.1f}".replace(".", ",")
+        if IS_ANDROID:
+            savings_footer = None
+        elif rate > 0:
+            savings_footer = f"{spent_share}% delle entrate è andato in uscite"
+        elif rate == 0:
+            savings_footer = "tutto è andato in uscite"
+        else:
+            savings_footer = "hai speso più di quanto è entrato"
+
+    render_info_card(
+        title="Tasso di risparmio",
+        value=savings_label,
+        value_color=savings_color,
+        footer=savings_footer,
+        extra_class="ft-savings-rate-card",
+    )
+    st.checkbox(
+        "Escludi rimborsi",
+        key="dashboard_savings_ex_refunds",
+        help=(
+            "I rimborsi non sono reddito: toglierli evita di gonfiare "
+            "il risparmio. Regali e donazioni restano."
+        ),
+    )
+
+
+# ---------------------------------------------------------------- vuoto
 
 
 def _close_restore_dialog() -> None:
@@ -453,247 +566,173 @@ def _restore_backup_dialog() -> None:
         st.rerun()
 
 
-@st.cache_resource(max_entries=8, show_spinner=False)
-def _monthly_figure(
-    monthly_df: pd.DataFrame,
-    month_order_key: tuple[str, ...],
-    sem,
-    is_android: bool,
-) -> go.Figure:
-    """Grafico mensile, tenuto in memoria finché dati e colori non cambiano.
+def _render_empty_state() -> None:
+    st.caption("Panoramica generale delle tue finanze.")
+    render_html(
+        """
+        <div class="ft-empty-hero">
+            <div class="ft-empty-title">Finance<span>Tracker</span></div>
+            <div class="ft-empty-chip"><span></span>Inizia da qui</div>
+            <div class="ft-empty-copy">
+                Nessun movimento ancora. Importa un estratto conto,
+                aggiungi il primo movimento oppure parti da un backup.
+            </div>
+            <div class="ft-empty-steps">
+                <div><b>1</b>Importa l’estratto conto della banca</div>
+                <div><b>2</b>Controlla le categorie assegnate</div>
+                <div><b>3</b>Guarda dove vanno i tuoi soldi</div>
+            </div>
+        </div>
+        """
+    )
+    st.markdown("")
+    if st.session_state.get(_RESTORE_KEY):
+        _restore_backup_dialog()
+    if IS_ANDROID:
+        # Sul telefono uno sotto l'altro: tre pulsanti affiancati non ci stanno.
+        c1 = c2 = c3 = st.container()
+    else:
+        c1, c2, c3, _ = st.columns([1.2, 1.3, 1.5, 1.2])
+    with c1:
+        if st.button("Importa dati", type="primary", width="stretch"):
+            switch_to("import_data")
+    with c2:
+        if st.button("Nuovo movimento", type="secondary", width="stretch"):
+            switch_to("manual_entry")
+    with c3:
+        if st.button("Parti da un backup", type="secondary", width="stretch"):
+            st.session_state[_RESTORE_KEY] = True
+            st.rerun()
 
-    Costruire e validare la figura Plotly è la parte più lenta della dashboard
-    (soprattutto sul telefono): a ogni interazione che non cambia i dati
-    si riusa la stessa figura.
-    """
-    month_order = list(month_order_key)
 
-    fig2 = px.line(
-        monthly_df,
-        x="mese_label",
-        y=[
-            "entrate",
-            "uscite",
-            "investimenti",
-        ],
-        markers=True,
-        category_orders={
-            "mese_label": month_order,
-        },
-        color_discrete_map={
-            "entrate": sem.income,
-            "uscite": sem.expense,
-            "investimenti": sem.investment,
-        },
-        labels={
-            "mese_label": "",
-            "value": "€",
-            "variable": "",
-            "entrate": "Entrate",
-            "uscite": "Uscite",
-            "investimenti": "Investimenti",
-        },
+# ---------------------------------------------------------------- filtri
+
+
+def _filter_summary(accounts: list[str]) -> str:
+    period = st.session_state.get("dashboard_period", "Tutto")
+    if period == "Mese specifico" and st.session_state.get("dashboard_month"):
+        labels, _ = month_labels([str(st.session_state["dashboard_month"])])
+        period = labels[0]
+    account_label = accounts_chip_label(
+        list(st.session_state.get("dashboard_accounts") or []), accounts
+    )
+    type_label = types_chip_label(list(st.session_state.get("dashboard_types") or []))
+    return f"{period} · {account_label} · {type_label}"
+
+
+def _render_filters(
+    months: list[str],
+    accounts: list[str],
+    min_data,
+    max_data,
+):
+    if "dashboard_period" not in st.session_state:
+        st.session_state["dashboard_period"] = "Tutto"
+    period = st.session_state["dashboard_period"]
+    if period in PERIOD_CUSTOM_ALIASES:
+        period = PERIOD_CUSTOM
+    if period not in PERIOD_OPTIONS:
+        period = "Tutto"
+    st.session_state["dashboard_period"] = period
+
+    selected_month = None
+    custom_start = None
+    custom_end = None
+
+    def period_fields() -> None:
+        nonlocal selected_month, custom_start, custom_end
+        if st.session_state.get("dashboard_period") == "Mese specifico" and months:
+            selected_month = st.selectbox(
+                "Mese",
+                months,
+                key="dashboard_month",
+                format_func=lambda value: month_labels([value])[0][0],
+            )
+        elif st.session_state.get("dashboard_period") == PERIOD_CUSTOM:
+            from_col, to_col = st.columns(2)
+            with from_col:
+                custom_start = themed_date_input(
+                    "Dal",
+                    value=min_data,
+                    key="dashboard_from",
+                    min_year=min_data.year,
+                    max_year=max_data.year + 1,
+                )
+            with to_col:
+                custom_end = themed_date_input(
+                    "Al",
+                    value=max_data,
+                    key="dashboard_to",
+                    min_year=min_data.year,
+                    max_year=max_data.year + 1,
+                )
+
+    if IS_ANDROID:
+        # Sul telefono i filtri stanno in un riquadro richiudibile:
+        # la Home parte subito dai numeri.
+        with st.expander(f"Filtri · {_filter_summary(accounts)}"):
+            period = st.selectbox("Periodo", PERIOD_OPTIONS, key="dashboard_period")
+            period_fields()
+            selected_accounts = st.pills(
+                "Conti",
+                accounts,
+                selection_mode="multi",
+                default=[],
+                key="dashboard_accounts",
+                help="Nessuno selezionato = tutti i conti.",
+            )
+            selected_types = st.pills(
+                "Tipo",
+                list(MOVEMENT_TYPE_FILTERS),
+                selection_mode="multi",
+                default=[],
+                key="dashboard_types",
+                help="Nessuno selezionato = tutti i movimenti.",
+            )
+    else:
+        with st.container(key="ft_filter_bar"):
+            c1, c2, c3 = st.columns([1.15, 1.6, 1.25], gap="medium")
+            with c1:
+                period = st.selectbox("Periodo", PERIOD_OPTIONS, key="dashboard_period")
+            with c2:
+                selected_accounts = st.pills(
+                    "Conti",
+                    accounts,
+                    selection_mode="multi",
+                    default=[],
+                    key="dashboard_accounts",
+                    help="Nessuno selezionato = tutti i conti.",
+                )
+            with c3:
+                selected_types = st.pills(
+                    "Tipo",
+                    list(MOVEMENT_TYPE_FILTERS),
+                    selection_mode="multi",
+                    default=[],
+                    key="dashboard_types",
+                    help="Nessuno selezionato = tutti i movimenti.",
+                )
+            period_fields()
+
+    return (
+        period,
+        selected_month,
+        custom_start,
+        custom_end,
+        list(selected_accounts or []),
+        list(selected_types or []),
     )
 
-    flow_labels = {
-        "entrate": "Entrate",
-        "uscite": "Uscite",
-        "investimenti": "Investimenti",
-    }
 
-    for trace in fig2.data:
-        trace.name = flow_labels.get(trace.name, trace.name)
-        trace.hovertemplate = "%{y:,.2f} €<extra></extra>"
-
-    fig2.update_layout(
-        height=400,
-        margin=dict(l=16, r=20, t=18, b=34),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(
-            color=sem.text,
-            family="Manrope",
-            size=13,
-        ),
-        legend_title_text="",
-        xaxis_title="",
-        yaxis_title="",
-        hovermode="x unified",
-        hoverlabel=dict(
-            bgcolor=sem.hover_bg,
-            bordercolor=sem.info,
-            font=dict(
-                color=sem.text,
-                family="Manrope",
-                size=13,
-            ),
-            namelength=-1,
-        ),
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="left",
-            x=0,
-            font=dict(
-                color=sem.text,
-                family="Manrope",
-                size=13,
-            ),
-        ),
-        xaxis=dict(
-            type="category",
-            categoryorder="array",
-            categoryarray=month_order,
-            tickmode="array",
-            tickvals=month_order,
-            ticktext=month_order,
-            showgrid=False,
-            zeroline=False,
-            automargin=True,
-            tickangle=0,
-            tickfont=dict(
-                color=sem.muted,
-                family="Manrope",
-                size=12,
-            ),
-        ),
-        yaxis=dict(
-            showgrid=True,
-            gridcolor="rgba(148,163,184,0.18)",
-            zeroline=False,
-            automargin=True,
-            tickfont=dict(
-                color=sem.muted,
-                family="Manrope",
-                size=12,
-            ),
-            tickformat=",.0f",
-            ticksuffix=" €",
-        ),
-    )
-
-    if is_android:
-        # Touch: tocco = dettaglio, niente zoom/trascinamento che blocca lo scroll.
-        fig2.update_layout(dragmode=False, height=340)
-
-        # Schermo stretto: solo il primo e l'ultimo mese, agli estremi dell'asse.
-        # Il mese di ogni punto si legge comunque toccando il grafico.
-        visible_months = (
-            [month_order[0], month_order[-1]]
-            if len(month_order) > 1
-            else list(month_order)
-        )
-        fig2.update_xaxes(
-            tickvals=visible_months,
-            # "Nov 2026" -> "Nov '26".
-            ticktext=[
-                f"{label[:3]} '{label[-2:]}" if label[-4:].isdigit() else label
-                for label in visible_months
-            ],
-            tickfont=dict(size=13),
-            automargin=True,
-        )
-        fig2.update_layout(margin=dict(l=16, r=28, t=18, b=34))
-
-    return fig2
+# ---------------------------------------------------------------- pagina
 
 
 def show_dashboard() -> None:
     st.title("Dashboard")
 
     df = load_movements()
-
     if df.empty:
-        st.caption("Panoramica generale delle tue finanze.")
-        render_html(
-            f"""
-            <div class="ft-empty-hero" style="
-                margin-top:12px;
-                padding:42px 28px 36px 28px;
-                border-radius:18px;
-                background:
-                    radial-gradient(
-                        circle at 14% 0%,
-                        rgba(var(--ft-accent-rgb), 0.18),
-                        transparent 44%
-                    ),
-                    var(--ft-panel);
-                border:1px solid var(--ft-border);
-                box-shadow:var(--ft-shadow);
-                animation: ft-fade-up 360ms ease-out;
-                text-align:left;
-            ">
-                <div style="
-                    font-family:Fraunces,Georgia,serif;
-                    font-size:clamp(34px, 4vw, 48px);
-                    font-weight:700;
-                    color:var(--ft-text);
-                    letter-spacing:-0.03em;
-                    line-height:1.05;
-                ">Finance<span style="color:var(--ft-accent)">Tracker</span></div>
-                <div style="
-                    margin-top:10px;
-                    display:inline-flex;
-                    align-items:center;
-                    gap:8px;
-                    padding:6px 12px;
-                    border-radius:999px;
-                    background:rgba(var(--ft-accent-rgb), 0.14);
-                    color:var(--ft-accent);
-                    font-size:12px;
-                    font-weight:700;
-                ">
-                    <span style="
-                        width:8px;height:8px;border-radius:999px;
-                        background:var(--ft-accent);
-                        box-shadow:0 0 0 3px rgba(var(--ft-accent-rgb), 0.25);
-                    "></span>
-                    Inizia da qui
-                </div>
-                <div style="
-                    margin-top:14px;
-                    max-width:34rem;
-                    font-size:16px;
-                    line-height:1.5;
-                    color:var(--ft-muted);
-                ">
-                    Nessun movimento ancora. Importa un estratto conto,
-                    aggiungi il primo movimento oppure parti da un backup.
-                </div>
-            </div>
-            """
-        )
-        st.markdown("")
-        if st.session_state.get(_RESTORE_KEY):
-            _restore_backup_dialog()
-        if IS_ANDROID:
-            # Sul telefono uno sotto l'altro: tre pulsanti affiancati non ci stanno.
-            c1 = c2 = c3 = st.container()
-        else:
-            c1, c2, c3, _ = st.columns([1.2, 1.3, 1.5, 1.2])
-        with c1:
-            if st.button(
-                "Importa dati",
-                type="primary",
-                width="stretch",
-            ):
-                switch_to("import_data")
-        with c2:
-            if st.button(
-                "Nuovo movimento",
-                type="secondary",
-                width="stretch",
-            ):
-                switch_to("manual_entry")
-        with c3:
-            if st.button(
-                "Parti da un backup",
-                type="secondary",
-                width="stretch",
-            ):
-                st.session_state[_RESTORE_KEY] = True
-                st.rerun()
+        _render_empty_state()
         return
 
     dated_all = normalize_date_column(df)
@@ -706,704 +745,146 @@ def show_dashboard() -> None:
     else:
         st.caption("Panoramica generale delle tue finanze.")
 
-
     months = sorted(df["mese"].dropna().unique(), reverse=True)
     accounts = sorted(df["account"].dropna().unique().tolist())
+    today = pd.Timestamp.today().date()
+    min_data = dated_all["data"].min().date() if not dated_all.empty else today
+    max_data = dated_all["data"].max().date() if not dated_all.empty else today
 
-    period_options = [
-        "Questo mese",
-        "Mese scorso",
-        "Mese specifico",
-        PERIOD_CUSTOM,
-        "Ultimi 3 mesi",
-        "Ultimi 6 mesi",
-        "Quest'anno",
-        "Tutto",
-    ]
-    if "dashboard_period" not in st.session_state:
-        st.session_state["dashboard_period"] = "Tutto"
-    period = st.session_state["dashboard_period"]
-    if period in PERIOD_CUSTOM_ALIASES:
-        period = PERIOD_CUSTOM
-    if period not in period_options:
-        period = "Tutto"
-    st.session_state["dashboard_period"] = period
-
-    selected_month = None
-    custom_start = None
-    custom_end = None
-    dated_all_bounds = dated_all
-    min_data = (
-        dated_all_bounds["data"].min().date()
-        if not dated_all_bounds.empty
-        else pd.Timestamp.today().date()
-    )
-    max_data = (
-        dated_all_bounds["data"].max().date()
-        if not dated_all_bounds.empty
-        else pd.Timestamp.today().date()
-    )
-
-    period = st.selectbox(
-        "Periodo",
-        period_options,
-        key="dashboard_period",
-    )
-    if period == "Mese specifico" and months:
-        selected_month = st.selectbox(
-            "Mese",
-            months,
-            key="dashboard_month",
-        )
-    elif period == PERIOD_CUSTOM:
-        from_col, to_col = st.columns(2)
-        with from_col:
-            custom_start = themed_date_input(
-                "Dal",
-                value=min_data,
-                key="dashboard_from",
-                min_year=min_data.year,
-                max_year=max_data.year + 1,
-            )
-        with to_col:
-            custom_end = themed_date_input(
-                "Al",
-                value=max_data,
-                key="dashboard_to",
-                min_year=min_data.year,
-                max_year=max_data.year + 1,
-            )
-
-    selected_accounts = st.pills(
-        "Conti",
-        accounts,
-        selection_mode="multi",
-        default=[],
-        key="dashboard_accounts",
-        help="Nessuno selezionato = tutti i conti.",
-    )
-    selected_accounts = list(selected_accounts or [])
-
-    selected_types = st.pills(
-        "Tipo",
-        list(MOVEMENT_TYPE_FILTERS),
-        selection_mode="multi",
-        default=[],
-        key="dashboard_types",
-        help="Nessuno selezionato = tutti i movimenti.",
-    )
-    selected_types = list(selected_types or [])
-
-    custom_start_ts = (
-        pd.Timestamp(custom_start).normalize() if custom_start else None
-    )
-    custom_end_ts = (
-        pd.Timestamp(custom_end).normalize() if custom_end else None
-    )
-
-    filtered_df = get_period_df(
-        df,
+    (
         period,
         selected_month,
-        custom_start=custom_start_ts,
-        custom_end=custom_end_ts,
-    )
-    filtered_df = filter_by_accounts(filtered_df, selected_accounts)
-    filtered_df = filter_by_movement_types(filtered_df, selected_types)
+        custom_start,
+        custom_end,
+        selected_accounts,
+        selected_types,
+    ) = _render_filters(months, accounts, min_data, max_data)
 
-    if filtered_df.empty:
-        st.warning(
-            "Nessun movimento trovato per i filtri selezionati (0 risultati)."
-        )
+    data = _dashboard_data(
+        str(database_version()),
+        period,
+        selected_month,
+        pd.Timestamp(custom_start).normalize() if custom_start else None,
+        pd.Timestamp(custom_end).normalize() if custom_end else None,
+        tuple(selected_accounts),
+        tuple(selected_types),
+    )
+    if data is None:
+        st.warning("Nessun movimento trovato per i filtri selezionati (0 risultati).")
         return
 
-    metrics = calculate_financial_metrics(filtered_df)
-    entrate = metrics["entrate"]
-    uscite = metrics["uscite"]
-    bilancio = metrics["bilancio"]
-    investimenti = metrics["investimenti"]
-    account_scope = filter_by_accounts(df, selected_accounts)
-    analysis_start, analysis_end = resolve_analysis_bounds(
-        filtered_df,
-        period,
-        selected_month,
-        custom_start=custom_start_ts,
-        custom_end=custom_end_ts,
+    metrics = data["metrics"]
+    saldo = float(data["saldo"])
+    deltas = data["deltas"]
+    bilancio = float(metrics["bilancio"])
+
+    period_label = period
+    if period == "Mese specifico" and selected_month:
+        period_label = month_labels([str(selected_month)])[0][0]
+    context = (
+        f"{period_label} · {accounts_chip_label(selected_accounts, accounts)}"
+        f" · {types_chip_label(selected_types)}"
     )
-    saldo = calculate_account_balance(account_scope, through=analysis_end)
-
-    period_days = get_period_day_count(
-        filtered_df,
-        period,
-        selected_month,
-        custom_start=custom_start_ts,
-        custom_end=custom_end_ts,
-    )
-    specials_source_df = filter_by_accounts(dated_all, selected_accounts)
-
-    avg_daily_expense = calculate_daily_expense(
-        filtered_df,
-        period_days,
-        source_df=specials_source_df,
-        period_start=analysis_start,
-        period_end=analysis_end,
-    )
-    special_summary = special_expense_summary(
-        filtered_df,
-        source_df=specials_source_df,
-        period_start=analysis_start,
-        period_end=analysis_end,
-    )
-
-    daily_footer_parts = [f"su {period_days} giorni"]
-    amortized_count = int(special_summary["amortized_count"])
-    amortized_amount = float(special_summary["amortized_amount"])
-    excluded_count = int(special_summary["excluded_count"])
-    excluded_total = float(special_summary["excluded_total"])
-    if amortized_count > 0:
-        noun = "ripartita" if amortized_count == 1 else "ripartite"
-        daily_footer_parts.append(
-            f"{amortized_count} {noun} ({euro(amortized_amount)} nel periodo)"
-        )
-    if excluded_count > 0:
-        noun = "esclusa" if excluded_count == 1 else "escluse"
-        daily_footer_parts.append(
-            f"{excluded_count} {noun} ({euro(excluded_total)})"
-        )
-    daily_footer = " · ".join(daily_footer_parts)
-
-    comparison_source_df = filter_by_accounts(
-        normalize_date_column(df),
-        selected_accounts,
-    )
-
-    previous_bounds = get_previous_period_bounds(
-        period=period,
-        selected_month=selected_month,
-        custom_start=custom_start_ts,
-        custom_end=custom_end_ts,
-    )
-
-    daily_comparison_text = None
-    daily_comparison_color = MUTED_COLOR
-    previous_metrics: dict[str, float] | None = None
-
-    if previous_bounds is not None:
-        previous_start, previous_end = previous_bounds
-
-        previous_period_df = comparison_source_df[
-            comparison_source_df["data"].between(
-                previous_start,
-                previous_end,
-                inclusive="both",
-            )
-        ].copy()
-        previous_period_df = filter_by_movement_types(
-            previous_period_df,
-            selected_types,
-        )
-
-        previous_period_days = calculate_period_days(
-            previous_start,
-            previous_end,
-        )
-
-        previous_metrics = calculate_financial_metrics(previous_period_df)
-        previous_daily_expense = calculate_daily_expense(
-            previous_period_df,
-            previous_period_days,
-            source_df=comparison_source_df,
-            period_start=previous_start,
-            period_end=previous_end,
-        )
-
-        daily_comparison_text, daily_comparison_color = (
-            get_daily_expense_comparison(
-                current_average=avg_daily_expense,
-                previous_average=previous_daily_expense,
-            )
-        )
-
-    def metric_delta(
-        key: str,
-        *,
-        higher_is_better: bool,
-    ) -> tuple[str | None, str]:
-        if previous_metrics is None:
-            return None, MUTED_COLOR
-        return get_value_comparison(
-            metrics[key],
-            previous_metrics[key],
-            higher_is_better=higher_is_better,
-        )
-
-    bilancio_delta, bilancio_delta_color = metric_delta(
-        "bilancio",
-        higher_is_better=True,
-    )
-    entrate_delta, entrate_delta_color = metric_delta(
-        "entrate",
-        higher_is_better=True,
-    )
-    uscite_delta, uscite_delta_color = metric_delta(
-        "uscite",
-        higher_is_better=False,
-    )
-    investimenti_delta, investimenti_delta_color = metric_delta(
-        "investimenti",
-        higher_is_better=True,
-    )
-    previous_saldo = None
-    if previous_bounds is not None:
-        previous_saldo = calculate_account_balance(
-            account_scope,
-            through=previous_bounds[1],
-        )
-    if previous_saldo is None:
-        saldo_delta, saldo_delta_color = None, MUTED_COLOR
-    else:
-        saldo_delta, saldo_delta_color = get_value_comparison(
-            saldo,
-            previous_saldo,
-            higher_is_better=True,
-        )
-
-    comparison_caption = None
-    if previous_bounds is not None:
-        current_bounds = get_current_period_bounds(
-            period,
-            selected_month,
-            custom_start=custom_start_ts,
-            custom_end=custom_end_ts,
-        )
-        if current_bounds is not None:
-            comparison_caption = format_comparison_caption(
-                current_bounds[0],
-                current_bounds[1],
-                previous_bounds[0],
-                previous_bounds[1],
-            )
-
-    top = top_expense_category(filtered_df)
-    if top is None:
-        top_category = "Nessuna"
-        top_category_amount = 0.0
-    else:
-        top_category, top_category_amount = top
-
-    top_income = top_income_category(filtered_df)
-    if top_income is None:
-        top_income_category_name = "Nessuna"
-        top_income_amount = 0.0
-    else:
-        top_income_category_name, top_income_amount = top_income
-
-    balance_color = BALANCE_COLOR if bilancio >= 0 else EXPENSE_COLOR
-    liquidity_color = LIQUIDITY_COLOR if saldo >= 0 else EXPENSE_COLOR
-
-    exclude_refunds = bool(
-        st.session_state.get("dashboard_savings_ex_refunds", False)
-    )
-    refunds = refund_income(filtered_df)
-    rate = savings_rate(
-        metrics,
-        exclude_refunds=exclude_refunds,
-        refunds=refunds,
-    )
-    if rate is None:
-        savings_label = "—"
-        savings_color = MUTED_COLOR
-        if exclude_refunds and refunds > 0:
-            savings_footer = "serve almeno un’entrata oltre i rimborsi"
-        else:
-            savings_footer = "serve almeno un’entrata"
-    else:
-        savings_label = f"{rate:.1f}".replace(".", ",") + "%"
-        savings_color = INCOME_COLOR if rate >= 0 else EXPENSE_COLOR
-        spent_share = f"{(100.0 - rate):.1f}".replace(".", ",")
-        if IS_ANDROID:
-            # Sul telefono la card è stretta: basta la percentuale.
-            savings_footer = None
-        elif rate > 0:
-            savings_footer = (
-                f"{spent_share}% delle entrate è andato in uscite"
-            )
-        elif rate == 0:
-            savings_footer = "tutto è andato in uscite"
-        else:
-            savings_footer = "hai speso più di quanto è entrato"
-
-    if comparison_caption:
-        st.caption(f"Confronto: {comparison_caption}")
-
-    account_chip = html.escape(
-        accounts_chip_label(selected_accounts, accounts)
-    )
-    type_chip = html.escape(types_chip_label(selected_types))
-    period_chip = html.escape(period)
-    render_html(
-        f"""
-        <div class="ft-appearance-chip" style="margin:4px 0 14px 0;width:fit-content;">
-          <span class="ft-appearance-chip-dot"></span>
-          {period_chip} · {account_chip} · {type_chip}
-        </div>
-        """
-    )
-
+    spark_count = int(data["spark_months"])
     render_hero_card(
-        title="BILANCIO DEL PERIODO",
+        title="Bilancio del periodo",
         main_value=signed_euro(bilancio),
-        main_color=balance_color,
-        subtitle=bilancio_delta,
-        subtitle_color=bilancio_delta_color,
+        main_color=BALANCE_COLOR if bilancio >= 0 else EXPENSE_COLOR,
+        subtitle=deltas["bilancio"][0],
+        subtitle_color=deltas["bilancio"][1],
+        context=context,
+        spark_values=data["spark_values"],
+        spark_caption=(
+            f"Bilancio mensile · ultimi {spark_count} mesi"
+            if spark_count > 1
+            else None
+        ),
     )
-
-    st.markdown("")
+    if data["comparison_caption"]:
+        st.caption(f"Confronto: {data['comparison_caption']}")
 
     k1, k2, k3, k4 = st.columns(4)
-
     with k1:
         render_kpi_card(
             "Entrate",
-            euro(entrate),
+            euro(metrics["entrate"]),
             value_color=INCOME_COLOR,
-            subtitle=entrate_delta,
-            subtitle_color=entrate_delta_color,
+            subtitle=deltas["entrate"][0],
+            subtitle_color=deltas["entrate"][1],
         )
-
     with k2:
         render_kpi_card(
             "Uscite",
-            euro(uscite),
+            euro(metrics["uscite"]),
             value_color=EXPENSE_COLOR,
-            subtitle=uscite_delta,
-            subtitle_color=uscite_delta_color,
+            subtitle=deltas["uscite"][0],
+            subtitle_color=deltas["uscite"][1],
         )
-
     with k3:
         render_kpi_card(
             "Investimenti",
-            euro(investimenti),
+            euro(metrics["investimenti"]),
             value_color=INVESTMENT_COLOR,
-            subtitle=investimenti_delta,
-            subtitle_color=investimenti_delta_color,
+            subtitle=deltas["investimenti"][0],
+            subtitle_color=deltas["investimenti"][1],
         )
-
     with k4:
         render_kpi_card(
             "Liquidità",
             signed_euro(saldo),
-            value_color=liquidity_color,
-            subtitle=saldo_delta,
-            subtitle_color=saldo_delta_color,
+            value_color=LIQUIDITY_COLOR if saldo >= 0 else EXPENSE_COLOR,
+            subtitle=deltas["saldo"][0],
+            subtitle_color=deltas["saldo"][1],
+            tone="accent",
         )
 
-    st.markdown("")
+    top = data["top_expense"]
+    top_category, top_amount = top if top else ("Nessuna", 0.0)
+    top_income = data["top_income"]
+    top_income_name, top_income_amount = top_income if top_income else ("Nessuna", 0.0)
 
     s1, s2, s3, s4 = st.columns(4)
-
     with s1:
         render_info_card(
             "Spesa principale",
             f"{get_category_icon(top_category)} {top_category}",
-            euro(top_category_amount),
+            euro(top_amount),
         )
-
     with s2:
         render_info_card(
             "Fonte principale",
-            (
-                f"{get_category_icon(top_income_category_name)} "
-                f"{top_income_category_name}"
-            ),
+            f"{get_category_icon(top_income_name)} {top_income_name}",
             euro(top_income_amount),
         )
-
     with s3:
         render_info_card(
             title="Spesa media giornaliera",
-            value=euro(avg_daily_expense),
-            subtitle=daily_comparison_text,
-            subtitle_color=daily_comparison_color,
-            footer=daily_footer,
+            value=euro(data["avg_daily_expense"]),
+            subtitle=deltas["daily"][0],
+            subtitle_color=deltas["daily"][1],
+            footer=data["daily_footer"],
         )
-
     with s4:
-        render_info_card(
-            title="Tasso di risparmio",
-            value=savings_label,
-            value_color=savings_color,
-            footer=savings_footer,
-            extra_class="ft-savings-rate-card",
-        )
-        st.checkbox(
-            "Escludi rimborsi",
-            key="dashboard_savings_ex_refunds",
-            help=(
-                "I rimborsi non sono reddito: toglierli evita di gonfiare "
-                "il risparmio. Regali e donazioni restano."
-            ),
-        )
+        _savings_card(metrics, float(data["refunds"]))
 
-    special_overview = special_expenses_overview(
-        specials_source_df,
-        analysis_start,
-        analysis_end,
-    )
-    if special_overview.empty:
-        render_section_title("Spese speciali")
-        render_html(
-            """
-            <div class="ft-dashboard-card">
-              <div class="ft-specials-hint" style="margin:0;">
-                Nessuna spesa speciale nel periodo.
-                Puoi segnalarle in Movimenti → Modifica.
-              </div>
-            </div>
-            """
-        )
-    else:
-        special_count = len(special_overview)
-        special_total = float(special_overview["importo"].sum())
-        render_section_title("Spese speciali")
-        rows_html: list[str] = []
-        for index, item in special_overview.iterrows():
-            date_label = pd.Timestamp(item["data"]).strftime("%d/%m/%Y")
-            title = html.escape(
-                str(item["descrizione"] or "Senza descrizione")
-            )
-            category = html.escape(str(item["categoria"] or ""))
-            account = html.escape(str(item["account"] or ""))
-            mesi_range = html.escape(str(item["mesi_range"] or "—"))
-            amount_label = html.escape(euro(float(item["importo"])))
-            quota = item["quota_mese"]
-            mode_chip = html.escape(str(item["modalita"] or ""))
-
-            if pd.notna(quota):
-                quota_block = f"""
-                    <div style="
-                        margin-top:8px;
-                        font-size:12px;
-                        color:var(--ft-muted);
-                    ">
-                      Quota mensile
-                      <span style="
-                          color:var(--ft-accent-strong);
-                          font-weight:700;
-                      ">{html.escape(euro(float(quota)))}</span>
-                    </div>
-                """
-                range_block = f"""
-                    <div style="
-                        display:inline-flex;
-                        align-items:center;
-                        gap:6px;
-                        margin-top:8px;
-                        padding:4px 10px;
-                        border-radius:999px;
-                        background:rgba(var(--ft-accent-rgb),0.10);
-                        border:1px solid rgba(var(--ft-accent-rgb),0.22);
-                        color:var(--ft-accent-strong);
-                        font-size:11px;
-                        font-weight:700;
-                        letter-spacing:0.01em;
-                    ">
-                      {mesi_range}
-                    </div>
-                """
-            else:
-                quota_block = ""
-                range_block = """
-                    <div style="
-                        margin-top:8px;
-                        font-size:12px;
-                        color:var(--ft-muted);
-                    ">Nessuna ripartizione</div>
-                """
-
-            note_text = str(item.get("notes") or "").strip()
-            note_block = ""
-            if note_text:
-                note_block = f"""
-                    <div style="
-                        margin-top:10px;
-                        font-size:13px;
-                        line-height:1.45;
-                        color:var(--ft-muted);
-                        font-style:italic;
-                    ">{html.escape(note_text)}</div>
-                """
-
-            border = (
-                "border-bottom:1px solid var(--ft-border);"
-                if int(index) < len(special_overview) - 1
-                else ""
-            )
-            rows_html.append(
-                f"""
-                <div style="
-                    display:flex;
-                    justify-content:space-between;
-                    gap:18px;
-                    padding:16px 2px;
-                    {border}
-                    flex-wrap:wrap;
-                ">
-                  <div style="min-width:min(100%, 280px);flex:1;">
-                    <div style="
-                        font-size:15px;
-                        font-weight:700;
-                        color:var(--ft-text);
-                        line-height:1.35;
-                    ">{title}</div>
-                    <div style="
-                        margin-top:8px;
-                        display:flex;
-                        flex-wrap:wrap;
-                        gap:8px;
-                        align-items:center;
-                        font-size:12px;
-                        color:var(--ft-muted);
-                    ">
-                      <span style="
-                          background:rgba(var(--ft-accent-rgb),0.14);
-                          color:var(--ft-accent-strong);
-                          padding:3px 8px;
-                          border-radius:8px;
-                          font-size:11px;
-                          font-weight:750;
-                      ">{html.escape(get_category_icon(str(item['categoria'])))} {category}</span>
-                      <span>{html.escape(date_label)}</span>
-                      <span>{account}</span>
-                      <span style="
-                          padding:3px 8px;
-                          border-radius:8px;
-                          border:1px solid var(--ft-border);
-                          background:var(--ft-panel-soft);
-                          font-weight:650;
-                      ">{mode_chip}</span>
-                    </div>
-                    {range_block}
-                    {quota_block}
-                    {note_block}
-                  </div>
-                  <div style="
-                      text-align:right;
-                      font-family:Fraunces,Georgia,serif;
-                      font-size:22px;
-                      font-weight:700;
-                      color:var(--ft-danger);
-                      white-space:nowrap;
-                      padding-top:2px;
-                  ">{amount_label}</div>
-                </div>
-                """
-            )
-
-        special_noun = (
-            "Spesa speciale" if special_count == 1 else "Spese speciali"
-        )
-        summary_label = (
-            f"{special_count} {special_noun} · "
-            f"Totale {euro(special_total)}"
-        )
-        st.html(
-            f"""
-            <div class="ft-dashboard-card">
-              <details class="ft-specials-details">
-                <summary class="ft-specials-summary">
-                  <span class="ft-specials-summary-label">
-                    {html.escape(summary_label)}
-                  </span>
-                </summary>
-                <div class="ft-specials-hint">
-                  Nei totali del mese restano come le hai pagate.
-                  Nella media giornaliera puoi escluderle
-                  oppure spalmarle sui mesi scelti.
-                </div>
-                {"".join(rows_html)}
-              </details>
-            </div>
-            """
-        )
+    _render_specials(data["special_overview"])
 
     render_section_title("Dove sono andati i soldi")
     _render_category_breakdown_section(
-        category_expense_breakdown(filtered_df),
+        data["expense_breakdown"],
         empty_message="Nessuna uscita da mostrare per questo periodo.",
         center_caption="Totale uscite",
         card_key="ft_dashboard_expense_distribution",
-        pie_root_id="ft-pie-expenses",
+        chart_key="ft_donut_expenses",
     )
 
     render_section_title("Da dove arrivano i soldi")
     _render_category_breakdown_section(
-        category_income_breakdown(filtered_df),
+        data["income_breakdown"],
         empty_message="Nessuna entrata da mostrare per questo periodo.",
         center_caption="Totale entrate",
         card_key="ft_dashboard_income_distribution",
-        pie_root_id="ft-pie-income",
+        chart_key="ft_donut_income",
     )
 
-    render_section_title("Andamento mensile")
-
-    sem = resolve_semantic()
-
-    monthly_df = monthly_flow_totals(filtered_df).copy()
-    monthly_df["mese"] = monthly_df["mese"].astype(str)
-
-    italian_months = {
-        1: "Gen",
-        2: "Feb",
-        3: "Mar",
-        4: "Apr",
-        5: "Mag",
-        6: "Giu",
-        7: "Lug",
-        8: "Ago",
-        9: "Set",
-        10: "Ott",
-        11: "Nov",
-        12: "Dic",
-    }
-
-    monthly_df["_mese_data"] = pd.to_datetime(
-        monthly_df["mese"] + "-01",
-        format="%Y-%m-%d",
-        errors="coerce",
-    )
-
-    monthly_df = monthly_df.sort_values(
-        "_mese_data",
-        kind="stable",
-    )
-
-    monthly_df["mese_label"] = monthly_df["_mese_data"].apply(
-        lambda value: (
-            f"{italian_months[value.month]} {value.year}"
-            if pd.notna(value)
-            else ""
-        )
-    )
-
-    month_order = monthly_df["mese_label"].tolist()
-
-    fig2 = _monthly_figure(
-        monthly_df,
-        tuple(month_order),
-        sem,
-        IS_ANDROID,
-    )
-
-    render_chart_card(
-        lambda: st.plotly_chart(
-            fig2,
-            width="stretch",
-            theme=None,
-            config={
-                "displayModeBar": False,
-                "responsive": True,
-                "scrollZoom": False,
-            },
-        )
-    )
+    _render_monthly_chart(data["monthly"])

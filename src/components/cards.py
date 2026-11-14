@@ -46,75 +46,150 @@ def _amount_size_class(value: str) -> str:
     return ""
 
 
+_TONE_BY_COLOR = {
+    INCOME_COLOR: "good",
+    EXPENSE_COLOR: "bad",
+    "var(--ft-accent)": "info",
+}
+
+
+def _delta_chip(text: str | None, color: str) -> str:
+    """Variazione rispetto al periodo precedente come piccola etichetta."""
+    if not text:
+        return ""
+    tone = _TONE_BY_COLOR.get(color, "neutral")
+    return (
+        f'<span class="ft-delta is-{tone}">{html.escape(str(text))}</span>'
+    )
+
+
+def sparkline_svg(
+    values: list[float],
+    *,
+    width: int = 260,
+    height: int = 72,
+    color: str = "var(--ft-accent)",
+) -> str:
+    """Piccola linea di tendenza in SVG (nessun JavaScript, nessuna libreria)."""
+    points = [float(v or 0) for v in values]
+    if len(points) < 2:
+        return ""
+    low, high = min(points + [0.0]), max(points + [0.0])
+    span = (high - low) or 1.0
+    pad = 6
+    step = (width - pad * 2) / (len(points) - 1)
+
+    def y_of(value: float) -> float:
+        return pad + (height - pad * 2) * (1 - (value - low) / span)
+
+    coords = [(pad + i * step, y_of(v)) for i, v in enumerate(points)]
+    path = f"M {coords[0][0]:.1f} {coords[0][1]:.1f}"
+    for (x0, y0), (x1, y1) in zip(coords, coords[1:]):
+        mid = (x0 + x1) / 2
+        path += f" C {mid:.1f} {y0:.1f} {mid:.1f} {y1:.1f} {x1:.1f} {y1:.1f}"
+    zero = y_of(0.0)
+    area = (
+        path
+        + f" L {coords[-1][0]:.1f} {zero:.1f} L {coords[0][0]:.1f} {zero:.1f} Z"
+    )
+    last_x, last_y = coords[-1]
+    return f"""
+        <svg class="ft-spark" viewBox="0 0 {width} {height}"
+             preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="ftSparkFill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" style="stop-color:{color};stop-opacity:.30"/>
+              <stop offset="100%" style="stop-color:{color};stop-opacity:0"/>
+            </linearGradient>
+          </defs>
+          <line x1="{pad}" x2="{width - pad}" y1="{zero:.1f}" y2="{zero:.1f}"
+                class="ft-spark-zero"/>
+          <path d="{area}" style="fill:url(#ftSparkFill)"/>
+          <path d="{path}" style="fill:none;stroke:{color};stroke-width:2.4;
+                stroke-linecap:round;vector-effect:non-scaling-stroke"/>
+          <circle cx="{last_x:.1f}" cy="{last_y:.1f}" r="3.6"
+                  style="fill:{color};vector-effect:non-scaling-stroke"/>
+        </svg>
+    """
+
+
 def render_hero_card(
     title: str,
     main_value: str,
     main_color: str,
     subtitle: str | None = None,
     subtitle_color: str = MUTED_COLOR,
+    *,
+    context: str | None = None,
+    spark_values: list[float] | None = None,
+    spark_caption: str | None = None,
+    stats: list[tuple[str, str, str]] | None = None,
 ) -> None:
-    subtitle_html = ""
-    if subtitle:
-        subtitle_html = f"""
-            <div style="
-                margin-top:12px;
-                font-family:Manrope,sans-serif;
-                font-size:14px;
-                font-weight:650;
-                color:{subtitle_color};
-            ">
-                {html.escape(subtitle)}
-            </div>
-        """
+    """
+    Card principale: valore grande, variazione, contesto e mini andamento.
+
+    stats: piccole cifre sotto il valore [(etichetta, valore, colore)].
+    """
+    context_html = (
+        f'<div class="ft-hero-context">{html.escape(context)}</div>'
+        if context
+        else ""
+    )
+    spark = sparkline_svg(spark_values or [], color=main_color)
+    spark_html = ""
+    if spark:
+        caption = (
+            f'<div class="ft-hero-spark-caption">{html.escape(spark_caption)}</div>'
+            if spark_caption
+            else ""
+        )
+        spark_html = f'<div class="ft-hero-spark">{caption}{spark}</div>'
+    stats_html = ""
+    if stats:
+        stats_html = '<div class="ft-hero-stats">' + "".join(
+            f"""<div class="ft-hero-stat">
+                  <span>{html.escape(label)}</span>
+                  <strong style="color:{color}">{html.escape(value)}</strong>
+                </div>"""
+            for label, value, color in stats
+        ) + "</div>"
 
     render_html(
         f"""
-        <div style="
-            margin-top:8px;
-            min-height:200px;
-            padding:36px 40px;
-            border-radius:{CARD_RADIUS};
-            background:
-                radial-gradient(
-                    circle at 18% 0%,
-                    rgba(var(--ft-accent-rgb), 0.22),
-                    transparent 42%
-                ),
-                {CARD_BACKGROUND};
-            border:{CARD_BORDER};
-            box-shadow:{CARD_SHADOW};
-            display:flex;
-            flex-direction:column;
-            align-items:flex-start;
-            justify-content:center;
-            text-align:left;
-            box-sizing:border-box;
-            animation: ft-fade-up 280ms ease-out;
-        ">
-            <div style="
-                font-family:Manrope,sans-serif;
-                font-size:13px;
-                color:{MUTED_COLOR};
-                font-weight:650;
-                letter-spacing:0.12em;
-                text-transform:uppercase;
-            ">
-                {html.escape(title)}
+        <div class="ft-hero">
+          <div class="ft-hero-main">
+            <div class="ft-kicker">{html.escape(title)}</div>
+            <div class="ft-hero-value {_amount_size_class(main_value)}"
+                 style="color:{main_color}">{html.escape(main_value)}</div>
+            <div class="ft-hero-row">
+              {_delta_chip(subtitle, subtitle_color)}
+              {context_html}
             </div>
-
-            <div class="ft-hero-value {_amount_size_class(main_value)}" style="
-                margin-top:10px;
-                font-family:Fraunces,Georgia,serif;
-                line-height:1.02;
-                font-weight:700;
-                color:{main_color};
-            ">
-                {html.escape(main_value)}
-            </div>
-            {subtitle_html}
+            {stats_html}
+          </div>
+          {spark_html}
         </div>
         """
     )
+
+
+# Icone delle card KPI (emoji: nessun font di icone da caricare).
+KPI_ICONS = {
+    "Entrate": "↘",
+    "Uscite": "↗",
+    "Investimenti": "◆",
+    "Liquidità": "◉",
+    "Bilancio": "±",
+    "Prestati": "↗",
+    "Rientrati": "↘",
+    "Netto": "±",
+}
+
+_KPI_TONES = {
+    INCOME_COLOR: "income",
+    EXPENSE_COLOR: "expense",
+    INVESTMENT_COLOR: "investment",
+}
 
 
 def render_kpi_card(
@@ -124,82 +199,23 @@ def render_kpi_card(
     value_color: str = TEXT_COLOR,
     subtitle: str | None = None,
     subtitle_color: str = MUTED_COLOR,
+    *,
+    tone: str | None = None,
 ) -> None:
-    icon_html = ""
-
-    if icon:
-        icon_html = f"{html.escape(icon)} "
-
-    subtitle_html = ""
-    if subtitle:
-        subtitle_html = f"""
-            <div style="
-                margin-top:8px;
-                font-size:12px;
-                line-height:1.3;
-                font-weight:650;
-                color:{subtitle_color};
-            ">
-                {html.escape(subtitle)}
-            </div>
-        """
-
+    tone = tone or _KPI_TONES.get(value_color, "accent")
+    glyph = icon or KPI_ICONS.get(title, "•")
     size_class = _amount_size_class(value)
     render_html(
         f"""
-        <div class="ft-kpi-card" style="
-            min-height:132px;
-            padding:18px 18px;
-            border-radius:{CARD_RADIUS};
-            background:
-                radial-gradient(
-                    circle at 12% 0%,
-                    rgba(var(--ft-accent-rgb), 0.14),
-                    transparent 46%
-                ),
-                {CARD_BACKGROUND};
-            border:{CARD_BORDER};
-            box-shadow:{CARD_SHADOW};
-            display:flex;
-            flex-direction:column;
-            justify-content:center;
-            align-items:flex-start;
-            text-align:left;
-            box-sizing:border-box;
-            animation: ft-fade-up 300ms ease-out;
-        ">
-            <div style="
-                font-family:Manrope,sans-serif;
-                font-size:12px;
-                color:{MUTED_COLOR};
-                font-weight:650;
-                letter-spacing:0.08em;
-                text-transform:uppercase;
-            ">
-                {icon_html}{html.escape(title)}
-            </div>
-
-            <div class="ft-kpi-value {size_class}" style="
-                margin-top:10px;
-                font-family:Fraunces,Georgia,serif;
-                line-height:1.1;
-                font-weight:700;
-                color:{value_color};
-            ">
-                {html.escape(value)}
-            </div>
-            {subtitle_html}
-            <div style="
-                margin-top:12px;
-                width:36px;
-                height:3px;
-                border-radius:999px;
-                background:linear-gradient(
-                    90deg,
-                    var(--ft-accent),
-                    var(--ft-accent-strong)
-                );
-            "></div>
+        <div class="ft-kpi-card ft-kpi is-{tone}">
+          <div class="ft-kpi-head">
+            <span class="ft-kpi-icon">{html.escape(glyph)}</span>
+            <span class="ft-kicker">{html.escape(title)}</span>
+          </div>
+          <div class="ft-kpi-value {size_class}" style="color:{value_color}">
+            {html.escape(value)}
+          </div>
+          <div class="ft-kpi-foot">{_delta_chip(subtitle, subtitle_color)}</div>
         </div>
         """
     )
@@ -223,36 +239,21 @@ def _info_card_body_html(
 
     subtitle_html = ""
     if subtitle:
-        subtitle_html = f"""
-            <div style="
-                margin-top:8px;
-                font-size:13px;
-                line-height:1.3;
-                font-weight:650;
-                color:{subtitle_color};
-                text-align:left;
-            ">
-                {html.escape(str(subtitle))}
-            </div>
-        """
+        subtitle_html = (
+            f'<div class="ft-info-card-sub">'
+            f"{_delta_chip(subtitle, subtitle_color)}</div>"
+        )
 
     footer_html = ""
     if footer:
         footer_html = f"""
-            <div style="
-                margin-top:6px;
-                font-size:12px;
-                line-height:1.25;
-                font-weight:550;
-                color:{MUTED_COLOR};
-                text-align:left;
-            ">
+            <div class="ft-info-card-footer">
                 {html.escape(str(footer))}
             </div>
         """
 
     return f"""
-        <div class="ft-info-card-kicker">
+        <div class="ft-info-card-kicker ft-kicker">
             {html.escape(str(title))}
         </div>
         <div class="ft-info-card-value">
@@ -287,20 +288,7 @@ def render_info_card(
     )
     render_html(
         f"""
-        <div class="{classes}" style="
-            padding:20px 18px;
-            border-radius:{CARD_RADIUS};
-            background:
-                radial-gradient(
-                    circle at 10% 0%,
-                    rgba(var(--ft-accent-rgb), 0.10),
-                    transparent 48%
-                ),
-                {CARD_BACKGROUND};
-            border:{CARD_BORDER};
-            box-shadow:{CARD_SHADOW};
-            color:{value_color};
-        ">
+        <div class="{classes}" style="--ft-info-value:{value_color};">
             {body}
         </div>
         """
@@ -308,110 +296,38 @@ def render_info_card(
 
 
 def _section_label(text: str) -> None:
-    render_html(
-        f"""
-        <div style="
-            font-family:Manrope,sans-serif;
-            font-size:12px;
-            color:{MUTED_COLOR};
-            font-weight:650;
-            letter-spacing:0.1em;
-            text-transform:uppercase;
-            margin-bottom:8px;
-        ">
-            {html.escape(text)}
-        </div>
-        """
-    )
+    render_html(f'<div class="ft-kicker ft-card-label">{html.escape(text)}</div>')
 
 
-def _category_rows_html(rows: list[dict]) -> str:
+def category_rows_html(rows: list[dict]) -> str:
+    """Righe categoria: icona, nome, importo, percentuale e barra."""
     items: list[str] = []
-
-    for index, row in enumerate(rows):
+    for row in rows:
         percent = max(0.0, min(100.0, float(row.get("percent", 0))))
         color = html.escape(str(row.get("color") or "var(--ft-accent)"))
-        border = (
-            "border-bottom:1px solid var(--ft-border);"
-            if index < len(rows) - 1
-            else ""
-        )
-
+        extra = row.get("extra") or ""
         items.append(
             f"""
-            <div style="padding:12px 0;{border}">
-                <div style="
-                    display:flex;
-                    justify-content:space-between;
-                    align-items:center;
-                    gap:12px;
-                ">
-                    <div style="
-                        display:flex;
-                        align-items:center;
-                        gap:10px;
-                        min-width:0;
-                    ">
-                        <span style="
-                            width:10px;
-                            height:10px;
-                            border-radius:999px;
-                            background:{color};
-                            box-shadow:0 0 0 3px {color}22;
-                            flex-shrink:0;
-                        "></span>
-                        <span style="
-                            font-family:Manrope,sans-serif;
-                            font-size:14px;
-                            font-weight:700;
-                            color:{TEXT_COLOR};
-                            white-space:nowrap;
-                            overflow:hidden;
-                            text-overflow:ellipsis;
-                        ">
-                            {html.escape(str(row.get("icon", "")))}
-                            {html.escape(str(row.get("name", "")))}
-                        </span>
-                    </div>
-                    <div style="text-align:right;flex-shrink:0;">
-                        <div style="
-                            font-family:Fraunces,Georgia,serif;
-                            font-size:16px;
-                            font-weight:700;
-                            color:{TEXT_COLOR};
-                            white-space:nowrap;
-                        ">
-                            {html.escape(str(row.get("amount", "")))}
-                        </div>
-                        <div style="
-                            margin-top:2px;
-                            font-size:12px;
-                            font-weight:600;
-                            color:{MUTED_COLOR};
-                        ">
-                            {percent:.1f}%
-                        </div>
-                    </div>
+            <div class="ft-cat-row" style="--c:{color}">
+              <span class="ft-cat-icon">{html.escape(str(row.get("icon", "")))}</span>
+              <div class="ft-cat-body">
+                <div class="ft-cat-line">
+                  <span class="ft-cat-name">{html.escape(str(row.get("name", "")))}</span>
+                  <span class="ft-cat-amount">{html.escape(str(row.get("amount", "")))}</span>
                 </div>
-                <div style="
-                    margin-top:8px;
-                    height:4px;
-                    border-radius:999px;
-                    background:rgba(148,163,184,0.12);
-                    overflow:hidden;
-                ">
-                    <div style="
-                        width:{percent:.2f}%;
-                        height:100%;
-                        border-radius:999px;
-                        background:linear-gradient(90deg,{color}aa,{color});
-                    "></div>
+                <div class="ft-cat-line is-sub">
+                  <div class="ft-cat-track"><div style="width:{percent:.2f}%"></div></div>
+                  <span class="ft-cat-pct">{f"{percent:.1f}".replace(".", ",")}%</span>
                 </div>
+                {extra}
+              </div>
             </div>
             """
         )
-
     return "".join(items)
+
+
+_category_rows_html = category_rows_html
 
 
 def render_expense_distribution_card(
@@ -423,56 +339,28 @@ def render_expense_distribution_card(
     key: str = "ft_dashboard_distribution_card",
 ) -> None:
     """
-    Card unica con torta a sinistra e lista scorrevole a destra.
+    Card unica con ciambella a sinistra e lista scorrevole a destra.
 
-    ``render_pie`` è una callback senza argomenti (es. iframe Plotly).
+    ``render_pie`` è una callback senza argomenti.
     """
     with st.container(border=True, key=key):
         render_html(
             '<span class="ft-distribution-anchor" aria-hidden="true"></span>'
         )
-        left_col, right_col = st.columns([1.15, 1], gap="large")
+        left_col, right_col = st.columns([1, 1.15], gap="large")
 
         with left_col:
-            _section_label("Distribuzione")
             render_pie()
 
         with right_col:
-            _section_label("Per categoria")
             render_html(
                 f"""
-                <div class="ft-category-scroll" style="
-                    max-height:{list_max_height}px;
-                    overflow-y:auto;
-                    overflow-x:hidden;
-                    padding-right:6px;
-                    margin-right:-2px;
-                    overscroll-behavior:contain;
-                ">
-                    {_category_rows_html(rows)}
+                <div class="ft-category-scroll" style="max-height:{list_max_height}px;">
+                    {category_rows_html(rows)}
                 </div>
-                <div style="
-                    margin-top:14px;
-                    padding-top:14px;
-                    border-top:1px solid rgba(148,163,184,0.14);
-                    display:flex;
-                    justify-content:space-between;
-                    align-items:center;
-                    gap:12px;
-                ">
-                    <span style="
-                        font-size:12px;
-                        font-weight:650;
-                        letter-spacing:0.08em;
-                        text-transform:uppercase;
-                        color:{MUTED_COLOR};
-                    ">Totale</span>
-                    <span style="
-                        font-family:Fraunces,Georgia,serif;
-                        font-size:20px;
-                        font-weight:700;
-                        color:{TEXT_COLOR};
-                    ">{html.escape(total_label)}</span>
+                <div class="ft-cat-total">
+                    <span class="ft-kicker">Totale</span>
+                    <strong>{html.escape(total_label)}</strong>
                 </div>
                 """
             )
@@ -487,9 +375,14 @@ def render_chart_card(render_chart: Callable[[], None]) -> None:
         render_chart()
 
 
-def render_section_title(text: str) -> None:
+def render_section_title(text: str, subtitle: str | None = None) -> None:
+    sub = (
+        f'<div class="ft-section-sub">{html.escape(subtitle)}</div>'
+        if subtitle
+        else ""
+    )
     render_html(
-        f'<div class="ft-section-title">{html.escape(text)}</div>'
+        f'<div class="ft-section-title">{html.escape(text)}</div>{sub}'
     )
 
 

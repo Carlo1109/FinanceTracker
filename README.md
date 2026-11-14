@@ -4,30 +4,32 @@ FinanceTracker è un'app sviluppata in Python per gestire le proprie finanze per
 
 ## ✨ Funzionalità
 
-- 📊 Dashboard con KPI, confronti periodo e grafici
+- 📊 **Dashboard**: bilancio del periodo con l'andamento degli ultimi 12 mesi, entrate, uscite, investimenti e liquidità con il confronto col periodo prima
+- 🗓️ **Report** mensili e annuali: confronti col mese/anno prima e con l'anno scorso, cose in evidenza, calendario delle spese, uscite anno su anno
+- 🥧 Dove vanno e da dove arrivano i soldi, andamento mensile (grafici che si leggono al passaggio del mouse o al tocco)
+- 💳 **Movimenti** raggruppati per giorno, con ricerca e filtri per conto, tipo, categoria e periodo; modifica, dividi, unisci, annulla
 - 🏦 Liquidità reale per conto (trasferimenti e saldo iniziale inclusi)
-- 🔎 Filtri per più conti e intervallo personalizzato
-- 🥧 Distribuzione spese e andamento mensile
 - ⭐ Spese speciali (ripartizione su mesi o esclusione dalla media giornaliera)
-- 🔁 Trasferimenti interni tra conti (fuori da entrate/uscite)
-- 💳 Import estratti conto (Fineco, Revolut, PostePay, PayPal)
-- ✏️ Inserimento movimenti manuali
-- 🏷️ Gestione categorie e parole chiave
+- 🔁 Trasferimenti interni e anticipi & recuperi fuori da entrate/uscite
+- 📥 Import estratti conto (Fineco, Revolut, PostePay, PayPal) e inserimento manuale
+- 🏷️ Categorie e parole chiave per la categorizzazione automatica
+- ☁️ **PC ↔ telefono con Google Drive**: il backup si invia a una cartella di Drive e si unisce dall'altra parte; arrivano anche modifiche e cancellazioni (vince la più recente)
 - 💾 Backup / ripristino e export Excel brandizzato
+- 🎨 Tema chiaro e scuro, quattro colori d'accento
 - 📱 App Android con interfaccia pensata per il touch
-- 🔒 Tutti i dati rimangono sul proprio dispositivo (PC o telefono), senza account e senza cloud
+- 🔒 I dati restano sul tuo dispositivo, senza account; Google Drive solo se lo usi tu per i backup
 
 ## 📱 Android
 
-L'app Android ha le stesse pagine e lo stesso stile del desktop, con un'impaginazione pensata per il touch:
-barra di navigazione in basso, card in griglia e grafici che si leggono al tocco.
+L'app Android ha le stesse pagine del desktop, con un'impaginazione pensata per il touch:
+barra di navigazione in basso, card in griglia, filtri richiudibili e grafici che si leggono al tocco.
 Funziona **senza internet**: Python e Streamlit girano dentro l'app.
 
 - Si installa dall'APK allegato alle **Releases** (Android 10 o successivo)
-- I dati restano nella memoria privata dell'app; backup ed export Excel vanno nella cartella **Download**
+- I dati restano nella memoria privata dell'app; backup ed export Excel vanno in **Download** oppure, per il backup, direttamente su **Google Drive** (☁️ Salva su Drive)
 - Blocco facoltativo con **impronta, volto o PIN** del telefono
 - Il primo avvio richiede 10–30 secondi, il tempo di caricare Python; dal background la riapertura è immediata
-- Per portare i dati dal PC al telefono: backup dal desktop, poi **Unisci** da **Opzioni → Dati**
+- Per tenere allineati PC e telefono: backup su Google Drive e **Unisci** dall'altra parte (vedi [MANUAL.md](MANUAL.md))
 
 Build, firma e dettagli tecnici: **[android/README.md](android/README.md)**.
 
@@ -36,7 +38,7 @@ Build, firma e dettagli tecnici: **[android/README.md](android/README.md)**.
 - Python
 - Streamlit
 - SQLite
-- Plotly
+- Grafici SVG disegnati nel browser (componenti Streamlit), senza librerie esterne
 - PyWebView (desktop)
 - stlite + Pyodide (Android: Streamlit e Python in WebAssembly)
 
@@ -50,18 +52,31 @@ Build, firma e dettagli tecnici: **[android/README.md](android/README.md)**.
 
 ![Movimenti](screenshots/movements.png)
 
+### Report
+
+![Report](screenshots/report.png)
+
 ### Gestione categorie
 
 ![Categorie](screenshots/categories.png)
 
 ### Importa dati
 
-![Impostazioni](screenshots/import.png)
+![Importa dati](screenshots/import.png)
 
+### Android
+
+<p>
+  <img src="screenshots/android-dashboard.png" alt="Dashboard su Android" width="260" />
+  <img src="screenshots/android-movements.png" alt="Movimenti su Android" width="260" />
+  <img src="screenshots/android-report.png" alt="Report su Android" width="260" />
+</p>
+
+*Screenshot con dati di esempio.*
 
 ## 📖 Manuale
 
-Categorie speciali (prestiti, rimborsi, trasferimenti, …), split, import: **[MANUAL.md](MANUAL.md)**.
+Categorie speciali (anticipi, rimborsi, trasferimenti, …), report, PC ↔ telefono con Google Drive, dividere e unire movimenti, import: **[MANUAL.md](MANUAL.md)**.
 
 ## 🚀 Download
 
@@ -93,8 +108,12 @@ Su Windows il percorso completo tipico è:
 `C:\Users\<utente>\AppData\Local\FinanceTracker\`
 
 Su **Android** database e categorie stanno nella memoria privata dell'app (non vanno su internet e sono
-esclusi dal backup automatico di Google); backup ed export Excel finiscono in **Download**. Disinstallando
-l'app i dati si perdono: ricordati di fare ogni tanto un backup.
+esclusi dal backup automatico di Google); backup ed export Excel finiscono in **Download**, oppure il backup
+su **Google Drive** se scegli ☁️ Salva su Drive. Disinstallando l'app i dati si perdono: ricordati di fare
+ogni tanto un backup.
+
+Se imposti la **cartella condivisa** (Impostazioni → Dati → Backup), i backup che invii dal PC finiscono
+anche lì; ne restano gli ultimi 10 per dispositivo.
 
 ## 📄 Licenza
 

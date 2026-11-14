@@ -218,4 +218,148 @@ def init_db() -> None:
             """
         )
 
+        _ensure_sync_schema(connection, column_names)
+
         connection.commit()
+
+
+# Formato delle date di modifica usate dalla sincronizzazione (UTC, con ms).
+SYNC_NOW_SQL = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
+
+# Colonne che, se cambiano, contano come "modifica" da sincronizzare.
+SYNC_TRACKED_COLUMNS = (
+    "movement_hash",
+    "date",
+    "operation_date",
+    "value_date",
+    "month",
+    "description",
+    "full_description",
+    "category",
+    "category_source",
+    "movement_type",
+    "amount",
+    "status",
+    "source",
+    "account",
+    "notes",
+    "speciale",
+    "speciale_mesi",
+    "prestito_di",
+)
+
+
+def _ensure_sync_schema(connection: sqlite3.Connection, column_names: set[str]) -> None:
+    """
+    Dati per la sincronizzazione tra dispositivi.
+
+    - uid: codice del movimento uguale su tutti i dispositivi (l'id numerico
+      cambia da un database all'altro);
+    - updated_at: ultima modifica, per decidere quale versione vince;
+    - sync_tombstones: movimenti cancellati, così la cancellazione arriva
+      anche sull'altro dispositivo.
+
+    Lo aggiornano dei trigger SQLite: nessuna funzione che scrive i
+    movimenti deve ricordarsene.
+    """
+    if "uid" not in column_names:
+        connection.execute("ALTER TABLE movements ADD COLUMN uid TEXT")
+    if "updated_at" not in column_names:
+        connection.execute("ALTER TABLE movements ADD COLUMN updated_at TEXT")
+
+    connection.execute(
+        "UPDATE movements SET uid = lower(hex(randomblob(16))) WHERE uid IS NULL"
+    )
+    connection.execute(
+        f"""
+        UPDATE movements
+        SET updated_at = COALESCE(
+            strftime('%Y-%m-%dT%H:%M:%fZ', created_at), {SYNC_NOW_SQL}
+        )
+        WHERE updated_at IS NULL
+        """
+    )
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_movements_uid ON movements(uid)"
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sync_tombstones (
+            uid TEXT PRIMARY KEY,
+            deleted_at TEXT NOT NULL
+        )
+        """
+    )
+
+    # Riga presente solo mentre la sincronizzazione applica i dati arrivati
+    # dall'altro dispositivo (dentro la stessa transazione): in quel momento
+    # i trigger non devono segnare le righe come "modificate adesso".
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS sync_applying (flag INTEGER PRIMARY KEY)"
+    )
+    connection.execute("DELETE FROM sync_applying")
+    not_applying = "NOT EXISTS (SELECT 1 FROM sync_applying)"
+
+    connection.execute(
+        f"""
+        CREATE TRIGGER IF NOT EXISTS ft_sync_movement_insert
+        AFTER INSERT ON movements
+        WHEN NEW.uid IS NULL OR NEW.updated_at IS NULL
+        BEGIN
+            UPDATE movements SET
+                uid = COALESCE(NEW.uid, lower(hex(randomblob(16)))),
+                updated_at = COALESCE(NEW.updated_at, {SYNC_NOW_SQL})
+            WHERE id = NEW.id;
+        END
+        """
+    )
+    changed = " OR ".join(
+        f"NEW.{name} IS NOT OLD.{name}" for name in SYNC_TRACKED_COLUMNS
+    )
+    connection.execute(
+        f"""
+        CREATE TRIGGER IF NOT EXISTS ft_sync_movement_update
+        AFTER UPDATE OF {", ".join(SYNC_TRACKED_COLUMNS)} ON movements
+        WHEN NEW.updated_at IS OLD.updated_at AND ({changed}) AND {not_applying}
+        BEGIN
+            UPDATE movements SET updated_at = {SYNC_NOW_SQL} WHERE id = NEW.id;
+        END
+        """
+    )
+    connection.execute(
+        f"""
+        CREATE TRIGGER IF NOT EXISTS ft_sync_movement_delete
+        AFTER DELETE ON movements
+        WHEN OLD.uid IS NOT NULL AND {not_applying}
+        BEGIN
+            INSERT OR REPLACE INTO sync_tombstones (uid, deleted_at)
+            VALUES (OLD.uid, {SYNC_NOW_SQL});
+        END
+        """
+    )
+
+
+_ensured_identity: tuple | None = None
+
+
+def ensure_db() -> None:
+    """
+    init_db() una volta sola per file di database (non a ogni interazione).
+
+    Se il file viene sostituito (ripristino di un backup, cartella dati
+    diversa) cambia identità e lo schema viene ricontrollato.
+    """
+    global _ensured_identity
+    try:
+        stat = DB_PATH.stat()
+        identity: tuple | None = (str(DB_PATH), stat.st_dev, stat.st_ino)
+    except OSError:
+        identity = None
+    if identity is not None and identity == _ensured_identity:
+        return
+    init_db()
+    try:
+        stat = DB_PATH.stat()
+        _ensured_identity = (str(DB_PATH), stat.st_dev, stat.st_ino)
+    except OSError:
+        _ensured_identity = None

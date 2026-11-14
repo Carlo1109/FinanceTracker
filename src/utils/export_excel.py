@@ -7,10 +7,6 @@ from io import BytesIO
 from pathlib import Path
 
 import pandas as pd
-from openpyxl import Workbook
-from openpyxl.drawing.image import Image as XLImage
-from openpyxl.styles import Alignment, Font
-from openpyxl.utils import get_column_letter
 
 EXPORT_COLUMNS = [
     ("data", "Data"),
@@ -69,6 +65,13 @@ def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def movements_to_export_bytes(df: pd.DataFrame) -> bytes:
+    # openpyxl (e Pillow per il logo) solo quando si esporta davvero:
+    # importarli all'apertura della pagina Movimenti rallenta il telefono.
+    from openpyxl import Workbook
+    from openpyxl.drawing.image import Image as XLImage
+    from openpyxl.styles import Alignment, Font
+    from openpyxl.utils import get_column_letter
+
     export = _prepare_export_frame(df)
     workbook = Workbook()
     sheet = workbook.active

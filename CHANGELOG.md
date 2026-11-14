@@ -1,5 +1,42 @@
 # Changelog
 
+## v2.0.0
+
+Nuova grafica, app più leggera sul telefono, pagina Report e passaggio dei dati tra PC e telefono con Google Drive.
+
+> Al primo avvio il database si aggiorna da solo (servono i nuovi campi per l'unione dei backup). Fai un backup prima di aggiornare, per sicurezza.
+
+### Funzionalità
+
+- **PC ↔ telefono con Google Drive**: «Crea backup» sul PC chiede se inviarlo anche alla cartella condivisa (una cartella di Drive sul PC); sul telefono c'è **☁️ Salva su Drive** («Salva in…» di Android). Per importare, sul PC si sceglie il backup direttamente dalla cartella condivisa (📱/💻, dal più recente); sul telefono dal selettore file, dove c'è Drive. Nella cartella restano gli ultimi 10 backup per dispositivo
+- **Unisci più intelligente**: con i backup della v2.0 arrivano anche modifiche e cancellazioni fatte sull'altro dispositivo (vince la modifica più recente), non solo i movimenti nuovi; lo stesso estratto conto importato su entrambi non si duplica; anticipi e recuperi restano collegati
+- I nomi dei backup dicono da quale dispositivo arrivano (`..._pc.zip`, `..._telefono.zip`)
+- Nuova pagina **Report**: mensile (entrate, uscite, risparmio e tasso di risparmio con il confronto col mese prima, tre cose «in evidenza», calendario delle uscite giorno per giorno, spese più grandi, categorie contro il mese prima e lo stesso mese dell’anno scorso) e annuale (mese per mese, uscite accumulate anno su anno, mese migliore e più caro, categorie con media mensile)
+- Movimenti: la lista è raggruppata per giorno («Oggi», «Ieri», «Venerdì 7 novembre») con il totale del giorno; si tocca la riga per modificarla. Per unire: **Seleziona**, tocca le righe, **Unisci**
+
+### Interfaccia
+
+- Grafica rinnovata, chiara e scura: superfici più pulite, card KPI con icona e variazione in un’etichetta colorata, card principale con il bilancio degli ultimi 12 mesi, importi con cifre allineate (Manrope), investimenti in viola
+- Nuovi grafici (ciambella, andamento mensile, barre, calendario) disegnati in SVG, con il dettaglio al passaggio del mouse o al tocco; stesso aspetto su PC e telefono
+- Menu laterale più compatto sul PC; filtri della dashboard su una riga
+- Android: barra in basso con **Report** e il pulsante **Nuovo** in evidenza; filtri di Home e Movimenti in un riquadro richiudibile (la ricerca resta sempre visibile); card più basse
+
+### Prestazioni
+
+- Lista movimenti disegnata come un unico elemento (prima ~10 per riga): molti meno elementi a ogni interazione, e spuntare le righe da unire non ricarica più la pagina
+- Il riquadro «Vuoi tornare indietro?» non riesegue più l’app ogni secondo (il tempo scorre con un’animazione)
+- Dashboard e Report tengono in memoria i calcoli finché dati e filtri non cambiano; la casella «Escludi rimborsi» aggiorna solo la sua card
+- Le pagine vengono caricate solo quando si aprono; openpyxl solo quando si esporta in Excel; preferenze e controllo del database non vengono riletti a ogni interazione
+- Plotly rimosso: niente pacchetto da installare e importare all’avvio del telefono, niente plotly.js nella WebView
+- Android: lo stile dell’app (~110 KB) è un file caricato una volta sola all’avvio (`ft.css`); a ogni interazione si inviano solo le variabili del tema
+
+### Build
+
+- `build-web.mjs` genera `ft.css` e non include più plotly; la prova offline controlla anche lista movimenti, grafici e Report
+- Test per i report (`tests/test_reports.py`) e per l'unione dei backup e la cartella condivisa (`tests/test_backup_merge.py`)
+- Database: nuove colonne `uid` e `updated_at`, tabella `sync_tombstones` e trigger che le tengono aggiornate (migrazione automatica al primo avvio)
+- Android: nuovo metodo nativo `saveFileAs` («Salva in…» per mettere il backup su Drive)
+
 ## v1.7.0
 
 ### Funzionalità

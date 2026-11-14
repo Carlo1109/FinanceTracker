@@ -1250,6 +1250,18 @@ def restore_movement_snapshots(rows: list[dict[str, Any]]) -> None:
                     )
                 ],
             )
+            # Sincronizzazione: il movimento torna "vivo" e più recente della
+            # sua cancellazione, così ricompare anche sull'altro dispositivo.
+            if row.get("uid"):
+                conn.execute(
+                    "DELETE FROM sync_tombstones WHERE uid = ?",
+                    (row["uid"],),
+                )
+                conn.execute(
+                    "UPDATE movements SET updated_at = "
+                    "strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
+                    (movement_id,),
+                )
         conn.commit()
 
 

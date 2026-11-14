@@ -12,11 +12,12 @@
  *                                     necessari + pyodide-lock.json "congelato"
  *   app/                              il codice Python dell'app (app.py, src/, ...)
  *   app-manifest.json                 elenco file da montare + requisiti
- *   vendor/plotly.min.js              plotly.js per il grafico a ciambella
+ *   ft.css                            foglio di stile fisso dell'app (caricato una volta
+ *                                     dalla pagina di avvio, non a ogni interazione)
  *   fonts/                            Manrope e Fraunces (da static/fonts, come il desktop)
  *
  * Come funziona l'offline: qui (con internet) si avvia Pyodide in Node,
- * si installano Streamlit (versione stlite), plotly e openpyxl con micropip,
+ * si installano Streamlit (versione stlite) e openpyxl con micropip,
  * poi micropip.freeze() produce un lockfile con TUTTI i pacchetti usati.
  * Scarichiamo quei file accanto a Pyodide e riscriviamo il lockfile perché
  * punti ai file locali: sul telefono micropip trova tutto lì e non va in rete.
@@ -32,7 +33,9 @@ import { loadPyodide } from "pyodide";
 // ---------------------------------------------------------------- config
 
 // Pacchetti dell'app oltre a Streamlit (stesse versioni del desktop).
-const APP_REQUIREMENTS = ["plotly==6.8.0", "openpyxl==3.1.5"];
+// Niente plotly: i grafici sono SVG disegnati nel browser (src/components/charts.py),
+// quindi all'avvio non c'è più un pacchetto da ~10 MB da installare e importare.
+const APP_REQUIREMENTS = ["openpyxl==3.1.5"];
 
 // File dell'app da includere (relativi alla radice della repo).
 const APP_FILE_PATTERNS = [
@@ -142,7 +145,13 @@ async function download(url, attempts = 4) {
 
 function copyTemplateAndStlite() {
   log("Pagina di avvio e stlite");
-  copyFile(path.join(WEB_TEMPLATE, "index.html"), path.join(OUT, "index.html"));
+  // ?v=... sul foglio di stile: dopo un aggiornamento la WebView non usa quello vecchio.
+  const stamp = Date.now().toString(36);
+  mkdirp(OUT);
+  fs.writeFileSync(
+    path.join(OUT, "index.html"),
+    fs.readFileSync(path.join(WEB_TEMPLATE, "index.html"), "utf8").replaceAll("__FT_BUILD__", stamp),
+  );
   copyFile(path.join(WEB_TEMPLATE, "android-bridge.js"), path.join(OUT, "android-bridge.js"));
   copyFile(path.join(WEB_TEMPLATE, "native.js"), path.join(OUT, "native.js"));
   copyFile(path.join(WEB_TEMPLATE, "touch.js"), path.join(OUT, "touch.js"));
@@ -221,8 +230,8 @@ os.environ["FT_PLATFORM"] = "android"
 sys.path.insert(0, "/home/pyodide/ftcheck")
 assert compileall.compile_dir("/home/pyodide/ftcheck", quiet=1), "Errori di sintassi nel codice"
 
-import sqlite3, pandas, numpy, pyarrow, plotly, openpyxl, PIL, streamlit
-print("streamlit", streamlit.__version__, "| pandas", pandas.__version__, "| plotly", plotly.__version__)
+import sqlite3, pandas, numpy, pyarrow, openpyxl, PIL, streamlit
+print("streamlit", streamlit.__version__, "| pandas", pandas.__version__)
 
 from src.database.db import init_db
 from src.services.movement_service import add_manual_movement, load_movements
@@ -237,7 +246,20 @@ assert len(movements_to_export_bytes(df)) > 1000
 name, data = build_backup_bytes()
 assert data[:2] == b"PK", name
 print("Controllo app OK:", len(df), "movimento, export Excel e backup generati")
+
+from src.services.reports import build_month_report, build_year_report
+assert build_month_report(df, "2026-01").current.movements == 1
+assert build_year_report(df, 2026).current.movements == 1
+print("Report OK")
 `);
+
+  // Foglio di stile fisso: sul telefono lo carica la pagina di avvio una volta
+  // sola; a ogni interazione Python invia solo le variabili del tema.
+  const css = pyodide.runPython(
+    "from src.theme.style import static_css\nstatic_css(android=True)",
+  );
+  fs.writeFileSync(path.join(OUT, "ft.css"), css);
+  log(`  ft.css ${(css.length / 1024).toFixed(0)} KB`);
 
   const lock = JSON.parse(micropip.freeze());
   const installed = pyodide
@@ -350,24 +372,6 @@ function pyodideVersion() {
   return JSON.parse(fs.readFileSync(path.join(PYODIDE_DIR, "package.json"), "utf8")).version;
 }
 
-function extractPlotlyJs(packages) {
-  log("plotly.js locale");
-  const entry = Object.values(packages).find((p) => canonicalName(p.name) === "plotly");
-  if (!entry) throw new Error("plotly non presente nel lockfile");
-  const wheel = fs.readFileSync(path.join(OUT, "pyodide", entry.file_name));
-  const files = unzipSync(new Uint8Array(wheel), {
-    filter: (f) => f.name === "plotly/package_data/plotly.min.js",
-  });
-  const js = files["plotly/package_data/plotly.min.js"];
-  if (!js) throw new Error("plotly.min.js non trovato nel wheel di plotly");
-  copyBuffer(js, path.join(OUT, "vendor", "plotly.min.js"));
-}
-
-function copyBuffer(buffer, dst) {
-  mkdirp(path.dirname(dst));
-  fs.writeFileSync(dst, buffer);
-}
-
 function writeManifest(appFiles) {
   const manifest = {
     files: appFiles,
@@ -401,8 +405,7 @@ if (onlyStatic) {
   log("FT_SKIP_PYODIDE=1: salto Pyodide (solo per prove locali)");
 } else {
   const frozen = await freezePythonEnvironment(appFiles);
-  const packages = await writeOfflinePyodide(frozen);
-  extractPlotlyJs(packages);
+  await writeOfflinePyodide(frozen);
 }
 
 log(`Fatto: ${path.relative(REPO, OUT)} (${(dirSize(OUT) / 1e6).toFixed(1)} MB)`);

@@ -51,74 +51,45 @@ def is_navigation_open() -> bool:
     return bool(st.session_state.get(NAVIGATION_OPEN_KEY, True))
 
 
+@st.cache_data(show_spinner=False)
+def _logo_data_uri(logo_path: str, mtime: float) -> str:
+    import base64
+
+    data = Path(logo_path).read_bytes()
+    return "data:image/png;base64," + base64.b64encode(data).decode("ascii")
+
+
 def render_brand(logo_path: Path, app_version: str | None = None) -> None:
     version = app_version or get_app_version()
 
-    top_left, top_right = st.columns([5, 1])
-
-    with top_right:
+    brand_col, toggle_col = st.columns([5, 1], vertical_alignment="center")
+    with brand_col:
+        logo_html = ""
+        if logo_path.exists():
+            uri = _logo_data_uri(str(logo_path), logo_path.stat().st_mtime)
+            logo_html = f'<img src="{uri}" alt="" />'
+        st.html(
+            f"""
+            <div class="ft-nav-brand">
+              {logo_html}
+              <div>
+                <div class="ft-nav-brand-name">
+                  <span class="ft-brand-finance">Finance</span><span class="ft-brand-tracker">Tracker</span>
+                </div>
+                <div class="ft-nav-brand-sub">
+                  <span class="ft-version-chip">{version}</span>
+                </div>
+              </div>
+            </div>
+            """
+        )
+    with toggle_col:
         st.button(
             "☰",
             key="close_navigation",
             on_click=close_navigation,
+            help="Nascondi il menu",
         )
-
-    if logo_path.exists():
-        logo_left, logo_center, logo_right = st.columns([1, 8, 1])
-
-        with logo_center:
-            st.image(str(logo_path), width=450)
-
-    st.markdown(
-        """
-        <h1 style="
-            text-align:center;
-            margin-top:-4px;
-            margin-bottom:0;
-            font-family:Fraunces,Georgia,serif;
-            font-size:32px;
-            font-weight:700;
-            letter-spacing:-0.03em;
-        ">
-            <span class="ft-brand-finance">Finance</span><span class="ft-brand-tracker">Tracker</span>
-        </h1>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.markdown(
-        """
-        <div class="ft-brand-subtitle" style="
-            text-align:center;
-            margin-top:2px;
-            margin-bottom:12px;
-            font-size:13px;
-            font-weight:500;
-            letter-spacing:0.04em;
-        ">
-            Personal Finance Manager
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.markdown(
-        f"""
-        <div style="text-align:center;">
-            <span class="ft-version-chip" style="
-                display:inline-block;
-                padding:3px 10px;
-                border-radius:8px;
-                font-weight:700;
-                font-size:11px;
-                letter-spacing:0.04em;
-            ">
-                {version}
-            </span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
 
 def render_navigation(
@@ -143,17 +114,10 @@ MOBILE_TAB_LABELS = {
     "Dashboard": "Home",
     "Movimenti": "Movimenti",
     "Nuovo movimento": "Nuovo",
+    "Report": "Report",
     "Importa dati": "Importa",
     "Impostazioni": "Opzioni",
 }
-
-
-@st.cache_data(show_spinner=False)
-def _logo_data_uri(logo_path: str, mtime: float) -> str:
-    import base64
-
-    data = Path(logo_path).read_bytes()
-    return "data:image/png;base64," + base64.b64encode(data).decode("ascii")
 
 
 def render_mobile_shell(

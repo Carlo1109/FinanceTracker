@@ -31,15 +31,15 @@ Quando fai push di un tag `v*`, `release.yml` crea in un'unica run gli installer
 poi pubblica **una sola Release** con tutti e quattro i file. Se una build fallisce, la Release non esce.
 
 ```bash
-# dopo aver aggiornato VERSION (es. v1.6.0)
-git commit -am "v1.6.0"
-git tag v1.6.0
+# dopo aver aggiornato VERSION (es. 2.0.0)
+git commit -am "v2.0.0"
+git tag v2.0.0
 git push && git push --tags
 ```
 
 ### Versioni
 
-- **Versione visibile** (es. 1.6.0): letta dal file `VERSION`, la stessa del desktop.
+- **Versione visibile** (es. 2.0.0): letta dal file `VERSION`, la stessa del desktop.
 - **Numero interno** (serve ad Android per riconoscere gli aggiornamenti): è il numero di commit della repo,
   che cresce a ogni commit. Vale sia per le build di prova sia per i rilasci, quindi un APK più recente
   aggiorna sempre quello installato. Ricostruire lo stesso commit dà lo stesso numero: Android lo reinstalla senza problemi.
@@ -58,11 +58,13 @@ Se qualcosa non va, la run si ferma lì e il log dice cosa.
   schermo impostato). L'app lo chiede all'apertura e quando ci torni dopo 30 secondi; con il blocco attivo
   screenshot e anteprima nelle app recenti sono nascosti.
 - **Backup ed export Excel** finiscono nella cartella **Download** del telefono: li vedi dall'app File e puoi
-  inviarli su Drive, via mail o al PC.
+  inviarli su Drive, via mail o al PC. Il backup si può salvare anche direttamente su **Google Drive**
+  (☁️ Salva su Drive apre il «Salva in…» di Android).
 - **Import:** *Importa* apre il selettore file di Android, quindi puoi usare estratti conto scaricati sul telefono
   o presi da Drive.
-- **Dal PC al telefono:** fai un backup sul PC (*Impostazioni → Dati*), copia lo zip sul telefono e, da
-  *Opzioni → Dati*, scegli **Unisci al database** (aggiunge solo ciò che manca) o **Sostituisci tutto**.
+- **PC ↔ telefono:** backup su Google Drive da una parte, poi da *Opzioni → Dati* (o *Impostazioni → Dati*
+  sul PC) scegli lo zip e premi **Unisci** (porta movimenti nuovi, modifiche e cancellazioni) o
+  **Sostituisci tutto**. Dettagli in [MANUAL.md](../MANUAL.md).
 
 Requisiti: Android 10 o successivo.
 
@@ -74,7 +76,7 @@ Requisiti: Android 10 o successivo.
 | `web/android-bridge.js` | Inoltra i download (Excel, backup) all'app nativa |
 | `web/native.js` | Controlli del blocco in *Opzioni → Dati*; contiene anche la cartella dei dati, per ora spenta (`FOLDER_STORAGE_ENABLED`) |
 | `web/touch.js` | Ritocchi per il touch: menu senza tastiera, dettaglio dei grafici che si chiude da solo |
-| `webbuild/build-web.mjs` | Costruisce il bundle offline: Python, pacchetti, codice, font |
+| `webbuild/build-web.mjs` | Costruisce il bundle offline: Python, pacchetti, codice, font e `ft.css` (lo stile dell'app, caricato una volta sola invece che a ogni tocco) |
 | `webbuild/smoke-test.mjs` | Prova offline nel browser prima di creare l'APK |
 | `app/` | Progetto Android (Java, nessuna dipendenza): WebView, file, download, cartella dati (`FolderStorage`), blocco |
 | `../.github/workflows/android.yml` | Build dell'APK (a mano, o richiamata da `release.yml` sui tag) |

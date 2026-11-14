@@ -16,6 +16,7 @@ from src.components.cards import (
     styled_panel,
 )
 from src.components.date_input import themed_date_input
+from src.components.movement_list import movement_list
 from src.components.export_dialog import (
     open_export_confirm_dialog,
     render_pending_export_dialog,
@@ -80,6 +81,7 @@ from src.utils.export_excel import (
     movements_export_filename,
 )
 from src.utils.formatting import euro, signed_euro
+from src.utils.platform import IS_ANDROID
 
 
 _MOVEMENTS_TOAST_KEY = "movements_toast"
@@ -88,7 +90,8 @@ _KEYWORD_EDIT_KEY = "keyword_suggest_edit"
 _OPEN_MOVEMENT_KEY = "open_movement_id"
 _LIST_LIMIT_KEY = "movements_list_limit"
 _LIST_FILTER_KEY = "movements_list_filter"
-_LIST_PAGE_SIZE = 40
+# Sul telefono meno righe per volta: si disegnano prima.
+_LIST_PAGE_SIZE = 30 if IS_ANDROID else 60
 _MERGE_IDS_KEY = "movements_merge_ids"
 _UNDO_KEY = "movements_undo"
 _UNDO_TTL_SECONDS = 15
@@ -128,23 +131,31 @@ def _rerun_app() -> None:
 
 
 def _render_pending_undo_dialog() -> None:
-    if not st.session_state.get(_UNDO_KEY):
+    payload = st.session_state.get(_UNDO_KEY)
+    if not payload:
         return
-    _undo_popup_tick()
+    remaining = _UNDO_TTL_SECONDS - (time.time() - float(payload.get("at") or 0))
+    if remaining <= 0:
+        _close_undo_popup()
+        return
+    # Prima il riquadro si ridisegnava ogni secondo (conto alla rovescia in
+    # Python): sul telefono erano 15 esecuzioni dello script. Ora il tempo
+    # scorre con un'animazione CSS e Python si risveglia una volta sola,
+    # alla scadenza, per chiudere il riquadro.
+    st.fragment(run_every=max(remaining, 0.5))(_undo_popup_body)()
 
 
-@st.fragment(run_every=1)
-def _undo_popup_tick() -> None:
+def _undo_popup_body() -> None:
     payload = st.session_state.get(_UNDO_KEY)
     if not payload:
         return
     elapsed = time.time() - float(payload.get("at") or 0)
-    if elapsed >= _UNDO_TTL_SECONDS:
+    if elapsed >= _UNDO_TTL_SECONDS - 0.2:
         _close_undo_popup()
         _rerun_app()
         return
 
-    remaining = max(int(_UNDO_TTL_SECONDS - elapsed), 0)
+    remaining = max(_UNDO_TTL_SECONDS - elapsed, 0.5)
     label = str(payload.get("label") or "Ultima azione")
     with st.container():
         render_html(
@@ -157,7 +168,10 @@ def _undo_popup_tick() -> None:
               </div>
               <div class="ft-undo-title">Vuoi tornare indietro?</div>
               <div class="ft-undo-copy">
-                Sparisce tra {remaining} s se non fai nulla.
+                Sparisce tra pochi secondi se non fai nulla.
+              </div>
+              <div class="ft-undo-timer">
+                <span style="animation-duration:{remaining:.1f}s"></span>
               </div>
             </div>
             """
@@ -477,6 +491,49 @@ def format_date(value) -> str:
         return "Data non disponibile"
 
     return value.strftime("%d/%m/%y")
+
+
+_WEEKDAYS_IT = (
+    "Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica",
+)
+_MONTHS_LONG_IT = (
+    "gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno",
+    "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre",
+)
+
+
+def _day_label(value) -> str:
+    """Intestazione dei gruppi della lista: Oggi, Ieri, Venerdì 7 novembre."""
+    if value is None or pd.isna(value):
+        return "Senza data"
+    day = pd.Timestamp(value).date()
+    today = date.today()
+    delta = (today - day).days
+    if delta == 0:
+        return "Oggi"
+    if delta == 1:
+        return "Ieri"
+    label = f"{_WEEKDAYS_IT[day.weekday()]} {day.day} {_MONTHS_LONG_IT[day.month - 1]}"
+    if day.year != today.year:
+        label += f" {day.year}"
+    return label
+
+
+def _movement_filter_summary(accounts: list[str]) -> str:
+    period = st.session_state.get("movements_period_mode", "Tutto")
+    if period == "Mese specifico" and st.session_state.get("movements_month"):
+        period = str(st.session_state["movements_month"])
+    parts = [str(period)]
+    picked = list(st.session_state.get("movements_accounts") or [])
+    if picked:
+        parts.append(accounts_chip_label(picked, accounts))
+    types = list(st.session_state.get("movements_types") or [])
+    if types:
+        parts.append(types_chip_label(types))
+    category = st.session_state.get("movements_category")
+    if category and category != "Tutte":
+        parts.append(str(category))
+    return " · ".join(parts)
 
 
 def _loan_option_label(practice: dict) -> str:
@@ -1186,8 +1243,22 @@ def show_movements() -> None:
         else date.today()
     )
 
-    render_section_title("Filtri")
-    with styled_panel():
+    search = None
+    if IS_ANDROID:
+        # Telefono: la ricerca resta sempre a portata di dito, gli altri
+        # filtri stanno in un riquadro richiudibile (prima occupavano
+        # mezzo schermo prima di arrivare alla lista).
+        search = st.text_input(
+            "Cerca",
+            placeholder="🔎  Cerca: Lidl, PayPal, Trenitalia…",
+            key="movements_search",
+            label_visibility="collapsed",
+        )
+        filters_box = st.expander(f"Filtri · {_movement_filter_summary(accounts)}")
+    else:
+        render_section_title("Filtri")
+        filters_box = styled_panel()
+    with filters_box:
         period_options = ["Tutto", "Mese specifico", PERIOD_CUSTOM]
         if "movements_period_mode" not in st.session_state:
             st.session_state["movements_period_mode"] = "Tutto"
@@ -1258,22 +1329,31 @@ def show_movements() -> None:
         )
         selected_types = list(selected_types or [])
 
-        cat_col, search_col = st.columns([1.4, 2.4])
-        with cat_col:
+        category_label = lambda name: (  # noqa: E731
+            name if name == "Tutte" else f"{get_category_icon(name)} {name}"
+        )
+        if IS_ANDROID:
             selected_category = st.selectbox(
                 "Categoria",
                 ["Tutte"] + categories,
-                format_func=lambda name: (
-                    name
-                    if name == "Tutte"
-                    else f"{get_category_icon(name)} {name}"
-                ),
+                format_func=category_label,
+                key="movements_category",
             )
-        with search_col:
-            search = st.text_input(
-                "Cerca",
-                placeholder="Lidl, PayPal, Trenitalia...",
-            )
+        else:
+            cat_col, search_col = st.columns([1.4, 2.4])
+            with cat_col:
+                selected_category = st.selectbox(
+                    "Categoria",
+                    ["Tutte"] + categories,
+                    format_func=category_label,
+                    key="movements_category",
+                )
+            with search_col:
+                search = st.text_input(
+                    "Cerca",
+                    placeholder="Lidl, PayPal, Trenitalia...",
+                    key="movements_search",
+                )
 
     search_term = (search or "").strip()
     if search_term:
@@ -1490,14 +1570,15 @@ def show_movements() -> None:
     visible_df = list_df.head(list_limit)
     hidden_count = max(total_found - len(visible_df), 0)
     if hidden_count:
-        st.caption(
+        count_label = (
             f"Mostrati {len(visible_df)} di {total_found} movimenti"
             f"{found_suffix}"
         )
     else:
-        st.caption(f"{total_found} movimenti trovati{found_suffix}")
-    st.caption("Seleziona più movimenti dello stesso conto per unirli.")
+        count_label = f"{total_found} movimenti trovati{found_suffix}"
 
+    groups: list[dict] = []
+    group_index: dict[str, int] = {}
     category_defs = load_category_definitions()
     for _, row in visible_df.iterrows():
         amount = float(row["importo"])
@@ -1541,7 +1622,7 @@ def show_movements() -> None:
             displayed_amount = euro(amount)
 
         icon = get_category_icon(category)
-        date = format_date(row["data"])
+        date_label = format_date(row["data"])
         description = clean_description(row["descrizione"])
         full_description = clean_description(row["descrizione_completa"])
         title = full_description if full_description else description
@@ -1559,7 +1640,7 @@ def show_movements() -> None:
             end_date = member_dates.max()
             start_label = format_date(start_date)
             end_label = format_date(end_date)
-            date = (
+            date_label = (
                 start_label
                 if start_label == end_label
                 else f"{start_label} → {end_label}"
@@ -1576,115 +1657,86 @@ def show_movements() -> None:
         category_rgb = _category_rgb(
             get_category_color(category, category_defs)
         )
-        flags = ""
+        sort_value = row.get(sort_column, row["data"])
+        day = pd.to_datetime(sort_value, errors="coerce")
+        day_key = day.strftime("%Y-%m-%d") if pd.notna(day) else "—"
+        if day_key not in group_index:
+            group_index[day_key] = len(groups)
+            groups.append(
+                {
+                    "label": _day_label(day),
+                    "net": 0.0,
+                    "rows": [],
+                }
+            )
+        group = groups[group_index[day_key]]
+        if tone in ("income", "expense") and not closed_practice:
+            group["net"] += amount
+
+        flag_list = []
         if closed_practice:
             if is_settled_practice(closed_practice):
-                flags += '<span class="ft-movement-flag">Chiuso</span>'
+                flag_list.append("Chiuso")
             else:
-                flags += '<span class="ft-movement-flag">Aperto</span>'
-                repaid = euro(float(closed_practice["repaid"]))
-                flags += (
-                    f'<span class="ft-movement-flag">'
-                    f"rientrato {html.escape(repaid)}</span>"
+                flag_list.append("Aperto")
+                flag_list.append(
+                    f"rientrato {euro(float(closed_practice['repaid']))}"
                 )
         if is_special:
-            flag_label = "Speciale"
-            if special_months > 0:
-                flag_label = f"Speciale · {special_months} mesi"
-            flags += (
-                f'<span class="ft-movement-flag">'
-                f"{html.escape(flag_label)}</span>"
+            flag_list.append(
+                f"Speciale · {special_months} mesi"
+                if special_months > 0
+                else "Speciale"
             )
         if str(row.get("notes") or "").strip():
-            flags += '<span class="ft-movement-flag">Nota</span>'
+            flag_list.append("Nota")
         if not closed_practice:
             loan_chip = movement_loan_chip(row, loan_chip_practices)
             if loan_chip:
-                flags += (
-                    f'<span class="ft-movement-flag">'
-                    f"{html.escape(loan_chip)}</span>"
-                )
+                flag_list.append(loan_chip)
 
-        with styled_panel(kind="movement"):
-            select_col, body_col, amount_col, action_col = st.columns(
-                [0.4, 4.0, 1.3, 1.05],
-                vertical_alignment="center",
-            )
-            with select_col:
-                st.checkbox(
-                    "Seleziona",
-                    key=f"merge_pick_{movement_id}",
-                    label_visibility="collapsed",
-                )
+        meta = [account] if account else []
+        if closed_practice and " → " in date_label:
+            meta.append(date_label)
 
-            with body_col:
-                render_html(
-                    f"""
-                    <div class="ft-movement-card"
-                         style="--ft-cat-rgb:{category_rgb};">
-                        <span class="ft-movement-tone is-{tone}" hidden></span>
-                        <div class="ft-movement-title">
-                            {html.escape(title or "Senza descrizione")}
-                        </div>
-                        <div class="ft-movement-meta">
-                            <span class="ft-movement-cat">
-                                <span class="ft-movement-cat-dot"></span>
-                                {html.escape(icon)} {html.escape(category)}
-                            </span>
-                            {flags}
-                            <span>{html.escape(date)}</span>
-                            <span class="ft-movement-dot">·</span>
-                            <span>{html.escape(account)}</span>
-                        </div>
-                    </div>
-                    """
-                )
+        group["rows"].append(
+            {
+                "id": movement_id,
+                "title": title or "Senza descrizione",
+                "category": category,
+                "icon": icon,
+                "rgb": category_rgb,
+                "meta": meta,
+                "flags": flag_list,
+                "amount": displayed_amount,
+                "tone": tone,
+            }
+        )
 
-            with amount_col:
-                render_html(
-                    f"""
-                    <div class="ft-movement-amount is-{tone}">
-                        {html.escape(displayed_amount)}
-                    </div>
-                    """
-                )
+    for group in groups:
+        net = float(group.pop("net"))
+        group["total"] = signed_euro(net) if abs(net) >= 0.005 else ""
 
-            with action_col:
-                if st.button(
-                    "Modifica",
-                    key=f"open_edit_{movement_id}",
-                    width="stretch",
-                    type="secondary",
-                ):
-                    _open_movement_dialog(movement_id)
-                    st.rerun()
-
-    picked_ids = [
-        int(row_id)
-        for row_id in visible_df["id"].tolist()
-        if st.session_state.get(f"merge_pick_{int(row_id)}")
-    ]
-    if len(picked_ids) >= 2:
-        if st.button(
-            f"Unisci {len(picked_ids)} movimenti",
-            type="primary",
-            key="movements_merge_open",
-        ):
-            st.session_state[_MERGE_IDS_KEY] = picked_ids
-            st.rerun()
-
-    if hidden_count:
-        more = min(_LIST_PAGE_SIZE, hidden_count)
-        _, more_col, _ = st.columns([1, 1.4, 1])
-        with more_col:
-            if st.button(
-                f"Mostra altri {more}",
-                type="secondary",
-                key="movements_show_more",
-                width="stretch",
-            ):
-                st.session_state[_LIST_LIMIT_KEY] = list_limit + more
-                st.rerun()
+    page_step = _LIST_PAGE_SIZE
+    list_result = movement_list(
+        groups,
+        key="ft_movement_list",
+        count_label=count_label,
+        more=hidden_count,
+        more_step=min(page_step, hidden_count),
+        can_select=len(visible_df) >= 2,
+    )
+    if list_result.open_id is not None:
+        _open_movement_dialog(list_result.open_id)
+        st.rerun()
+    if len(list_result.merge_ids) >= 2:
+        st.session_state[_MERGE_IDS_KEY] = list_result.merge_ids
+        st.rerun()
+    if list_result.more and hidden_count:
+        st.session_state[_LIST_LIMIT_KEY] = list_limit + min(
+            page_step, hidden_count
+        )
+        st.rerun()
 
     st.markdown("")
     export_month = (

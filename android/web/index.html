@@ -8,6 +8,8 @@
   <link rel="icon" href="/app/assets/icons/ft_logo.png" />
   <link rel="stylesheet" href="/fonts/fonts.css" />
   <link rel="stylesheet" href="/stlite/stlite.css" />
+  <!-- Stile dell'app, generato in build (build-web.mjs): caricato una volta sola. -->
+  <link rel="stylesheet" href="/ft.css?v=__FT_BUILD__" />
   <style>
     html, body {
       margin: 0;
@@ -263,7 +265,7 @@
         env: {
           FT_PLATFORM: "android",
           FT_DATA_DIR: "/data",
-          FT_PLOTLY_JS_URL: "/vendor/plotly.min.js",
+          FT_STATIC_CSS: "1",
         },
         streamlitConfig: {
           "client.toolbarMode": "minimal",

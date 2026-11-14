@@ -1,6 +1,8 @@
 from datetime import datetime
 from io import BytesIO
 import json
+import os
+import re
 from pathlib import Path
 import shutil
 import sqlite3
@@ -17,16 +19,28 @@ from src.services.categories import (
 )
 from src.services.loans import sanitize_loan_links
 from src.services.settings_service import get_setting, set_setting
+from src.utils.platform import IS_ANDROID
 
 LAST_BACKUP_SETTING = "last_backup_at"
+SHARED_FOLDER_SETTING = "shared_backup_folder"
+
+# Il nome del backup dice da dove arriva: utile nella cartella condivisa.
+DEVICE_TAG = "telefono" if IS_ANDROID else "pc"
+BACKUP_PREFIX = "FinanceTracker_Backup_"
+# Backup tenuti nella cartella condivisa per ogni dispositivo (i più vecchi si tolgono).
+SHARED_KEEP_PER_DEVICE = 10
+
+
+def backup_file_name() -> str:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return f"{BACKUP_PREFIX}{timestamp}_{DEVICE_TAG}.zip"
 
 
 def create_backup() -> Path:
     backup_dir = DATA_DIR / "backups"
     backup_dir.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_path = backup_dir / f"FinanceTracker_Backup_{timestamp}.zip"
+    backup_path = backup_dir / backup_file_name()
 
     categories_path = ensure_category_config()
 
@@ -56,8 +70,7 @@ def build_backup_bytes() -> tuple[str, bytes]:
     Come create_backup, ma interamente in memoria (usato su Android,
     dove il file viene consegnato con un download invece che scritto su disco).
     """
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    file_name = f"FinanceTracker_Backup_{timestamp}.zip"
+    file_name = backup_file_name()
 
     categories_path = ensure_category_config()
     buffer = BytesIO()
@@ -130,8 +143,16 @@ def merge_backup(uploaded_file) -> tuple[bool, str]:
         if error:
             return False, error
 
+        updated = deleted = 0
         try:
-            added, skipped = _merge_movements(backup_db)
+            if _has_sync_columns(backup_db):
+                # Backup della v2.0 o successiva: arrivano anche modifiche e
+                # cancellazioni (vince la modifica più recente).
+                result = _smart_merge(backup_db)
+                added, skipped = result.added, result.unchanged
+                updated, deleted = result.updated, result.deleted
+            else:
+                added, skipped = _merge_movements(backup_db)
         except sqlite3.DatabaseError:
             return False, "Il database nel backup non è leggibile."
 
@@ -139,10 +160,35 @@ def merge_backup(uploaded_file) -> tuple[bool, str]:
         if backup_categories is not None:
             new_categories = _merge_categories(backup_categories)
 
-    parts = [f"{added} movimenti aggiunti", f"{skipped} già presenti"]
+    parts = [f"{added} movimenti aggiunti"]
+    if updated:
+        parts.append(f"{updated} aggiornati")
+    if deleted:
+        parts.append(f"{deleted} eliminati")
+    parts.append(f"{skipped} già presenti")
     if new_categories:
         parts.append(f"{new_categories} categorie nuove")
     return True, "Backup unito: " + ", ".join(parts) + "."
+
+
+def _has_sync_columns(backup_db: Path) -> bool:
+    source = sqlite3.connect(backup_db)
+    try:
+        columns = {row[1] for row in source.execute("PRAGMA table_info(movements)")}
+    finally:
+        source.close()
+    return "uid" in columns and "updated_at" in columns
+
+
+def _smart_merge(backup_db: Path):
+    from src.services.backup_merge import export_package, import_package
+
+    source = sqlite3.connect(backup_db)
+    try:
+        package = export_package(source)
+    finally:
+        source.close()
+    return import_package(package)
 
 
 def _merge_movements(backup_db: Path) -> tuple[int, int]:
@@ -180,7 +226,12 @@ def _merge_movements(backup_db: Path) -> tuple[int, int]:
         target_columns = {
             row["name"] for row in conn.execute("PRAGMA table_info(movements)")
         }
-        columns = [c for c in source_columns if c in target_columns and c != "id"]
+        # uid e updated_at (sincronizzazione) li assegna questo database.
+        columns = [
+            c
+            for c in source_columns
+            if c in target_columns and c not in ("id", "uid", "updated_at")
+        ]
 
         known_hashes = {
             row[0]: int(row[1])
@@ -320,4 +371,143 @@ def restore_backup(uploaded_file) -> tuple[bool, str]:
             )
             invalidate_category_cache()
 
+    # Un backup di una versione precedente può avere uno schema più vecchio.
+    init_db()
     return True, "Backup ripristinato correttamente."
+
+
+# ---------------------------------------------------------------- cartella condivisa
+#
+# Una cartella che il PC tiene sincronizzata con Google Drive (Drive per
+# desktop, Insync, rclone, …). "Crea backup" può mandarci lo zip e
+# "Unisci / Sostituisci" può prenderlo da lì. Sul telefono la cartella non
+# serve: lo zip si salva su Drive con "Salva in…" e si apre dal selettore file.
+
+
+class LocalFile:
+    """Imita il file caricato da st.file_uploader per un file su disco."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.name = path.name
+
+    def getvalue(self) -> bytes:
+        return self.path.read_bytes()
+
+
+def shared_folder() -> Path | None:
+    value = (get_setting(SHARED_FOLDER_SETTING) or "").strip()
+    return Path(value).expanduser() if value else None
+
+
+def set_shared_folder(path: str | None) -> tuple[bool, str]:
+    if not path or not path.strip():
+        set_setting(SHARED_FOLDER_SETTING, "")
+        return True, "Cartella condivisa tolta."
+    folder = Path(path.strip().strip('"')).expanduser()
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        probe = folder / ".financetracker-prova"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+    except OSError as error:
+        return False, f"Non riesco a scrivere in questa cartella: {error}"
+    set_setting(SHARED_FOLDER_SETTING, str(folder))
+    return True, f"Cartella condivisa: {folder}"
+
+
+def suggest_shared_folders() -> list[Path]:
+    """Cartelle di Google Drive che si trovano spesso su un PC."""
+    home = Path.home()
+    candidates: list[Path] = [
+        home / "Google Drive",
+        home / "GoogleDrive",
+        home / "gdrive",
+        home / "Il mio Drive",
+    ]
+    for pattern in (
+        "Library/CloudStorage/GoogleDrive-*/Il mio Drive",
+        "Library/CloudStorage/GoogleDrive-*/My Drive",
+        "Insync/*/Google Drive",
+        "Insync/*/Il mio Drive",
+        "Insync/*/My Drive",
+    ):
+        candidates += sorted(home.glob(pattern))
+    if os.name == "nt":
+        for letter in "GHIJKLM":
+            candidates += [Path(f"{letter}:/Il mio Drive"), Path(f"{letter}:/My Drive")]
+    found: list[Path] = []
+    for path in candidates:
+        try:
+            if path.is_dir() and path not in found:
+                found.append(path)
+        except OSError:
+            continue
+    return found
+
+
+_BACKUP_NAME = re.compile(
+    rf"^{BACKUP_PREFIX}(\d{{8}}_\d{{6}})(?:_(pc|telefono))?.*\.zip$",
+    re.IGNORECASE,
+)
+
+
+def describe_backup(path: Path) -> dict:
+    """Da dove arriva e quando è stato fatto un backup (dal nome del file)."""
+    match = _BACKUP_NAME.match(path.name)
+    when = None
+    device = None
+    if match:
+        try:
+            when = datetime.strptime(match.group(1), "%Y%m%d_%H%M%S")
+        except ValueError:
+            when = None
+        device = (match.group(2) or "").lower() or None
+    if when is None:
+        try:
+            when = datetime.fromtimestamp(path.stat().st_mtime)
+        except OSError:
+            when = datetime.min
+    try:
+        size = path.stat().st_size
+    except OSError:
+        size = 0
+    return {"path": path, "name": path.name, "device": device, "when": when, "size": size}
+
+
+def list_shared_backups() -> list[dict]:
+    """Backup nella cartella condivisa, dal più recente."""
+    folder = shared_folder()
+    if folder is None or not folder.is_dir():
+        return []
+    items = [
+        describe_backup(path)
+        for path in folder.glob("*.zip")
+        if path.name.lower().startswith(BACKUP_PREFIX.lower())
+    ]
+    return sorted(items, key=lambda item: item["when"], reverse=True)
+
+
+def send_to_shared_folder(data: bytes, file_name: str) -> Path:
+    """Copia lo zip nella cartella condivisa e toglie i backup più vecchi."""
+    folder = shared_folder()
+    if folder is None:
+        raise OSError("nessuna cartella condivisa impostata")
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / file_name
+    temp = folder / f".{file_name}.tmp"
+    temp.write_bytes(data)
+    os.replace(temp, target)
+
+    # Ordine nella cartella: per ogni dispositivo solo gli ultimi N backup.
+    mine = [
+        item
+        for item in list_shared_backups()
+        if (item["device"] or "") == DEVICE_TAG
+    ]
+    for old in mine[SHARED_KEEP_PER_DEVICE:]:
+        try:
+            old["path"].unlink()
+        except OSError:
+            pass
+    return target

@@ -119,9 +119,10 @@ try {
   const tabs = [
     ["Movimenti", "02-movimenti"],
     ["Nuovo", "03-nuovo-movimento"],
-    ["Importa", "04-importa"],
-    ["Opzioni", "05-impostazioni"],
-    ["Home", "06-dashboard-di-nuovo"],
+    ["Report", "04-report"],
+    ["Importa", "05-importa"],
+    ["Opzioni", "06-impostazioni"],
+    ["Home", "07-dashboard-di-nuovo"],
   ];
   for (const [label, name] of tabs) {
     const t = Date.now();
@@ -149,6 +150,36 @@ add_manual_movement(datetime.date(2026, 1, 15), "SMOKE TEST", 9.99, "Altro", "Us
 `);
   await page.locator(".st-key-ft_mobile_tabbar a", { hasText: "Movimenti" }).first().click();
   await page.waitForTimeout(6000);
+
+  // Lista movimenti e grafici sono componenti disegnati nel browser
+  // (st.components.v2): controlla che compaiano davvero anche in stlite.
+  const listRows = await page.locator(".ml-row").count();
+  if (listRows < 1) failures.push("Movimenti: la lista non si è disegnata (componente ft_movement_list)");
+  else console.log(`  ok: lista movimenti (${listRows} righe)`);
+  await shot("08-movimenti-con-dati");
+  await page.locator(".ml-row").first().click();
+  await page.waitForTimeout(4000);
+  if (!(await page.locator('[data-testid="stDialog"]').count())) {
+    failures.push("Movimenti: toccando una riga non si apre la modifica");
+  } else {
+    console.log("  ok: tocco su una riga apre la modifica");
+  }
+  await shot("09-modifica-movimento");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(1500);
+  await page.locator(".st-key-ft_mobile_tabbar a", { hasText: "Home" }).first().click();
+  await page.waitForTimeout(6000);
+  const charts = await page.locator(".ftc svg, .ftc .cal").count();
+  if (charts < 1) failures.push("Dashboard: i grafici non si sono disegnati (componente ft_chart)");
+  else console.log(`  ok: grafici della dashboard (${charts})`);
+  await shot("10-dashboard-con-dati");
+  await page.locator(".st-key-ft_mobile_tabbar a", { hasText: "Report" }).first().click();
+  await page.waitForTimeout(6000);
+  await checkNoErrors("Report con dati");
+  if ((await page.locator(".ftc .cal .day").count()) < 28) {
+    failures.push("Report: il calendario del mese non si è disegnato");
+  }
+  await shot("11-report-con-dati");
 
   await page.reload();
   await waitForApp("Riavvio");

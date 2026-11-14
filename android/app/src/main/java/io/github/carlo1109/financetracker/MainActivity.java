@@ -83,6 +83,7 @@ public class MainActivity extends Activity {
 
     private static final int FILE_CHOOSER_REQUEST = 4101;
     private static final int FOLDER_PICKER_REQUEST = 4102;
+    private static final int SAVE_AS_REQUEST = 4103;
 
     private static final String PREFS = "ft_prefs";
     private static final String KEY_LOCK = "lock_enabled";
@@ -122,6 +123,9 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> pendingFileCallback;
     private FolderStorage storage;
     private SharedPreferences prefs;
+    // File in attesa del "Salva in…" (es. backup da mettere su Google Drive).
+    private byte[] pendingSaveBytes;
+    private String pendingSaveName;
 
     private boolean locked;
     private boolean authInProgress;
@@ -306,6 +310,8 @@ public class MainActivity extends Activity {
             deliverChosenFiles(resultCode, data);
         } else if (requestCode == FOLDER_PICKER_REQUEST) {
             deliverChosenFolder(resultCode, data);
+        } else if (requestCode == SAVE_AS_REQUEST) {
+            deliverSaveAs(resultCode, data);
         } else {
             super.onActivityResult(requestCode, resultCode, data);
         }
@@ -329,6 +335,43 @@ public class MainActivity extends Activity {
         }
         pendingFileCallback.onReceiveValue(result);
         pendingFileCallback = null;
+    }
+
+    /** Scrive il file in attesa nel posto scelto con "Salva in…" (Drive, cartella, …). */
+    private void deliverSaveAs(int resultCode, Intent data) {
+        byte[] bytes = pendingSaveBytes;
+        String name = pendingSaveName;
+        pendingSaveBytes = null;
+        pendingSaveName = null;
+        if (bytes == null) {
+            return;
+        }
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) {
+            showToast("Salvataggio annullato");
+            return;
+        }
+        Uri target = data.getData();
+        new Thread(() -> {
+            // "wt" = da capo; alcuni provider accettano solo "w".
+            try (OutputStream out = openForWrite(target)) {
+                if (out == null) {
+                    throw new IOException("impossibile scrivere il file");
+                }
+                out.write(bytes);
+                showToast("Salvato: " + name);
+            } catch (IOException | RuntimeException e) {
+                Log.e(TAG, "Salva in… non riuscito", e);
+                showToast("Salvataggio non riuscito: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    private OutputStream openForWrite(Uri target) throws IOException {
+        try {
+            return getContentResolver().openOutputStream(target, "wt");
+        } catch (IllegalArgumentException | UnsupportedOperationException e) {
+            return getContentResolver().openOutputStream(target, "w");
+        }
     }
 
     private void deliverChosenFolder(int resultCode, Intent data) {
@@ -447,6 +490,36 @@ public class MainActivity extends Activity {
                 Log.e(TAG, "Salvataggio non riuscito", e);
                 showToast("Salvataggio non riuscito: " + e.getMessage());
             }
+        }
+
+        /**
+         * "Salva in…" di Android: l'utente sceglie dove (Google Drive, una
+         * cartella, …). Usato per inviare il backup alla cartella condivisa.
+         */
+        @JavascriptInterface
+        public void saveFileAs(String fileName, String mimeType, String base64) {
+            String name = sanitizeFileName(fileName);
+            byte[] bytes;
+            try {
+                bytes = Base64.decode(base64, Base64.DEFAULT);
+            } catch (IllegalArgumentException e) {
+                showToast("Salvataggio non riuscito: file non valido");
+                return;
+            }
+            String type = mimeType == null || mimeType.isEmpty() ? "application/octet-stream" : mimeType;
+            runOnUiThread(() -> {
+                pendingSaveBytes = bytes;
+                pendingSaveName = name;
+                Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType(type);
+                intent.putExtra(Intent.EXTRA_TITLE, name);
+                if (!startForResult(intent, SAVE_AS_REQUEST)) {
+                    pendingSaveBytes = null;
+                    pendingSaveName = null;
+                    showToast("Su questo telefono non c'è la finestra «Salva in…»");
+                }
+            });
         }
 
         @JavascriptInterface

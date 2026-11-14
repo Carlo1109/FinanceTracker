@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.database.db import get_connection
+from src.database.db import database_version, get_connection
 
 DEFAULT_THEME = "dark"
 DEFAULT_ACCENT = "blue"
@@ -11,15 +11,30 @@ VALID_THEMES = ("dark", "light")
 VALID_ACCENTS = ("blue", "green", "amber", "violet")
 
 
-def get_setting(key: str, default: str | None = None) -> str | None:
+_settings_cache: tuple[object, dict[str, str]] | None = None
+
+
+def _all_settings() -> dict[str, str]:
+    """Tutte le preferenze, rilette solo quando il database cambia.
+
+    Tema e accento si leggono più volte a ogni interazione: sul telefono
+    ogni query costa, quindi si tiene una copia finché nessuno scrive.
+    """
+    global _settings_cache
+    version = database_version()
+    cached = _settings_cache
+    if cached is not None and cached[0] == version:
+        return cached[1]
     with get_connection() as conn:
-        row = conn.execute(
-            "SELECT value FROM settings WHERE key = ?",
-            (key,),
-        ).fetchone()
-    if row is None:
-        return default
-    return str(row["value"])
+        rows = conn.execute("SELECT key, value FROM settings").fetchall()
+    values = {str(row["key"]): str(row["value"]) for row in rows}
+    _settings_cache = (version, values)
+    return values
+
+
+def get_setting(key: str, default: str | None = None) -> str | None:
+    value = _all_settings().get(key)
+    return default if value is None else value
 
 
 def set_setting(key: str, value: str) -> None:
@@ -35,6 +50,8 @@ def set_setting(key: str, value: str) -> None:
             (key, value),
         )
         conn.commit()
+    global _settings_cache
+    _settings_cache = None
 
 
 def get_theme_mode() -> str:

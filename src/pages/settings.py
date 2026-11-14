@@ -713,6 +713,262 @@ def _render_desktop_storage_paths() -> None:
             )
 
 
+_SHARED_HOWTO_PC = """
+**Come si imposta (una volta sola)**
+
+1. Fai in modo che sul PC ci sia una cartella sincronizzata con Google Drive:
+   - **Windows / macOS:** installa *Google Drive per desktop*; Drive compare
+     come disco (es. `G:\\Il mio Drive`).
+   - **Linux:** Google non ha un'app ufficiale: usa *Insync* (a pagamento) oppure
+     *rclone* (gratuito).
+2. Dentro Drive crea una cartella, per esempio **FinanceTracker**.
+3. Incolla qui sotto il percorso di quella cartella sul PC.
+
+Sul telefono non serve nulla: il backup si salva su Drive con
+**☁️ Salva su Drive** e si riapre scegliendo Drive nel selettore dei file.
+"""
+
+
+def _backup_label(item: dict) -> str:
+    device = {"pc": "💻 PC", "telefono": "📱 Telefono"}.get(item.get("device") or "", "📦 Backup")
+    when = item["when"].strftime("%d/%m/%Y %H:%M") if item.get("when") else ""
+    size = f"{max(item.get('size', 0), 1) / 1024:.0f} KB"
+    return f"{device} · {when} · {size}"
+
+
+def _render_shared_folder_settings() -> None:
+    """PC: cartella sincronizzata con Google Drive per inviare/prendere i backup."""
+    from src.services.backup_service import (
+        set_shared_folder,
+        shared_folder,
+        suggest_shared_folders,
+    )
+
+    current = shared_folder()
+    with st.expander(
+        f"☁️ Cartella condivisa (Google Drive): {current}" if current else "☁️ Cartella condivisa (Google Drive)",
+        expanded=current is None and st.session_state.get("shared_folder_open", False),
+    ):
+        if current is None:
+            st.markdown(_SHARED_HOWTO_PC)
+            suggestions = suggest_shared_folders()
+            if suggestions:
+                st.caption("Cartelle di Drive trovate su questo PC:")
+                for index, folder in enumerate(suggestions[:3]):
+                    target = folder / "FinanceTracker"
+                    if st.button(f"📁 {target}", key=f"shared_suggest_{index}", width="stretch"):
+                        ok, message = set_shared_folder(str(target))
+                        (st.toast if ok else st.error)(message)
+                        if ok:
+                            st.rerun()
+        else:
+            st.caption(
+                "I backup inviati finiscono qui; Drive li porta sul telefono. "
+                "Per ogni dispositivo restano gli ultimi 10."
+            )
+        path = st.text_input(
+            "Percorso della cartella" if current is None else "Cambia cartella",
+            placeholder="Es. G:\\Il mio Drive\\FinanceTracker  oppure  ~/gdrive/FinanceTracker",
+            key="shared_folder_input",
+        )
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("Usa questa cartella", key="shared_set", disabled=not path.strip(), width="stretch"):
+                ok, message = set_shared_folder(path)
+                if ok:
+                    st.toast(message)
+                    st.rerun()
+                else:
+                    st.error(message)
+        with c2:
+            if current is not None and st.button("Togli cartella", key="shared_off", width="stretch"):
+                set_shared_folder(None)
+                st.rerun()
+
+
+_SEND_KEY = "backup_send_prompt"
+
+
+@st.dialog("Backup creato")
+def _send_to_drive_dialog() -> None:
+    """PC: dopo il backup chiede se inviarlo anche alla cartella condivisa."""
+    from pathlib import Path as _Path
+
+    from src.services.backup_service import send_to_shared_folder, shared_folder
+
+    info = st.session_state.get(_SEND_KEY) or {}
+    backup_path = _Path(info.get("path", ""))
+    st.markdown(f"Salvato in **Download**: `{info.get('saved', backup_path.name)}`")
+    folder = shared_folder()
+    if folder is None:
+        st.caption(
+            "Per inviarlo anche a Google Drive imposta prima la cartella condivisa "
+            "(qui sotto, in Backup → ☁️ Cartella condivisa)."
+        )
+        if st.button("Chiudi", width="stretch"):
+            st.session_state.pop(_SEND_KEY, None)
+            st.session_state["shared_folder_open"] = True
+            st.rerun()
+        return
+    st.markdown("Inviarlo anche alla cartella condivisa (Google Drive)?")
+    st.caption(str(folder))
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("☁️ Sì, invia", type="primary", width="stretch"):
+            try:
+                target = send_to_shared_folder(backup_path.read_bytes(), backup_path.name)
+            except OSError as error:
+                st.error(f"Invio non riuscito: {error}")
+                return
+            st.session_state.pop(_SEND_KEY, None)
+            st.toast(f"Inviato: {target.name}")
+            st.rerun()
+    with c2:
+        if st.button("No", width="stretch"):
+            st.session_state.pop(_SEND_KEY, None)
+            st.rerun()
+
+
+def _render_backup_section() -> None:
+    """Crea backup (anche su Drive) e unisci/sostituisci da un backup."""
+    from src.services.backup_service import (
+        LocalFile,
+        list_shared_backups,
+        shared_folder,
+    )
+
+    # ---- crea
+    if IS_ANDROID:
+        st.caption(
+            "Crea uno zip con database e categorie. Salvalo in Download o "
+            "direttamente su Google Drive, per aprirlo poi sul PC."
+        )
+        backup_name, backup_bytes = build_backup_bytes()
+        c1, c2 = st.columns(2)
+        with c1:
+            st.download_button(
+                "📦 Salva in Download",
+                data=backup_bytes,
+                file_name=backup_name,
+                mime=ZIP_MIME,
+                width="stretch",
+                type="primary",
+                on_click=mark_backup_done,
+                key="android_backup_download",
+            )
+        with c2:
+            # Il prefisso dice alla parte nativa di aprire "Salva in…"
+            # (dove si sceglie Google Drive) invece di salvare in Download.
+            st.download_button(
+                "☁️ Salva su Drive",
+                data=backup_bytes,
+                file_name=f"ft-saveas--{backup_name}",
+                mime=ZIP_MIME,
+                width="stretch",
+                on_click=mark_backup_done,
+                key="android_backup_drive",
+                help="Si apre «Salva in…»: scegli Google Drive e la cartella FinanceTracker.",
+            )
+    else:
+        st.caption(
+            "Crea uno zip con database e categorie e lo salva in Download; "
+            "poi puoi inviarlo anche alla cartella di Google Drive."
+        )
+        if st.session_state.get(_SEND_KEY):
+            _send_to_drive_dialog()
+        if st.button("📦 Crea backup completo", width="stretch", type="primary"):
+            backup_path = create_backup()
+            saved = save_and_reveal(backup_path.read_bytes(), backup_path.name)
+            st.session_state[_SEND_KEY] = {"path": str(backup_path), "saved": saved.name}
+            st.rerun()
+        _render_shared_folder_settings()
+
+    # ---- importa
+    st.markdown("")
+    st.markdown("**Da un backup**")
+    st.caption(
+        "**Unisci** porta qui quello che c'è nel backup: movimenti nuovi, "
+        "modifiche e cancellazioni fatte sull'altro dispositivo (vince la "
+        "modifica più recente), senza perdere quello che hai fatto qui. "
+        "**Sostituisci** cancella i dati attuali e mette quelli del backup."
+    )
+
+    uploaded_backup = None
+    source = "Da questo PC"
+    if not IS_ANDROID and shared_folder() is not None:
+        source = st.segmented_control(
+            "Da dove?",
+            ["Dalla cartella condivisa", "Da questo PC"],
+            default="Dalla cartella condivisa",
+            key="backup_source",
+        ) or "Dalla cartella condivisa"
+
+    if source == "Dalla cartella condivisa":
+        backups = list_shared_backups()
+        if not backups:
+            st.info(
+                "Nella cartella condivisa non ci sono ancora backup. Sul telefono: "
+                "Opzioni → Dati → ☁️ Salva su Drive (nella cartella giusta), "
+                "poi aspetta che Drive lo porti sul PC."
+            )
+        else:
+            choice = st.selectbox(
+                "Backup",
+                list(range(len(backups))),
+                format_func=lambda index: _backup_label(backups[index]),
+                key="shared_backup_choice",
+                help="Dal più recente. 📱 = fatto sul telefono, 💻 = su un PC.",
+            )
+            uploaded_backup = LocalFile(backups[int(choice)]["path"])
+    else:
+        st.caption(
+            "Scegli lo zip da Download o da **Google Drive**: nel selettore "
+            "dei file tocca ☰ e poi Drive."
+            if IS_ANDROID
+            else "Se la cartella sembra vuota, scegli «Tutti i file» oppure "
+            "trascina lo zip qui."
+        )
+        uploaded_backup = st.file_uploader(
+            "Seleziona un backup (.zip)",
+            type=None,
+            key="restore_backup_uploader",
+        )
+        if uploaded_backup is not None:
+            suffix = Path(uploaded_backup.name).suffix.lower()
+            if suffix not in BACKUP_EXTENSIONS:
+                st.error("Formato non supportato. Usa un file backup .zip.")
+                uploaded_backup = None
+
+    if uploaded_backup is not None:
+        merge_col, replace_col = st.columns(2)
+        with merge_col:
+            merge_clicked = st.button(
+                "➕ Unisci",
+                width="stretch",
+                type="primary",
+                key="backup_merge",
+                help="Aggiunge e aggiorna senza perdere nulla di quello che c'è qui.",
+            )
+        with replace_col:
+            replace_clicked = st.button(
+                "♻️ Sostituisci tutto",
+                width="stretch",
+                type="secondary",
+                key="backup_replace",
+                help="Cancella i dati attuali e mette al loro posto quelli del backup.",
+            )
+        if merge_clicked or replace_clicked:
+            if merge_clicked:
+                success, message = merge_backup(uploaded_backup)
+            else:
+                success, message = restore_backup(uploaded_backup)
+            if success:
+                st.toast(message)
+                st.rerun()
+            else:
+                st.error(message)
+
+
 def _render_android_storage_info() -> None:
     """
     Su Android: cartella dei dati, backup e blocco dell'app.
@@ -742,8 +998,9 @@ def _render_android_storage_info() -> None:
             """
         )
         st.caption(
-            "Dal PC al telefono: crea un backup nella versione desktop, "
-            "copialo sul telefono e uniscilo qui sotto."
+            "PC ↔ telefono: crea il backup e salvalo su Google Drive "
+            "(☁️ Salva su Drive qui, la cartella condivisa sul PC); "
+            "dall'altra parte aprilo e premi Unisci."
         )
 
     with styled_panel():
@@ -1027,92 +1284,7 @@ def show_settings() -> None:
 
         with styled_panel():
             _settings_section_header("Backup", chip="Sicurezza")
-            st.caption(
-                "Crea uno zip con database e categorie e lo salva in Download."
-            )
-
-            if IS_ANDROID:
-                backup_name, backup_bytes = build_backup_bytes()
-                st.download_button(
-                    "📦 Crea backup completo",
-                    data=backup_bytes,
-                    file_name=backup_name,
-                    mime=ZIP_MIME,
-                    width="stretch",
-                    type="primary",
-                    on_click=mark_backup_done,
-                    key="android_backup_download",
-                )
-            elif st.button(
-                "📦 Crea backup completo",
-                width="stretch",
-                type="primary",
-            ):
-                backup_path = create_backup()
-                saved = save_and_reveal(
-                    backup_path.read_bytes(),
-                    backup_path.name,
-                )
-                st.toast(f"Salvato in Download: {saved.name}")
-
-            if IS_ANDROID:
-                st.caption(
-                    "Da un backup puoi **unire** (aggiunge solo ciò che manca) "
-                    "o **sostituire** tutto. Scegli lo zip da Download, da Drive "
-                    "o da un'altra app."
-                )
-            else:
-                st.caption(
-                    "Da un backup puoi **unire** (aggiunge solo ciò che manca) "
-                    "o **sostituire** tutto. Se la cartella sembra vuota, "
-                    "scegli «Tutti i file» oppure trascina lo zip qui."
-                )
-
-            uploaded_backup = st.file_uploader(
-                "Seleziona un backup (.zip)",
-                type=None,
-                key="restore_backup_uploader",
-            )
-
-            if uploaded_backup is not None:
-                suffix = Path(uploaded_backup.name).suffix.lower()
-                if suffix not in BACKUP_EXTENSIONS:
-                    st.error("Formato non supportato. Usa un file backup .zip.")
-                    uploaded_backup = None
-
-            if uploaded_backup is not None:
-                merge_col, replace_col = st.columns(2)
-
-                with merge_col:
-                    merge_clicked = st.button(
-                        "➕ Unisci al database",
-                        width="stretch",
-                        type="primary",
-                        help=(
-                            "Aggiunge solo i movimenti e le categorie che mancano. "
-                            "Non cancella nulla: utile per allineare PC e telefono."
-                        ),
-                    )
-
-                with replace_col:
-                    replace_clicked = st.button(
-                        "♻️ Sostituisci tutto",
-                        width="stretch",
-                        type="secondary",
-                        help="Cancella i dati attuali e mette al loro posto quelli del backup.",
-                    )
-
-                if merge_clicked or replace_clicked:
-                    if merge_clicked:
-                        success, message = merge_backup(uploaded_backup)
-                    else:
-                        success, message = restore_backup(uploaded_backup)
-
-                    if success:
-                        st.toast(message)
-                        st.rerun()
-                    else:
-                        st.error(message)
+            _render_backup_section()
 
     with tab_info:
         st.caption(

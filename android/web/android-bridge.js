@@ -82,15 +82,25 @@
     });
   }
 
+  // Nome che inizia con questo prefisso = "Salva in…" di Android (si può
+  // scegliere Google Drive) invece del salvataggio in Download.
+  // Lo usa il pulsante "☁️ Salva su Drive" del backup (src/pages/settings.py).
+  var SAVE_AS_PREFIX = "ft-saveas--";
+
   function save(href, fileName) {
     resolveDownload(href, fileName)
       .then(function (result) {
         return readAsBase64(result.blob).then(function (base64) {
-          bridge.saveFile(
-            result.name || "FinanceTracker_download",
-            result.blob.type || "application/octet-stream",
-            base64
-          );
+          var name = result.name || "FinanceTracker_download";
+          var type = result.blob.type || "application/octet-stream";
+          if (name.indexOf(SAVE_AS_PREFIX) === 0) {
+            name = name.slice(SAVE_AS_PREFIX.length);
+            if (typeof bridge.saveFileAs === "function") {
+              bridge.saveFileAs(name, type, base64);
+              return;
+            }
+          }
+          bridge.saveFile(name, type, base64);
         });
       })
       .catch(function (error) {
