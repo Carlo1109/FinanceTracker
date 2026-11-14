@@ -269,14 +269,27 @@ public class MainActivity extends Activity {
             }
             pendingFileCallback = callback;
 
+            boolean multiple = params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE;
+
+            // GET_CONTENT dentro una scelta di app: così compaiono anche Drive,
+            // File, Archivio… (il solo OPEN_DOCUMENT su molti telefoni non mostra Drive).
             // */* perché i CSV/XLSX delle banche arrivano con tipi MIME molto vari.
+            Intent pick = new Intent(Intent.ACTION_GET_CONTENT);
+            pick.addCategory(Intent.CATEGORY_OPENABLE);
+            pick.setType("*/*");
+            if (multiple) {
+                pick.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+            }
+            if (startForResult(Intent.createChooser(pick, "Scegli il file da…"), FILE_CHOOSER_REQUEST)) {
+                return true;
+            }
+
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
             intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.setType("*/*");
-            if (params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE) {
+            if (multiple) {
                 intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
             }
-
             if (startForResult(intent, FILE_CHOOSER_REQUEST)) {
                 return true;
             }
