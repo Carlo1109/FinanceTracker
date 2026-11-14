@@ -39,6 +39,7 @@ Nuova grafica, app più leggera sul telefono, pagina Report e passaggio dei dati
 - Test per i report (`tests/test_reports.py`) e per l'unione dei backup e la cartella condivisa (`tests/test_backup_merge.py`)
 - Database: nuove colonne `uid` e `updated_at`, tabella `sync_tombstones` e trigger che le tengono aggiornate (migrazione automatica al primo avvio)
 - Android: «☁️ Salva su Drive» usa la condivisione di Android (nuovo `ShareProvider`, metodo nativo `shareFile`): lì c'è sempre «Salva su Drive», mentre «Salva in…» su molti telefoni non mostra Drive
+- Android: scegliendo un file da importare (backup o estratto conto) si apre l'elenco delle app, con Drive tra le prime, invece del solo selettore file
 
 ## v1.7.0
 
