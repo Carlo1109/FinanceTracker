@@ -395,14 +395,60 @@ class LocalFile:
         return self.path.read_bytes()
 
 
+# La scelta sta in un file di questo dispositivo, fuori dal database: così un
+# backup ripristinato non la cambia. "off" = tolta di proposito dall'utente.
+_SHARED_FOLDER_FILE = "shared_folder.txt"
+_SHARED_OFF = "off"
+
+
+def _shared_folder_file() -> Path:
+    return DATA_DIR / _SHARED_FOLDER_FILE
+
+
+def _read_shared_choice() -> str | None:
+    try:
+        return _shared_folder_file().read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+
+
+def _write_shared_choice(value: str) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _shared_folder_file().write_text(value, encoding="utf-8")
+
+
+def _auto_shared_folder() -> str | None:
+    """Prima volta: la cartella vecchia (nel database) o quella di Drive trovata."""
+    legacy = (get_setting(SHARED_FOLDER_SETTING) or "").strip()
+    if legacy:
+        return legacy
+    for drive in suggest_shared_folders():
+        target = drive / "FinanceTracker"
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            continue
+        return str(target)
+    return None
+
+
 def shared_folder() -> Path | None:
-    value = (get_setting(SHARED_FOLDER_SETTING) or "").strip()
-    return Path(value).expanduser() if value else None
+    if IS_ANDROID:
+        return None
+    choice = _read_shared_choice()
+    if choice is None:
+        choice = _auto_shared_folder()
+        if choice is None:
+            return None  # riprova al prossimo avvio (Drive magari non c'è ancora)
+        _write_shared_choice(choice)
+    if not choice or choice == _SHARED_OFF:
+        return None
+    return Path(choice).expanduser()
 
 
 def set_shared_folder(path: str | None) -> tuple[bool, str]:
     if not path or not path.strip():
-        set_setting(SHARED_FOLDER_SETTING, "")
+        _write_shared_choice(_SHARED_OFF)
         return True, "Cartella condivisa tolta."
     folder = Path(path.strip().strip('"')).expanduser()
     try:
@@ -412,7 +458,7 @@ def set_shared_folder(path: str | None) -> tuple[bool, str]:
         probe.unlink()
     except OSError as error:
         return False, f"Non riesco a scrivere in questa cartella: {error}"
-    set_setting(SHARED_FOLDER_SETTING, str(folder))
+    _write_shared_choice(str(folder))
     return True, f"Cartella condivisa: {folder}"
 
 

@@ -43,37 +43,6 @@ binaries = streamlit_binaries + webview_binaries
 
 hiddenimports = [
     "streamlit.web.cli",
-    "src.components.cards",
-    "src.components.export_dialog",
-    "src.components.navigation",
-    "src.database.db",
-    "src.pages.dashboard",
-    "src.pages.import_data",
-    "src.pages.manual_entry",
-    "src.pages.movements",
-    "src.pages.settings",
-    "src.services.analytics",
-    "src.services.backup_service",
-    "src.services.categories",
-    "src.services.loans",
-    "src.services.settings_service",
-    "src.services.imports",
-    "src.services.imports.base",
-    "src.services.imports.fineco",
-    "src.services.imports.normalize",
-    "src.services.imports.paypal",
-    "src.services.imports.postepay",
-    "src.services.imports.revolut",
-    "src.services.movement_service",
-    "src.theme.style",
-    "src.theme.colors",
-    "src.theme.mobile",
-    "src.theme.tokens",
-    "src.utils",
-    "src.utils.export_excel",
-    "src.utils.formatting",
-    "src.utils.platform",
-    "src.utils.version",
     "openpyxl",
     "openpyxl.cell",
     "openpyxl.styles",
@@ -82,6 +51,14 @@ hiddenimports = [
     "PIL",
     "PIL.Image",
 ]
+
+# app.py è un file di dati (lo esegue Streamlit), quindi PyInstaller non ne
+# segue gli import: si includono tutti i moduli di src, anche quelli nuovi.
+hiddenimports += sorted(
+    ".".join(path.relative_to(PROJECT_ROOT).with_suffix("").parts)
+    for path in (PROJECT_ROOT / "src").rglob("*.py")
+    if "__pycache__" not in path.parts and path.name != "__init__.py"
+)
 
 hiddenimports += streamlit_hidden
 hiddenimports += webview_hidden

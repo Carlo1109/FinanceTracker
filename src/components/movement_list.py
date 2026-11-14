@@ -69,7 +69,12 @@ _CSS = r"""
   content: ""; position: absolute; top: 0; left: 70px; right: 16px; height: 1px;
   background: var(--ft-border, rgba(148,163,184,.12));
 }
-.ml-row:hover, .ml-row:focus-visible { background: var(--ft-raised, rgba(148,163,184,.07)); }
+.ml-row:focus-visible { background: var(--ft-raised, rgba(148,163,184,.07)); }
+/* Solo con un mouse vero: sul telefono :hover resta attivo dopo il tocco. */
+@media (hover: hover) {
+  .ml-row:hover { background: var(--ft-raised, rgba(148,163,184,.07)); }
+  .ml-row:hover .ml-chev { opacity: .8; }
+}
 .ml-row:active { background: rgba(var(--ft-accent-rgb, 96,165,250), .10); }
 .ml-ico {
   position: relative; flex: 0 0 40px; width: 40px; height: 40px; border-radius: 13px;
@@ -109,7 +114,6 @@ _CSS = r"""
 .ml-amt.investment { color: var(--ft-investment, #a78bfa); }
 .ml-amt.transfer { color: var(--ft-muted, #94a3b8); }
 .ml-chev { flex: 0 0 auto; color: var(--ft-subtle, #94a3b8); opacity: .0; transition: opacity 120ms ease; font-size: 18px; margin-left: -4px; }
-.ml-row:hover .ml-chev { opacity: .8; }
 .ml.selecting .ml-chev { display: none; }
 .ml-more { display: flex; justify-content: center; margin: 6px 0 4px 0; }
 .ml-sel {
@@ -244,7 +248,9 @@ export default function (component) {
       sync();
       return;
     }
+    // Riscontro immediato del tocco, poi la riga torna normale.
     row.style.background = "rgba(var(--ft-accent-rgb, 96,165,250), .14)";
+    setTimeout(() => { row.style.background = ""; row.blur(); }, 450);
     setTriggerValue("open", id);
   };
   root.onkeydown = (ev) => {

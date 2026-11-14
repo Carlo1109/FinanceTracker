@@ -30,6 +30,8 @@ def fresh_database():
     """Ogni test parte da un database e da categorie nuovi."""
     for name in ("finance_tracker.db", "categories.json"):
         (_TEST_DATA_DIR / name).unlink(missing_ok=True)
+    # Cartella condivisa "tolta": i test non cercano Drive nel PC vero.
+    (_TEST_DATA_DIR / "shared_folder.txt").write_text("off", encoding="utf-8")
     categories.invalidate_category_cache()
     db.init_db()
     yield

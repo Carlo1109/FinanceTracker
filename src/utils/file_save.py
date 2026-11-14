@@ -114,6 +114,11 @@ def _reveal_in_file_manager(path: Path) -> None:
         return
 
 
+def save_to_downloads(data: bytes, file_name: str) -> Path:
+    """Salva in Download senza aprire la cartella."""
+    return _save_bytes_to_downloads(data, file_name)
+
+
 def save_and_reveal(data: bytes, file_name: str) -> Path:
     path = _save_bytes_to_downloads(data, file_name)
     _reveal_in_file_manager(path)

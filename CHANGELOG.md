@@ -23,6 +23,10 @@ Nuova grafica, app più leggera sul telefono, pagina Report e passaggio dei dati
 - Android: logo non più deformato nella schermata di caricamento e nella barra in alto; su Android 12+ anche la schermata di avvio di sistema mostra il logo intero
 - Android: nei menu a tendina (es. Categoria nella modifica di un movimento) le ultime voci non restano più tagliate fuori
 - Android: tabella delle categorie del report più compatta, entra nello schermo
+- Android: dopo aver aperto e chiuso un movimento la riga non resta più grigia
+- PC: «Crea backup» salva lo zip in Download senza aprire la cartella
+- Dopo «Unisci» o «Sostituisci» resta un messaggio verde con l'esito (prima il toast spariva col ricaricamento)
+- PC: la cartella condivisa si imposta da sola se c'è Google Drive (`…/Il mio Drive/FinanceTracker`) e resta impostata finché non la togli; è salvata in un file del PC (`shared_folder.txt`), così nessun backup la cambia
 
 ### Prestazioni
 

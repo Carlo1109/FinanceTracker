@@ -50,7 +50,7 @@ from src.theme.colors import get_category_color
 from src.theme.tokens import ACCENTS, THEMES, resolve_palette
 from src.theme.style import apply_theme
 from src.utils.export_excel import movements_export_filename
-from src.utils.file_save import save_and_reveal
+from src.utils.file_save import save_to_downloads
 from src.utils.formatting import euro
 from src.utils.version import get_app_version
 
@@ -787,6 +787,7 @@ def _render_shared_folder_settings() -> None:
 
 
 _SEND_KEY = "backup_send_prompt"
+_BACKUP_RESULT_KEY = "ft_backup_result"
 
 
 @st.dialog("Backup creato")
@@ -880,7 +881,7 @@ def _render_backup_section() -> None:
             _send_to_drive_dialog()
         if st.button("📦 Crea backup completo", width="stretch", type="primary"):
             backup_path = create_backup()
-            saved = save_and_reveal(backup_path.read_bytes(), backup_path.name)
+            saved = save_to_downloads(backup_path.read_bytes(), backup_path.name)
             st.session_state[_SEND_KEY] = {"path": str(backup_path), "saved": saved.name}
             st.rerun()
         _render_shared_folder_settings()
@@ -960,15 +961,22 @@ def _render_backup_section() -> None:
                 help="Cancella i dati attuali e mette al loro posto quelli del backup.",
             )
         if merge_clicked or replace_clicked:
-            if merge_clicked:
-                success, message = merge_backup(uploaded_backup)
-            else:
-                success, message = restore_backup(uploaded_backup)
+            with st.spinner("Unisco il backup…" if merge_clicked else "Ripristino il backup…"):
+                if merge_clicked:
+                    success, message = merge_backup(uploaded_backup)
+                else:
+                    success, message = restore_backup(uploaded_backup)
             if success:
-                st.toast(message)
+                # Mostrato dopo il ricaricamento (un toast lì sparirebbe subito).
+                st.session_state[_BACKUP_RESULT_KEY] = message
                 st.rerun()
             else:
                 st.error(message)
+
+    result = st.session_state.pop(_BACKUP_RESULT_KEY, None)
+    if result:
+        st.success(result, icon="✅")
+        st.toast(result, icon="✅")
 
 
 def _render_android_storage_info() -> None:

@@ -153,7 +153,7 @@ PC e telefono si allineano con i **backup** passando da una cartella di **Google
 **Una volta sola**
 
 1. In Google Drive crea una cartella, per esempio **FinanceTracker**.
-2. **Sul PC** serve una cartella che si sincronizza con Drive: su Windows e macOS installa *Google Drive per desktop* (Drive compare come disco, es. `G:\Il mio Drive`); su Linux Google non ha un'app ufficiale, usa *Insync* (a pagamento) o *rclone* (gratuito). Poi in Impostazioni → Dati → Backup → **☁️ Cartella condivisa** incolla il percorso della cartella, es. `G:\Il mio Drive\FinanceTracker`.
+2. **Sul PC** serve una cartella che si sincronizza con Drive: su Windows e macOS installa *Google Drive per desktop* (Drive compare come disco, es. `G:\Il mio Drive`); su Linux Google non ha un'app ufficiale, usa *Insync* (a pagamento) o *rclone* (gratuito). Se l'app trova Drive imposta da sola la cartella `…\Il mio Drive\FinanceTracker` e la tiene finché non premi **Togli cartella**; altrimenti in Impostazioni → Dati → Backup → **☁️ Cartella condivisa** incolla il percorso, es. `G:\Il mio Drive\FinanceTracker`.
 3. **Sul telefono** non serve nulla.
 
 **Dal telefono al PC**
@@ -164,7 +164,7 @@ PC e telefono si allineano con i **backup** passando da una cartella di **Google
 **Dal PC al telefono**
 
 1. PC: **Crea backup completo** → alla domanda «Inviarlo anche alla cartella condivisa?» rispondi **Sì, invia**.
-2. Telefono (dopo che Drive l'ha caricato): Opzioni → Dati → *Seleziona un backup* → nel selettore tocca ☰ → Drive → cartella FinanceTracker → scegli lo zip → **Unisci**.
+2. Telefono (dopo che Drive l'ha caricato): Opzioni → Dati → *Seleziona un backup* → nell'elenco delle app scegli **Drive** → cartella FinanceTracker → scegli lo zip → **Unisci**.
 
 **Unisci** porta tutto quello che è cambiato sull'altro dispositivo: movimenti nuovi, modifiche e cancellazioni. Se lo stesso movimento è stato cambiato su tutti e due, vince la modifica più recente; quello che hai fatto solo qui non si perde. Lo stesso estratto conto importato su entrambi non crea doppioni. Le categorie nuove si aggiungono. (I backup fatti con versioni prima della 2.0 aggiungono solo i movimenti che mancano.) **Sostituisci** invece mette al posto di tutto il contenuto del backup.
 

@@ -226,3 +226,27 @@ def test_nome_backup_dice_il_dispositivo():
 
     name = backup.backup_file_name()
     assert name.startswith("FinanceTracker_Backup_") and name.endswith("_pc.zip")
+
+
+def test_cartella_condivisa_automatica_e_resta_dopo_ripristino(tmp_path, monkeypatch):
+    from src.services import backup_service as backup
+
+    drive = tmp_path / "Il mio Drive"
+    drive.mkdir()
+    monkeypatch.setattr(backup, "suggest_shared_folders", lambda: [drive])
+    backup._shared_folder_file().unlink(missing_ok=True)
+
+    # Primo avvio: Drive trovato → impostata da sola.
+    assert backup.shared_folder() == drive / "FinanceTracker"
+    assert (drive / "FinanceTracker").is_dir()
+
+    # Un backup ripristinato (es. dal telefono) non la cambia.
+    zip_path = backup.create_backup()
+    ok, message = backup.restore_backup(backup.LocalFile(zip_path))
+    assert ok, message
+    assert backup.shared_folder() == drive / "FinanceTracker"
+
+    # Tolta dall'utente: non torna da sola.
+    backup.set_shared_folder(None)
+    assert backup.shared_folder() is None
+    backup._shared_folder_file().unlink()
