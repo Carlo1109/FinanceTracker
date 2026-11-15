@@ -1143,6 +1143,36 @@ div[data-testid="stExpander"] summary p {
 """
 
 
+# Solo PC (sul telefono le KPI hanno altezze fisse in MOBILE_REFRESH_CSS).
+DESKTOP_REFRESH_CSS = r"""
+/* Riga dei KPI: tutte le card alte come la più alta (nel report Risparmio e
+   Tasso hanno la riga investito / liquidità in più). La colonna passa la sua
+   altezza fino alla card. Solo la riga più interna: anche la pagina
+   (menu + contenuto) è fatta di colonne. */
+[data-testid="stHorizontalBlock"]:has(.ft-kpi-card):not(:has([data-testid="stHorizontalBlock"] .ft-kpi-card)) {
+    align-items: stretch !important;
+}
+
+[data-testid="stHorizontalBlock"]:has(.ft-kpi-card):not(:has([data-testid="stHorizontalBlock"] .ft-kpi-card)) > [data-testid="stColumn"],
+[data-testid="stHorizontalBlock"]:has(.ft-kpi-card):not(:has([data-testid="stHorizontalBlock"] .ft-kpi-card)) > [data-testid="stColumn"] div:has(.ft-kpi-card) {
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+[data-testid="stHorizontalBlock"]:has(.ft-kpi-card):not(:has([data-testid="stHorizontalBlock"] .ft-kpi-card)) > [data-testid="stColumn"] {
+    align-self: stretch !important;
+}
+
+[data-testid="stHorizontalBlock"]:has(.ft-kpi-card):not(:has([data-testid="stHorizontalBlock"] .ft-kpi-card)) > [data-testid="stColumn"] div:has(.ft-kpi-card) {
+    flex: 1 1 auto !important;
+}
+
+[data-testid="stHorizontalBlock"]:has(.ft-kpi-card):not(:has([data-testid="stHorizontalBlock"] .ft-kpi-card)) .ft-kpi-card {
+    flex: 1 1 auto;
+    height: auto;
+}
+"""
+
 MOBILE_REFRESH_CSS = r"""
 /* ================================================================ telefono */
 

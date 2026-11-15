@@ -8,7 +8,7 @@ import streamlit as st
 
 from src.services.settings_service import get_accent, get_theme_mode
 from src.theme.mobile import MOBILE_CSS
-from src.theme.refresh import MOBILE_REFRESH_CSS, REFRESH_CSS
+from src.theme.refresh import DESKTOP_REFRESH_CSS, MOBILE_REFRESH_CSS, REFRESH_CSS
 from src.theme.tokens import resolve_palette
 from src.utils.platform import IS_ANDROID
 
@@ -192,6 +192,8 @@ def static_css(*, android: bool | None = None) -> str:
     parts = [BASE_CSS, REFRESH_CSS]
     if android:
         parts += [MOBILE_CSS, MOBILE_REFRESH_CSS]
+    else:
+        parts.append(DESKTOP_REFRESH_CSS)
     return "\n".join(parts)
 
 
