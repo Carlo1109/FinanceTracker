@@ -924,13 +924,11 @@ def _render_backup_section() -> None:
             )
             uploaded_backup = LocalFile(backups[int(choice)]["path"])
     else:
-        st.caption(
-            "Scegli lo zip da Download o da **Google Drive**: nel selettore "
-            "dei file tocca ☰ e poi Drive."
-            if IS_ANDROID
-            else "Se la cartella sembra vuota, scegli «Tutti i file» oppure "
-            "trascina lo zip qui."
-        )
+        if not IS_ANDROID:
+            st.caption(
+                "Se la cartella sembra vuota, scegli «Tutti i file» oppure "
+                "trascina lo zip qui."
+            )
         uploaded_backup = st.file_uploader(
             "Seleziona un backup (.zip)",
             type=None,

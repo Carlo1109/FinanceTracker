@@ -109,3 +109,80 @@ def test_reimport_non_crea_duplicati(uploaded_file):
     assert first[0] == 3, "due spese identiche nello stesso giorno sono due movimenti distinti"
     assert second[0] == 0, "il secondo import dello stesso file non aggiunge nulla"
     assert len(load_movements()) == 3
+
+
+def _fineco_file(uploaded_file, rows):
+    header = ["Data_Operazione", "Data_Valuta", "Entrate", "Uscite", "Descrizione", "Descrizione_Completa", "Stato"]
+    data = _xlsx([header, *rows], sheet="Movimenti", header_row=13)
+    return get_importer_by_label("Fineco Excel").parse(uploaded_file("fineco.xlsx", data))
+
+
+def test_fineco_contabilizzato_aggiorna_autorizzato_anche_dopo_una_modifica(uploaded_file):
+    """Cambiare la categoria di un Autorizzato non deve impedire l'abbinamento."""
+    from datetime import date
+
+    from src.services.movement_service import get_movement, update_movement
+
+    pending = _fineco_file(
+        uploaded_file,
+        [["", "10/05/2026", None, -42.3, "Pagamento Visa Debit", "BAR ROSSI", "Autorizzato"]],
+    )
+    save_movements(pending, source="Fineco", account="Fineco")
+    stored = load_movements()
+    assert len(stored) == 1
+    movement_id = int(stored.iloc[0]["id"])
+    before = get_movement(movement_id)
+
+    # Come il modulo di modifica: parte dal titolo in lista (descrizione completa).
+    update_movement(
+        movement_id,
+        movement_date=date(2026, 5, 10),
+        description="BAR ROSSI",
+        amount=42.3,
+        category="Svago & Tempo libero",
+        movement_type="Uscita",
+        account="Fineco",
+    )
+    after = get_movement(movement_id)
+    assert after["description"] == before["description"], "descrizione breve della banca conservata"
+    assert after["full_description"] == before["full_description"]
+
+    settled = _fineco_file(
+        uploaded_file,
+        [[
+            "12/05/2026", "10/05/2026", None, -42.3, "Pagamento Visa Debit",
+            "BAR ROSSI TORINO Data operazione 10/05/26", "Contabilizzato",
+        ]],
+    )
+    save_movements(settled, source="Fineco", account="Fineco")
+    final = load_movements()
+    assert len(final) == 1, "il Contabilizzato aggiorna l'Autorizzato, niente doppione"
+    assert final.iloc[0]["categoria"] == "Svago & Tempo libero", "la categoria scelta resta"
+
+
+def test_modifica_descrizione_cambia_anche_il_titolo(uploaded_file):
+    from datetime import date
+
+    from src.services.movement_service import get_movement, update_movement
+
+    save_movements(
+        _fineco_file(
+            uploaded_file,
+            [["10/05/2026", "10/05/2026", None, -9.9, "Pagamento Visa Debit", "AMZN MKTP IT", "Contabilizzato"]],
+        ),
+        source="Fineco",
+        account="Fineco",
+    )
+    movement_id = int(load_movements().iloc[0]["id"])
+    update_movement(
+        movement_id,
+        movement_date=date(2026, 5, 10),
+        description="Cavo USB",
+        amount=9.9,
+        category="Shopping",
+        movement_type="Uscita",
+        account="Fineco",
+    )
+    after = get_movement(movement_id)
+    assert after["description"] == "Cavo USB"
+    assert after["full_description"] == "Cavo USB"

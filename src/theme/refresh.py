@@ -826,6 +826,68 @@ div[data-testid="stExpander"] summary p {
 
 /* ================================================================ report */
 
+/* Risparmio diviso in investito e liquidità (parti dello stesso totale). */
+.ft-split {
+    margin: 8px 0 6px 0;
+}
+
+.ft-split-bar {
+    display: flex;
+    height: 6px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(148, 163, 184, 0.18);
+}
+
+.ft-split-bar span.is-invest,
+.ft-split-legend i.is-invest { background: rgb(var(--ft-investment-rgb)); }
+.ft-split-bar span.is-cash,
+.ft-split-legend i.is-cash { background: rgba(var(--ft-income-rgb), 0.75); }
+
+.ft-split-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 12px;
+    margin-top: 6px;
+    font-size: 11.5px;
+    font-weight: 650;
+    color: var(--ft-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.ft-split-legend span { white-space: nowrap; }
+.ft-split-legend span.is-bad { color: rgb(var(--ft-danger-rgb)); }
+
+.ft-split-legend i {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 3px;
+    margin-right: 5px;
+}
+
+.ft-kpi-note {
+    margin: 6px 0 4px 0;
+    font-size: 11.5px;
+    font-weight: 650;
+    color: var(--ft-muted);
+}
+
+/* Scheda spese speciali del report. */
+.ft-spec-table td:first-child { white-space: normal; }
+.ft-spec-name { font-weight: 700; }
+.ft-spec-meta {
+    margin-top: 2px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--ft-muted);
+}
+.ft-spec-table tr.is-group td {
+    padding-top: 14px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+}
+
 .ft-report-kpis {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));

@@ -241,9 +241,12 @@ def _tokens_match(left: tuple[str, ...], right: tuple[str, ...]) -> bool:
         return False
     left_tokens = set(left)
     right_tokens = set(right)
+    # Si confrontano gli insiemi, non le tuple: se descrizione breve e
+    # completa coincidono (es. dopo una modifica) i token sono doppi e la
+    # tupla più lunga non vuol dire più parole.
     shorter, longer = (
         (left_tokens, right_tokens)
-        if len(left) <= len(right)
+        if len(left_tokens) <= len(right_tokens)
         else (right_tokens, left_tokens)
     )
     if shorter <= longer:
@@ -1326,17 +1329,36 @@ def update_movement(
         speciale_mesi = 0
 
     description = description.strip()
-    resolved_full = (
-        description
-        if full_description is None
-        else str(full_description).strip() or description
-    )
+    current = get_movement(movement_id)
+    if full_description is not None:
+        resolved_full = str(full_description).strip() or description
+    else:
+        # Il modulo di modifica parte dal titolo mostrato in lista (la
+        # descrizione completa della banca). Se non viene toccato (es. si
+        # cambia solo la categoria) descrizione breve e completa restano
+        # quelle della banca: servono per riconoscere il Contabilizzato di
+        # un Autorizzato al prossimo import. Se viene cambiato, entrambe
+        # prendono il nuovo nome, così il titolo in lista lo mostra.
+        def _flat(value: Any) -> str:
+            return " ".join(_clean_text_value(value).split())
+
+        old_description = _clean_text_value(current.get("description")) if current else ""
+        old_full = _clean_text_value(current.get("full_description")) if current else ""
+        typed = _flat(description)
+        unchanged = bool(current) and typed in {
+            _flat(old_full),
+            _flat(old_description),
+        }
+        if unchanged and (old_description or old_full):
+            description = old_description or old_full
+            resolved_full = old_full or old_description
+        else:
+            resolved_full = description
     notes = notes.strip()
     account = account.strip() or "Altro"
     month = movement_date.strftime("%Y-%m")
     date_string = movement_date.isoformat()
 
-    current = get_movement(movement_id)
     category_source = "manual"
     if current is not None and str(current.get("category") or "") == category:
         category_source = (

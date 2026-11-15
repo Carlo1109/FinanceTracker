@@ -201,7 +201,9 @@ def render_kpi_card(
     subtitle_color: str = MUTED_COLOR,
     *,
     tone: str | None = None,
+    extra_html: str = "",
 ) -> None:
+    """KPI; extra_html (già sicuro) va sotto il valore, prima del confronto."""
     tone = tone or _KPI_TONES.get(value_color, "accent")
     glyph = icon or KPI_ICONS.get(title, "•")
     size_class = _amount_size_class(value)
@@ -215,6 +217,7 @@ def render_kpi_card(
           <div class="ft-kpi-value {size_class}" style="color:{value_color}">
             {html.escape(value)}
           </div>
+          {extra_html}
           <div class="ft-kpi-foot">{_delta_chip(subtitle, subtitle_color)}</div>
         </div>
         """

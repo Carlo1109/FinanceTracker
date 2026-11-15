@@ -21,6 +21,8 @@ from src.services.analytics import (
     expense_frame,
     income_frame,
     normalize_date_column,
+    savings_rate,
+    special_expenses_overview,
 )
 
 MONTHS_IT = (
@@ -60,11 +62,20 @@ def _between(df: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> pd.Dat
     return df[df["data"].between(start, end, inclusive="both")].copy()
 
 
-def savings_rate_of(metrics: dict[str, float]) -> float | None:
-    income = float(metrics["entrate"])
-    if income <= 0:
-        return None
-    return (income - float(metrics["uscite"])) / income * 100
+def investment_split(metrics: dict[str, float]) -> dict[str, float | None]:
+    """Il risparmio diviso in investito e liquidità (stesso totale).
+
+    Il risparmio è entrate meno uscite e comprende già quanto investito:
+    qui si dice solo quanta parte è andata in investimenti.
+    """
+    invested = float(metrics.get("investimenti") or 0)
+    saved = float(metrics.get("bilancio") or 0)
+    income = float(metrics.get("entrate") or 0)
+    return {
+        "investito": invested,
+        "liquidita": saved - invested,
+        "quota_entrate": invested / income * 100 if income > 0 else None,
+    }
 
 
 def category_totals(df: pd.DataFrame) -> pd.Series:
@@ -99,7 +110,7 @@ def _summary(df: pd.DataFrame, label: str, start, end) -> PeriodSummary:
         start=start,
         end=end,
         metrics=metrics,
-        savings_rate=savings_rate_of(metrics),
+        savings_rate=savings_rate(metrics),
         movements=len(part),
     )
 
@@ -120,6 +131,74 @@ class Report:
     daily_average: float = 0.0
     zero_spend_days: int = 0
     elapsed_days: int = 0
+    specials: pd.DataFrame | None = None  # spese speciali, una riga per mese
+
+
+SPECIALS_COLUMNS = [
+    "mese",
+    "data",
+    "descrizione",
+    "categoria",
+    "account",
+    "importo",
+    "mesi",
+    "rata",
+    "quota",
+]
+
+
+def special_rows(
+    df: pd.DataFrame,
+    start: pd.Timestamp,
+    end: pd.Timestamp,
+) -> pd.DataFrame:
+    """Spese speciali mese per mese tra start ed end.
+
+    - ripartita su N mesi: compare in ognuno dei suoi N mesi con la quota
+      (importo / N) e la rata («3/12»);
+    - ripartita su 0 mesi: compare solo nel mese in cui è stata pagata,
+      per intero.
+    """
+    if df.empty:
+        return pd.DataFrame(columns=SPECIALS_COLUMNS)
+    rows: list[dict] = []
+    month = pd.Timestamp(start).to_period("M")
+    last = pd.Timestamp(end).to_period("M")
+    while month <= last:
+        m_start, m_end = month.start_time.normalize(), month.end_time.normalize()
+        overview = special_expenses_overview(df, m_start, m_end)
+        for item in overview.itertuples(index=False):
+            paid = pd.Timestamp(item.data)
+            amount = float(item.importo)
+            if item.quota_mese is None or pd.isna(item.quota_mese):
+                if not (m_start <= paid <= m_end):
+                    continue
+                months, rata, quota = 0, "", amount
+            else:
+                quota = float(item.quota_mese)
+                months = int(round(amount / quota)) if quota else 0
+                index = (month - paid.to_period("M")).n + 1
+                rata = f"{index}/{months}"
+            rows.append(
+                {
+                    "mese": str(month),
+                    "data": paid,
+                    "descrizione": item.descrizione or item.categoria,
+                    "categoria": item.categoria,
+                    "account": item.account,
+                    "importo": amount,
+                    "mesi": months,
+                    "rata": rata,
+                    "quota": round(quota, 2),
+                }
+            )
+        month += 1
+    if not rows:
+        return pd.DataFrame(columns=SPECIALS_COLUMNS)
+    table = pd.DataFrame(rows, columns=SPECIALS_COLUMNS)
+    return table.sort_values(
+        ["mese", "quota"], ascending=[True, False], kind="stable"
+    ).reset_index(drop=True)
 
 
 def _category_table(
@@ -228,6 +307,7 @@ def build_month_report(
         daily_average=daily_average,
         zero_spend_days=zero_spend_days,
         elapsed_days=elapsed,
+        specials=special_rows(dated, start, end),
     )
     report.highlights = _month_highlights(report, current_df)
     return report
@@ -287,6 +367,10 @@ def build_year_report(
         monthly=monthly,
         daily_average=current.metrics["uscite"] / elapsed if elapsed else 0.0,
         elapsed_days=elapsed,
+        # Anno in corso: fino al mese attuale, niente quote dei mesi futuri.
+        specials=special_rows(
+            dated, start, min(end, pd.Timestamp(today).to_period("M").end_time.normalize())
+        ),
     )
     report.highlights = _year_highlights(report, today)
     return report
@@ -402,5 +486,7 @@ __all__ = [
     "build_month_report",
     "build_year_report",
     "income_frame",
+    "investment_split",
+    "special_rows",
     "percent_change",
 ]

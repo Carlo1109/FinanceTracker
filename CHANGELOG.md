@@ -11,7 +11,10 @@ Nuova grafica, app più leggera sul telefono, pagina Report e passaggio dei dati
 - **PC ↔ telefono con Google Drive**: «Crea backup» sul PC chiede se inviarlo anche alla cartella condivisa (una cartella di Drive sul PC); sul telefono c'è **☁️ Salva su Drive** («Salva in…» di Android). Per importare, sul PC si sceglie il backup direttamente dalla cartella condivisa (📱/💻, dal più recente); sul telefono dal selettore file, dove c'è Drive. Nella cartella restano gli ultimi 10 backup per dispositivo
 - **Unisci più intelligente**: con i backup della v2.0 arrivano anche modifiche e cancellazioni fatte sull'altro dispositivo (vince la modifica più recente), non solo i movimenti nuovi; lo stesso estratto conto importato su entrambi non si duplica; anticipi e recuperi restano collegati
 - I nomi dei backup dicono da quale dispositivo arrivano (`..._pc.zip`, `..._telefono.zip`)
-- Nuova pagina **Report**: mensile (entrate, uscite, risparmio e tasso di risparmio con il confronto col mese prima, tre cose «in evidenza», calendario delle uscite giorno per giorno, spese più grandi, categorie contro il mese prima e lo stesso mese dell’anno scorso) e annuale (mese per mese, uscite accumulate anno su anno, mese migliore e più caro, categorie con media mensile)
+- Nuova pagina **Report**: mensile (entrate, uscite, risparmio e tasso di risparmio con il confronto col mese prima, tre cose «in evidenza», calendario delle uscite giorno per giorno, spese più grandi, categorie contro il mese prima e lo stesso mese dell’anno scorso) e annuale (mese per mese, uscite accumulate anno su anno, mese migliore e più caro, categorie con media mensile), con lo stesso ordine nelle due viste
+- Report: sotto il **risparmio** quanto ne hai **investito** e quanto è rimasto **liquidità** (le due parti del risparmio, non un numero in più); sul tasso di risparmio «di cui X% investito»; nell'anno l'investito totale e, in «Mese per mese», risparmio e investito di ogni mese
+- Report: scheda **Spese speciali** (mese e anno): le ripartite su N mesi compaiono in ogni mese con la quota («Rata 3/12 di 120 €»), quelle a 0 mesi solo nel mese in cui le hai pagate; nell'anno raggruppate per mese, fino al mese in corso. Il Riepilogo resta di cassa
+- Rimborsi sempre tra le entrate, in Dashboard e Report: tolta la casella «Escludi rimborsi», che toglieva il rimborso anche dal risparmio mentre la spesa restava intera. I rimborsi legati a una spesa (assicurazione, metà conto) si gestiscono con Anticipi & Recuperi (vedi MANUAL); Dashboard e Report calcolano il tasso allo stesso modo
 - Movimenti: la lista è raggruppata per giorno («Oggi», «Ieri», «Venerdì 7 novembre») con il totale del giorno; si tocca la riga per modificarla. Per unire: **Seleziona**, tocca le righe, **Unisci**
 
 ### Interfaccia
@@ -19,10 +22,12 @@ Nuova grafica, app più leggera sul telefono, pagina Report e passaggio dei dati
 - Grafica rinnovata, chiara e scura: superfici più pulite, card KPI con icona e variazione in un’etichetta colorata, card principale con il bilancio degli ultimi 12 mesi, importi con cifre allineate (Manrope), investimenti in viola
 - Nuovi grafici (ciambella, andamento mensile, barre, calendario) disegnati in SVG, con il dettaglio al passaggio del mouse o al tocco; stesso aspetto su PC e telefono
 - Menu laterale più compatto sul PC; filtri della dashboard su una riga
-- Android: barra in basso con **Report**; «Nuovo» con un + semplice (l'emoji ➕ su alcuni telefoni, es. Samsung, è un quadrato blu); filtri di Home e Movimenti in un riquadro richiudibile (la ricerca resta sempre visibile); card più basse
+- Android: barra in basso con **Report**; «Nuovo» con un + semplice (l'emoji ➕ su alcuni telefoni, es. Samsung, è un quadrato blu); filtri di Home e Movimenti in un riquadro richiudibile (la ricerca resta sempre visibile) che non si richiude scegliendo periodo, conto o tipo, col riepilogo dei filtri nella riga sotto; card più basse
 - Android: logo non più deformato nella schermata di caricamento e nella barra in alto; su Android 12+ anche la schermata di avvio di sistema mostra il logo intero
 - Android: nei menu a tendina (es. Categoria nella modifica di un movimento) le ultime voci non restano più tagliate fuori
 - Android: tabella delle categorie del report più compatta, entra nello schermo
+- Dashboard: sotto «Spesa media giornaliera» una riga corta («su 30 giorni · 2 speciali»); il dettaglio è nella sezione Spese speciali
+- Android: tolta la frase sul selettore dei file nel ripristino del backup
 - Android: dopo aver aperto e chiuso un movimento la riga non resta più grigia
 - PC: «Crea backup» salva lo zip in Download senza aprire la cartella
 - Dopo «Unisci» o «Sostituisci» resta un messaggio verde con l'esito (prima il toast spariva col ricaricamento)
@@ -32,15 +37,19 @@ Nuova grafica, app più leggera sul telefono, pagina Report e passaggio dei dati
 
 - Lista movimenti disegnata come un unico elemento (prima ~10 per riga): molti meno elementi a ogni interazione, e spuntare le righe da unire non ricarica più la pagina
 - Il riquadro «Vuoi tornare indietro?» non riesegue più l’app ogni secondo (il tempo scorre con un’animazione)
-- Dashboard e Report tengono in memoria i calcoli finché dati e filtri non cambiano; la casella «Escludi rimborsi» aggiorna solo la sua card
+- Dashboard e Report tengono in memoria i calcoli finché dati e filtri non cambiano
 - Le pagine vengono caricate solo quando si aprono; openpyxl solo quando si esporta in Excel; preferenze e controllo del database non vengono riletti a ogni interazione
 - Plotly rimosso: niente pacchetto da installare e importare all’avvio del telefono, niente plotly.js nella WebView
 - Android: lo stile dell’app (~110 KB) è un file caricato una volta sola all’avvio (`ft.css`); a ogni interazione si inviano solo le variabili del tema
 
+### Correzioni
+
+- Import Fineco: un **Autorizzato** già modificato (es. cambiando solo la categoria) a volte non veniva aggiornato dal suo **Contabilizzato** e restava doppio: salvando, la descrizione completa finiva anche in quella breve e il confronto falliva. Ora, se la descrizione non cambia, restano quelle della banca, e il confronto ignora le parole doppie (si abbinano anche gli Autorizzati modificati in passato)
+
 ### Build
 
 - `build-web.mjs` genera `ft.css` e non include più plotly; la prova offline controlla anche lista movimenti, grafici e Report
-- Test per i report (`tests/test_reports.py`) e per l'unione dei backup e la cartella condivisa (`tests/test_backup_merge.py`)
+- Test per i report (`tests/test_reports.py`: anche investito nel risparmio, rimborsi nel tasso, spese speciali mese per mese), per l'unione dei backup e la cartella condivisa (`tests/test_backup_merge.py`) e per l'Autorizzato modificato che si abbina al Contabilizzato (`tests/test_imports.py`)
 - Database: nuove colonne `uid` e `updated_at`, tabella `sync_tombstones` e trigger che le tengono aggiornate (migrazione automatica al primo avvio)
 - Android: «☁️ Salva su Drive» usa la condivisione di Android (nuovo `ShareProvider`, metodo nativo `shareFile`): lì c'è sempre «Salva su Drive», mentre «Salva in…» su molti telefoni non mostra Drive
 - Android: scegliendo un file da importare (backup o estratto conto) si apre l'elenco delle app, con Drive tra le prime, invece del solo selettore file

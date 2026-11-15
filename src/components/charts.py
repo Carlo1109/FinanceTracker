@@ -63,6 +63,8 @@ _CSS = r"""
 .ftc.has-active .bar { opacity: .45; }
 .ftc.has-active .bar.on { opacity: 1; }
 .ftc .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+/* Il calendario del report sta a tutta larghezza: celle quadrate, non oltre 620px. */
+.ftc .cal, .ftc .cal-scale { max-width: 620px; margin-left: auto; margin-right: auto; }
 .ftc .cal .dow { font-size: 11px; font-weight: 700; color: var(--ft-subtle, #94a3b8); text-align: center; padding-bottom: 2px; }
 .ftc .cal .day {
   position: relative; aspect-ratio: 1 / 1; border-radius: 9px;

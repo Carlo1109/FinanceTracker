@@ -893,32 +893,18 @@ def loan_flow_summary(
     }
 
 
-def refund_income(df: pd.DataFrame) -> float:
-    """Entrate operative in categoria Rimborsi (regali e donazioni restano fuori)."""
-    if df.empty:
-        return 0.0
-    working = _for_metrics(df)
-    if working.empty:
-        return 0.0
-    mask = (working["importo"] > 0) & (working["categoria"] == RIMBORSO_CATEGORY)
-    return float(working.loc[mask, "importo"].sum())
+def savings_rate(metrics: dict[str, float]) -> float | None:
+    """Tasso di risparmio in %: bilancio / entrate * 100.
 
-
-def savings_rate(
-    metrics: dict[str, float],
-    *,
-    exclude_refunds: bool = False,
-    refunds: float = 0.0,
-) -> float | None:
-    """Tasso di risparmio in %: (bilancio / entrate) * 100.
-
-    Con exclude_refunds i rimborsi non contano come reddito; regali e donazioni sì.
+    Il bilancio è entrate meno uscite: comprende quanto è stato investito
+    (gli investimenti non sono uscite) e i rimborsi contano come entrate.
+    Un rimborso legato a una spesa (es. assicurazione) va gestito con
+    Anticipi & Recuperi, che restano fuori da entrate e uscite.
     """
-    refunds_cut = max(float(refunds or 0), 0.0) if exclude_refunds else 0.0
-    entrate = float(metrics.get("entrate") or 0) - refunds_cut
+    entrate = float(metrics.get("entrate") or 0)
     if entrate <= 0:
         return None
-    bilancio = float(metrics.get("bilancio") or 0) - refunds_cut
+    bilancio = float(metrics.get("bilancio") or 0)
     return bilancio / entrate * 100
 
 

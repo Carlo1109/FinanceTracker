@@ -47,7 +47,6 @@ from src.services.analytics import (
     get_value_comparison,
     monthly_flow_totals,
     normalize_date_column,
-    refund_income,
     resolve_analysis_bounds,
     savings_rate,
     special_expense_summary,
@@ -59,6 +58,7 @@ from src.services.analytics import (
 from src.services.backup_service import restore_backup
 from src.services.categories import get_category_icon, load_category_definitions
 from src.services.movement_service import load_movements
+from src.services.reports import month_name
 from src.theme.colors import get_category_colors
 from src.theme.tokens import resolve_semantic
 from src.utils.formatting import euro, signed_euro
@@ -172,21 +172,17 @@ def _dashboard_data(
         period_end=analysis_end,
     )
 
-    daily_footer_parts = [f"su {period_days} giorni"]
-    amortized_count = int(special_summary["amortized_count"])
-    amortized_amount = float(special_summary["amortized_amount"])
-    excluded_count = int(special_summary["excluded_count"])
-    excluded_total = float(special_summary["excluded_total"])
-    if amortized_count > 0:
-        noun = "ripartita" if amortized_count == 1 else "ripartite"
-        daily_footer_parts.append(
-            f"{amortized_count} {noun} ({euro(amortized_amount)} nel periodo)"
-        )
-    if excluded_count > 0:
-        noun = "esclusa" if excluded_count == 1 else "escluse"
-        daily_footer_parts.append(
-            f"{excluded_count} {noun} ({euro(excluded_total)})"
-        )
+    # Riga corta: il dettaglio (ripartite / escluse) è nella sezione
+    # «Spese speciali» qui sotto, nella card non ci starebbe.
+    daily_footer_parts = [
+        f"{period_days} giorni" if IS_ANDROID else f"su {period_days} giorni"
+    ]
+    specials_count = int(special_summary["amortized_count"]) + int(
+        special_summary["excluded_count"]
+    )
+    if specials_count > 0 and not IS_ANDROID:
+        noun = "speciale" if specials_count == 1 else "speciali"
+        daily_footer_parts.append(f"{specials_count} {noun}")
 
     previous_bounds = get_previous_period_bounds(
         period=period,
@@ -278,7 +274,6 @@ def _dashboard_data(
         "comparison_caption": comparison_caption,
         "top_expense": top_expense_category(filtered_df),
         "top_income": top_income_category(filtered_df),
-        "refunds": refund_income(filtered_df),
         "special_overview": special_expenses_overview(
             specials_source_df,
             analysis_start,
@@ -481,24 +476,13 @@ def _render_monthly_chart(monthly: pd.DataFrame) -> None:
     )
 
 
-@st.fragment
-def _savings_card(metrics: dict, refunds: float) -> None:
-    """Card del tasso di risparmio: la casella aggiorna solo questa card."""
-    exclude_refunds = bool(
-        st.session_state.get("dashboard_savings_ex_refunds", False)
-    )
-    rate = savings_rate(
-        metrics,
-        exclude_refunds=exclude_refunds,
-        refunds=refunds,
-    )
+def _savings_card(metrics: dict) -> None:
+    """Card del tasso di risparmio (rimborsi compresi tra le entrate)."""
+    rate = savings_rate(metrics)
     if rate is None:
         savings_label = "—"
         savings_color = MUTED_COLOR
-        if exclude_refunds and refunds > 0:
-            savings_footer = "serve almeno un’entrata oltre i rimborsi"
-        else:
-            savings_footer = "serve almeno un’entrata"
+        savings_footer = "serve almeno un’entrata"
     else:
         savings_label = f"{rate:.1f}".replace(".", ",") + "%"
         savings_color = INCOME_COLOR if rate >= 0 else EXPENSE_COLOR
@@ -518,14 +502,6 @@ def _savings_card(metrics: dict, refunds: float) -> None:
         value_color=savings_color,
         footer=savings_footer,
         extra_class="ft-savings-rate-card",
-    )
-    st.checkbox(
-        "Escludi rimborsi",
-        key="dashboard_savings_ex_refunds",
-        help=(
-            "I rimborsi non sono reddito: toglierli evita di gonfiare "
-            "il risparmio. Regali e donazioni restano."
-        ),
     )
 
 
@@ -611,8 +587,7 @@ def _render_empty_state() -> None:
 def _filter_summary(accounts: list[str]) -> str:
     period = st.session_state.get("dashboard_period", "Tutto")
     if period == "Mese specifico" and st.session_state.get("dashboard_month"):
-        labels, _ = month_labels([str(st.session_state["dashboard_month"])])
-        period = labels[0]
+        period = month_name(pd.Period(str(st.session_state["dashboard_month"]), freq="M"))
     account_label = accounts_chip_label(
         list(st.session_state.get("dashboard_accounts") or []), accounts
     )
@@ -669,8 +644,10 @@ def _render_filters(
 
     if IS_ANDROID:
         # Sul telefono i filtri stanno in un riquadro richiudibile:
-        # la Home parte subito dai numeri.
-        with st.expander(f"Filtri · {_filter_summary(accounts)}"):
+        # la Home parte subito dai numeri. Il titolo resta sempre «Filtri»:
+        # se cambiasse col riepilogo, Streamlit ricreerebbe il riquadro
+        # chiuso a ogni scelta (es. «Mese specifico» → poi il mese).
+        with st.expander("Filtri"):
             period = st.selectbox("Periodo", PERIOD_OPTIONS, key="dashboard_period")
             period_fields()
             selected_accounts = st.pills(
@@ -689,6 +666,8 @@ def _render_filters(
                 key="dashboard_types",
                 help="Nessuno selezionato = tutti i movimenti.",
             )
+        # Riepilogo sotto il riquadro, dopo i filtri: già aggiornato.
+        st.caption(_filter_summary(accounts))
     else:
         with st.container(key="ft_filter_bar"):
             c1, c2, c3 = st.columns([1.15, 1.6, 1.25], gap="medium")
@@ -865,7 +844,7 @@ def show_dashboard() -> None:
             footer=data["daily_footer"],
         )
     with s4:
-        _savings_card(metrics, float(data["refunds"]))
+        _savings_card(metrics)
 
     _render_specials(data["special_overview"])
 

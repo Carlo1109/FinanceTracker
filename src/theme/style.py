@@ -559,40 +559,6 @@ p, label, span, div, .stCaption {
     }
 }
 
-/* Flag rimborsi: stesso riquadro HTML delle altre info card. */
-.ft-info-card.ft-savings-rate-card {
-    padding-bottom: 52px !important;
-}
-
-[data-testid="stColumn"]:has(.ft-savings-rate-card) {
-    position: relative;
-}
-
-[data-testid="stColumn"]:has(.ft-savings-rate-card)
-[data-testid="stElementContainer"]:has([data-testid="stCheckbox"]) {
-    position: absolute;
-    left: 18px;
-    right: 14px;
-    bottom: 14px;
-    z-index: 2;
-    width: auto !important;
-    margin: 0 !important;
-    padding: 0 !important;
-}
-
-[data-testid="stColumn"]:has(.ft-savings-rate-card)
-[data-testid="stCheckbox"] {
-    min-height: 0 !important;
-    padding: 0 !important;
-}
-
-[data-testid="stColumn"]:has(.ft-savings-rate-card)
-[data-testid="stCheckbox"] label p {
-    font-size: 12px;
-    font-weight: 650;
-    color: var(--ft-muted);
-}
-
 /* ---- Content surfaces ---- */
 
 .stButton > button p,

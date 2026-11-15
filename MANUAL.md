@@ -17,7 +17,9 @@ Ogni movimento tocca il **conto**. Non tutti toccano il **tenore di vita**.
 
 Se Fineco «sembra ricca» in liquidità e «povera» nel tasso, di solito c’è un giroconto in entrata: soldi già tuoi, non reddito.
 
-**Tasso di risparmio** = (entrate − uscite) / entrate. I rimborsi, se non spunti **Escludi rimborsi**, contano come entrate. I regali restano.
+**Risparmio** = entrate − uscite. Comprende anche quanto hai **investito** (gli investimenti non sono uscite): il Report lo divide in *investito* e *liquidità*, che sommati fanno il risparmio.
+
+**Tasso di risparmio** = risparmio / entrate. I **Rimborsi** contano come entrate, i regali anche. Un rimborso legato a una tua spesa (assicurazione, metà conto) va in **Anticipi & Recuperi**: vedi sotto.
 
 ---
 
@@ -51,6 +53,7 @@ PAC, ETF, compravendita titoli.
 
 - KPI **Investimenti** a parte
 - **Non** abbassano il tasso di risparmio (li tratti come già messi da parte)
+- Nel Report sono **dentro** il risparmio: «Investito 300 € · Liquidità 1.070 €» sotto il totale, e «di cui X% investito» sotto il tasso
 - Restano nella liquidità del conto (i soldi sono usciti da Fineco)
 
 Esempio: -50 € Compravendita Titoli. Uscite del mese invariate; liquidità Fineco -50.
@@ -69,17 +72,22 @@ Esempio: anticipi 50 € per un bus (−50 Anticipi & Recuperi). Quando tornano 
 
 Non usare Anticipi & Recuperi per l’affitto o la spesa del mese: quello è consumo, non un prestito.
 
+**Rimborso di una spesa (assicurazione, metà conto).** Quando paghi, l’uscita va nella sua categoria (es. Salute). Se e quando arriva il rimborso:
+
+- **Rimborso totale** (pagati 300 €, rimborsati 300 €): cambia la categoria dell’uscita in Anticipi & Recuperi, metti anche l’entrata in Anticipi & Recuperi e collegale. La pratica si chiude a zero: la spesa non conta più né in uscite né in entrate, anche nel mese in cui l’avevi pagata.
+- **Rimborso parziale** (pagati 300 €, rimborsati 200 €): **dividi** l’uscita in 200 € Anticipi & Recuperi + 100 € nella sua categoria, poi collega i 200 € all’entrata. Così in uscite resta solo quello che hai speso davvero (100 €).
+
+Se sposti tutti i 300 € in Anticipi & Recuperi ma te ne tornano 200, i 100 € spesi spariscono dalle uscite e la pratica resta aperta a −100 €.
+
 ### Rimborsi
 
-Soldi che **ti tornano** (reso, assicurazioni, metà conto che paga un altro). È un’entrata vera.
+Soldi che **ti tornano** e non sono legati a una tua spesa da sistemare, per esempio dallo **Stato** (rimborso 730, conguaglio in busta paga). È un’entrata vera.
 
-- Restano nelle entrate
-- **Escludi rimborsi** sul tasso: non gonfiare il risparmio con i resi
+- Contano nelle entrate e nel tasso di risparmio, ovunque (Dashboard e Report)
 - I **regali ricevuti** non vanno qui: **Regali & Donazioni**
+- Rimborso di una spesa che hai fatto tu (assicurazione, coinquilino che ti ridà la sua metà): **Anticipi & Recuperi**, vedi sopra
 
-Esempio: −80 € Esselunga. +40 € dal coinquilino → Rimborsi. L’Esselunga non si cancella.
-
-Non collegare rimborso e spesa: non è una pratica come i prestiti. Se la spesa è mista, **dividi** in partenza.
+Esempio: +350 € rimborso 730 → Rimborsi.
 
 ### Regali & Donazioni
 
@@ -97,6 +105,8 @@ Non è possibile su trasferimenti interni, anticipi e recuperi, saldo iniziale, 
 
 Esempio: −120 € Netflix annuale, speciale 12 mesi. In uscite ci sono 120 € associati al mese in cui hai pagato; in media giornaliera pesa come 10 €/mese.
 
+Nel **Report**, scheda **Spese speciali**: la Netflix compare in ognuno dei 12 mesi con la sua quota («Rata 3/12 di 120 €», 10 €); una speciale a 0 mesi compare solo nel mese in cui l’hai pagata, per intero.
+
 ---
 
 
@@ -109,7 +119,7 @@ Esempio: −120 € Netflix annuale, speciale 12 mesi. In uscite ci sono 120 €
 
 Fineco, PostePay, Revolut, PayPal, più l’inserimento manuale. Scegli il **conto**.
 
-Fineco: se reimporti, la stessa riga (stesso hash) si salta. Un **Autorizzato** può diventare **Contabilizzato** (stesso importo, stesso esercente, date entro 2 giorni). Categoria e note tue restano. Se due coppie sono ambigue, inserisce e segnala «da rivedere».
+Fineco: se reimporti, la stessa riga (stesso hash) si salta. Un **Autorizzato** può diventare **Contabilizzato** (stesso importo, stesso esercente, date entro 2 giorni). Categoria e note tue restano, anche se l’Autorizzato l’avevi già modificato (es. cambiando la categoria). Se rinomini la descrizione l’app non riconosce più l’esercente: in quel caso, se resta un doppione, uniscili. Se due coppie sono ambigue, inserisce e segnala «da rivedere».
 
 ### Cercare e filtrare
 
@@ -119,10 +129,16 @@ Anticipi & Recuperi e trasferimenti **non** compaiono se filtri solo Entrate o U
 
 ### Report
 
-Pagina **Report**: scegli **Mese** o **Anno** (e, se vuoi, i conti).
+Pagina **Report**: scegli **Mese** o **Anno** (e, se vuoi, i conti). Due schede: **Riepilogo** e **Spese speciali**.
 
-- **Mese**: entrate, uscite, risparmio e tasso di risparmio con il confronto col mese prima; tre cose «in evidenza» (la categoria cresciuta di più, quella su cui hai risparmiato, la spesa più grande o i giorni senza spese); il **calendario** colorato in base a quanto hai speso ogni giorno (tocca un giorno per il dettaglio); le spese più grandi; la tabella delle categorie contro il mese prima e lo stesso mese dell’anno scorso.
-- **Anno**: entrate e uscite mese per mese, le **uscite accumulate** contro l’anno prima (anno su anno), mese migliore e più caro, categorie contro l’anno prima con la media mensile.
+Il **Riepilogo** ha lo stesso ordine per mese e anno:
+
+1. entrate, uscite, **risparmio** (con sotto *investito* e *liquidità*: le due parti del risparmio) e **tasso di risparmio** (con «di cui X% investito»), col confronto col periodo prima;
+2. tre cose «in evidenza» (mese: la categoria cresciuta di più, quella su cui hai risparmiato, la spesa più grande o i giorni senza spese; anno: mese migliore, più caro, categoria principale);
+3. l’andamento: nel mese il **calendario** colorato in base a quanto hai speso ogni giorno (tocca un giorno per il dettaglio); nell’anno entrate e uscite **mese per mese** (nel dettaglio di ogni mese anche risparmio e investito) e le **uscite accumulate** contro l’anno prima;
+4. le **categorie a confronto** (mese: contro il mese prima e lo stesso mese dell’anno scorso; anno: contro l’anno prima, con la media mensile) e **le spese più grandi**.
+
+La scheda **Spese speciali** elenca le speciali del mese (o dell’anno, mese per mese, fino al mese in corso): le ripartite con la quota del mese, quelle a 0 mesi solo nel mese pagato. Il Riepilogo conta invece le uscite quando le paghi.
 
 Valgono le stesse regole della dashboard: trasferimenti, saldo iniziale e anticipi & recuperi restano fuori; gli investimenti sono a parte.
 
@@ -192,4 +208,4 @@ Le keyword sono pezzi di testo dell’estratto (`ESSELUNGA`, `ENI`).
 
 ## 5. In due parole
 
-Il conto vede i soldi. Entrate e uscite vedono come vivi. Trasferimenti, saldo iniziale e prestiti sistemano la cassa senza sporcare il mese. Rimborsi e regali restano nel mese; i prestiti si legano in una pratica. In dubbio, non inventare quote: preponderante + nota, oppure lascia il netto in Casa.
+Il conto vede i soldi. Entrate e uscite vedono come vivi. Trasferimenti, saldo iniziale e prestiti sistemano la cassa senza sporcare il mese. Rimborsi (es. dallo Stato) e regali restano nel mese; prestiti e rimborsi di una tua spesa si legano in una pratica di Anticipi & Recuperi. In dubbio, non inventare quote: preponderante + nota, oppure lascia il netto in Casa.

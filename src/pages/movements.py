@@ -77,6 +77,7 @@ from src.services.movement_service import (
     undo_movement_action,
     update_movement,
 )
+from src.services.reports import month_name
 from src.utils.export_excel import (
     movements_export_filename,
 )
@@ -522,7 +523,11 @@ def _day_label(value) -> str:
 def _movement_filter_summary(accounts: list[str]) -> str:
     period = st.session_state.get("movements_period_mode", "Tutto")
     if period == "Mese specifico" and st.session_state.get("movements_month"):
-        period = str(st.session_state["movements_month"])
+        month = str(st.session_state["movements_month"])
+        try:
+            period = month_name(pd.Period(month, freq="M"))
+        except (ValueError, TypeError):
+            period = month
     parts = [str(period)]
     picked = list(st.session_state.get("movements_accounts") or [])
     if picked:
@@ -1254,7 +1259,10 @@ def show_movements() -> None:
             key="movements_search",
             label_visibility="collapsed",
         )
-        filters_box = st.expander(f"Filtri · {_movement_filter_summary(accounts)}")
+        # Titolo fisso: se cambiasse col riepilogo, il riquadro si
+        # richiuderebbe a ogni scelta. Il riepilogo va sotto il riquadro,
+        # scritto dopo i filtri così è già aggiornato.
+        filters_box = st.expander("Filtri")
     else:
         render_section_title("Filtri")
         filters_box = styled_panel()
@@ -1354,6 +1362,8 @@ def show_movements() -> None:
                     placeholder="Lidl, PayPal, Trenitalia...",
                     key="movements_search",
                 )
+    if IS_ANDROID:
+        st.caption(_movement_filter_summary(accounts))
 
     search_term = (search or "").strip()
     if search_term:

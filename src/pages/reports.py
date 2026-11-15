@@ -23,11 +23,13 @@ from src.services.analytics import filter_by_accounts, get_value_comparison
 from src.services.categories import get_category_icon, load_category_definitions
 from src.services.movement_service import load_movements
 from src.services.reports import (
+    MONTHS_IT,
     Report,
     available_months,
     available_years,
     build_month_report,
     build_year_report,
+    investment_split,
     month_name,
 )
 from src.theme.colors import get_category_colors
@@ -104,6 +106,7 @@ def _render_kpis(report: Report) -> None:
             subtitle=text,
             subtitle_color=color,
         )
+    split = investment_split(cur)
     with c3:
         text, color = comparison("bilancio", True)
         balance = float(cur["bilancio"])
@@ -115,8 +118,17 @@ def _render_kpis(report: Report) -> None:
             subtitle=text,
             subtitle_color=color,
             tone="accent",
+            extra_html=_savings_split_html(split, balance),
         )
     with c4:
+        share = split["quota_entrate"]
+        note = ""
+        if split["investito"] > 0.005 and share is not None:
+            note = (
+                '<div class="ft-kpi-note">di cui '
+                + f"{share:.1f}".replace(".", ",")
+                + "% investito</div>"
+            )
         render_kpi_card(
             "Tasso risparmio",
             rate_label,
@@ -125,7 +137,118 @@ def _render_kpis(report: Report) -> None:
             subtitle=rate_delta,
             subtitle_color=rate_color,
             tone="accent",
+            extra_html=note,
         )
+
+
+def _savings_split_html(split: dict, balance: float) -> str:
+    """Barretta «Investito · Liquidità»: le due parti del risparmio, non un extra."""
+    invested = float(split["investito"])
+    cash = float(split["liquidita"])
+    if invested < 0.005:
+        return ""
+    cash_class = "is-bad" if cash < 0 else ""
+    text = (
+        '<div class="ft-split-legend">'
+        f'<span><i class="is-invest"></i>Investito {html.escape(euro(invested))}</span>'
+        f'<span class="{cash_class}"><i class="is-cash"></i>Liquidità '
+        f"{html.escape(signed_euro(cash) if cash < 0 else euro(cash))}</span>"
+        "</div>"
+    )
+    bar = ""
+    if balance > 0.005:
+        invested_pct = max(0.0, min(invested / balance * 100, 100.0))
+        bar = (
+            '<div class="ft-split-bar">'
+            f'<span class="is-invest" style="width:{invested_pct:.1f}%"></span>'
+            f'<span class="is-cash" style="width:{100 - invested_pct:.1f}%"></span>'
+            "</div>"
+        )
+    return f'<div class="ft-split">{bar}{text}</div>'
+
+
+def _render_specials(report: Report) -> None:
+    """Scheda «Spese speciali»: quote dei ripartiti e speciali pagati nel mese."""
+    table = report.specials
+    if table is None or table.empty:
+        render_html(
+            '<div class="ft-specials-hint">Nessuna spesa speciale in questo periodo. '
+            "Segna una spesa come speciale dal suo dettaglio in Movimenti.</div>"
+        )
+        return
+    total = float(table["quota"].sum())
+    is_month = report.kind == "month"
+    render_section_title(
+        "Spese speciali",
+        (
+            f"Quote del mese delle spese ripartite e spese pagate in {report.title}"
+            if is_month
+            else f"Mese per mese nel {report.title}"
+        ),
+    )
+    _card(
+        "specials",
+        f"Totale {'nel mese' if is_month else 'nell’anno'} · {euro(total)}",
+        lambda: render_html(_specials_table_html(table, is_month)),
+    )
+    st.caption(
+        "Le ripartite su N mesi compaiono in ogni mese con la loro quota; "
+        "quelle su 0 mesi solo nel mese in cui le hai pagate. "
+        "Le altre schede del report contano le uscite quando le paghi."
+    )
+
+
+def _specials_row_html(item) -> str:
+    name = html.escape(str(item.descrizione))
+    category = str(item.categoria)
+    paid = pd.Timestamp(item.data).strftime("%d/%m/%Y")
+    if int(item.mesi) > 0:
+        mode = f"Rata {html.escape(str(item.rata))} di {html.escape(euro(float(item.importo)))}"
+    else:
+        mode = "Solo nel mese pagato"
+    meta = (
+        f"{html.escape(get_category_icon(category))} {html.escape(category)} · "
+        f"pagata il {paid}"
+    )
+    if IS_ANDROID:
+        return (
+            "<tr>"
+            f'<td><div class="ft-spec-name">{name}</div>'
+            f'<div class="ft-spec-meta">{meta} · {mode}</div></td>'
+            f"<td>{html.escape(euro(float(item.quota)))}</td>"
+            "</tr>"
+        )
+    return (
+        "<tr>"
+        f'<td><div class="ft-spec-name">{name}</div>'
+        f'<div class="ft-spec-meta">{meta} · {html.escape(str(item.account))}</div></td>'
+        f'<td class="is-muted">{mode}</td>'
+        f"<td>{html.escape(euro(float(item.quota)))}</td>"
+        "</tr>"
+    )
+
+
+def _specials_table_html(table: pd.DataFrame, is_month: bool) -> str:
+    columns = 2 if IS_ANDROID else 3
+    head = "<th>Spesa</th>" + ("" if IS_ANDROID else "<th>Ripartizione</th>") + "<th>Nel mese</th>"
+    body: list[str] = []
+    for month, group in table.groupby("mese", sort=True):
+        if not is_month:
+            period = pd.Period(str(month), freq="M")
+            body.append(
+                f'<tr class="is-group"><td colspan="{columns - 1}">'
+                f"{html.escape(MONTHS_IT[period.month - 1])}</td>"
+                f"<td>{html.escape(euro(float(group['quota'].sum())))}</td></tr>"
+            )
+        body.extend(_specials_row_html(item) for item in group.itertuples(index=False))
+    body.append(
+        f'<tr class="is-total"><td colspan="{columns - 1}">Totale</td>'
+        f"<td>{html.escape(euro(float(table['quota'].sum())))}</td></tr>"
+    )
+    return (
+        '<div class="ft-cmp-scroll"><table class="ft-cmp-table ft-spec-table">'
+        f"<thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody></table></div>"
+    )
 
 
 def _render_highlights(report: Report) -> None:
@@ -263,39 +386,50 @@ def _card(key: str, title: str, body) -> None:
         body()
 
 
-def _render_month(report: Report) -> None:
-    _render_kpis(report)
-    render_section_title("In evidenza")
-    _render_highlights(report)
-
+def _render_bottom(report: Report) -> None:
+    """Categorie a confronto e spese più grandi: stessa riga in mese e anno."""
     if IS_ANDROID:
         left = right = st.container()
     else:
-        left, right = st.columns([1.05, 1], gap="medium")
+        left, right = st.columns([1.35, 1], gap="medium")
     with left:
-        render_section_title("Calendario delle uscite")
+        if report.kind == "month":
+            subtitle = f"{report.current.label} rispetto a {report.previous.label}"
+            if report.last_year is not None and not IS_ANDROID:
+                subtitle += f" e a {report.last_year.label}"
+            card_title = "Uscite per categoria"
+        else:
+            subtitle = None
+            card_title = f"{report.title} contro {report.previous.label}"
+        render_section_title("Categorie a confronto", subtitle)
         _card(
-            "calendar",
-            f"{report.title} · {'tocca' if IS_ANDROID else 'passa su'} un giorno per il dettaglio",
-            lambda: calendar_heatmap(
-                report.days,
-                key="ft_report_calendar",
-                offset=report.calendar_offset,
-            ),
+            "categories",
+            card_title,
+            lambda: render_html(_category_table_html(report)),
         )
     with right:
         render_section_title("Le spese più grandi")
         _card("top", report.title, lambda: render_html(_top_expenses_html(report)))
 
-    subtitle = f"{report.current.label} rispetto a {report.previous.label}"
-    if report.last_year is not None and not IS_ANDROID:
-        subtitle += f" e a {report.last_year.label}"
-    render_section_title("Categorie a confronto", subtitle)
+
+def _render_month(report: Report) -> None:
+    # Ordine comune a mese e anno: KPI, in evidenza, andamento, categorie + spese.
+    _render_kpis(report)
+    render_section_title("In evidenza")
+    _render_highlights(report)
+
+    render_section_title("Calendario delle uscite")
     _card(
-        "categories",
-        "Uscite per categoria",
-        lambda: render_html(_category_table_html(report)),
+        "calendar",
+        f"{report.title} · {'tocca' if IS_ANDROID else 'passa su'} un giorno per il dettaglio",
+        lambda: calendar_heatmap(
+            report.days,
+            key="ft_report_calendar",
+            offset=report.calendar_offset,
+        ),
     )
+
+    _render_bottom(report)
 
 
 def _render_year(report: Report) -> None:
@@ -307,6 +441,12 @@ def _render_year(report: Report) -> None:
     sem = resolve_semantic()
     year = int(report.title)
     today = date.today()
+
+    def savings_tip(balance: float, invested: float) -> tuple[str, str]:
+        text = signed_euro(balance)
+        if invested > 0.005:
+            text += f" (investito {euro(invested)})"
+        return ("Risparmio", text)
 
     render_section_title("Mese per mese")
     _card(
@@ -322,7 +462,10 @@ def _render_year(report: Report) -> None:
             kind="bar",
             height=250 if IS_ANDROID else 300,
             tooltip_extra=[
-                ("Bilancio", signed_euro(value)) for value in monthly["bilancio"].tolist()
+                savings_tip(float(balance), float(invested))
+                for balance, invested in zip(
+                    monthly["bilancio"].tolist(), monthly["investimenti"].tolist()
+                )
             ],
         ),
     )
@@ -361,20 +504,7 @@ def _render_year(report: Report) -> None:
             ),
         )
 
-    if IS_ANDROID:
-        left = right = st.container()
-    else:
-        left, right = st.columns([1.35, 1], gap="medium")
-    with left:
-        render_section_title("Categorie a confronto")
-        _card(
-            "categories",
-            f"{report.title} contro {report.previous.label}",
-            lambda: render_html(_category_table_html(report)),
-        )
-    with right:
-        render_section_title("Le spese più grandi")
-        _card("top", report.title, lambda: render_html(_top_expenses_html(report)))
+    _render_bottom(report)
 
 
 def show_reports() -> None:
@@ -456,7 +586,13 @@ def show_reports() -> None:
         st.info("Nessun movimento in questo periodo per i conti scelti.")
         return
 
-    if report.kind == "month":
-        _render_month(report)
-    else:
-        _render_year(report)
+    # Etichette fisse: se cambiassero (es. con un conteggio) Streamlit
+    # tornerebbe alla prima scheda a ogni cambio di mese.
+    summary_tab, specials_tab = st.tabs(["Riepilogo", "Spese speciali"])
+    with summary_tab:
+        if report.kind == "month":
+            _render_month(report)
+        else:
+            _render_year(report)
+    with specials_tab:
+        _render_specials(report)

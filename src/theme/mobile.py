@@ -597,36 +597,6 @@ input, textarea, select, [data-testid="stSelectbox"] input {
         overflow: hidden !important;
     }
 
-    .ft-info-card.ft-savings-rate-card {
-        padding-bottom: 46px !important;
-    }
-
-    /* Testo sopra la casella: al massimo una riga, mai sotto la casella. */
-    .ft-savings-rate-card > div:last-child {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 100%;
-    }
-
-    [data-testid="stColumn"]:has(.ft-savings-rate-card)
-    [data-testid="stElementContainer"]:has([data-testid="stCheckbox"]) {
-        left: 12px !important;
-        right: 10px !important;
-        bottom: 10px !important;
-    }
-
-    [data-testid="stColumn"]:has(.ft-savings-rate-card) [data-testid="stCheckbox"] label {
-        gap: 6px !important;
-        min-height: 28px !important;
-    }
-
-    [data-testid="stColumn"]:has(.ft-savings-rate-card) [data-testid="stCheckbox"] label * {
-        white-space: nowrap !important;
-        overflow: visible !important;
-        text-overflow: clip !important;
-        font-size: 12px !important;
-    }
 
     .ft-kpi-value {
         font-size: clamp(15px, 13cqi, 26px) !important;
