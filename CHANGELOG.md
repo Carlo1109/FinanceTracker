@@ -19,7 +19,7 @@ Nuova grafica, app più leggera sul telefono, pagina Report e passaggio dei dati
 
 ### Interfaccia
 
-- Grafica rinnovata, chiara e scura: superfici più pulite, card KPI con icona e variazione in un’etichetta colorata, card principale con il bilancio degli ultimi 12 mesi, importi con cifre allineate (Manrope), investimenti in viola
+- Grafica rinnovata, chiara e scura: superfici più pulite, card KPI con icona e variazione in un’etichetta colorata, card principale con la liquidità e il suo andamento negli ultimi 12 mesi (il bilancio del periodo passa tra le card sotto), importi con cifre allineate (Manrope), investimenti in viola
 - Nuovi grafici (ciambella, andamento mensile, barre, calendario) disegnati in SVG, con il dettaglio al passaggio del mouse o al tocco; stesso aspetto su PC e telefono
 - Menu laterale più compatto sul PC; filtri della dashboard su una riga
 - Android: barra in basso con **Report**; «Nuovo» con un + semplice (l'emoji ➕ su alcuni telefoni, es. Samsung, è un quadrato blu); filtri di Home e Movimenti in un riquadro richiudibile (la ricerca resta sempre visibile) che non si richiude scegliendo periodo, conto o tipo, col riepilogo dei filtri nella riga sotto; card più basse

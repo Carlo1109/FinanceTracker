@@ -47,6 +47,7 @@ from src.services.analytics import (
     get_rate_comparison,
     get_value_comparison,
     monthly_flow_totals,
+    monthly_liquidity,
     normalize_date_column,
     resolve_analysis_bounds,
     savings_rate,
@@ -260,14 +261,11 @@ def _dashboard_data(
                 previous_end,
             )
 
-    # Andamento del bilancio negli ultimi 12 mesi (per la card principale).
-    trend_scope = filter_by_movement_types(account_scope, types_filter)
-    trend = monthly_flow_totals(trend_scope)
-    if not trend.empty and analysis_end is not None and pd.notna(analysis_end):
-        last_month = pd.Timestamp(analysis_end).strftime("%Y-%m")
-        trend = trend[trend["mese"].astype(str) <= last_month]
-    trend = trend.tail(12)
-    spark_values = (trend["entrate"] - trend["uscite"]).round(2).tolist()
+    # Liquidità a fine mese negli ultimi 12 mesi (per la card principale):
+    # stessi conti della liquidità, l'ultimo punto è la liquidità mostrata.
+    spark_values = (
+        monthly_liquidity(account_scope, through=analysis_end).tail(12).round(2).tolist()
+    )
 
     return {
         "metrics": metrics,
@@ -288,6 +286,7 @@ def _dashboard_data(
         "monthly": monthly_flow_totals(filtered_df),
         "spark_values": spark_values,
         "spark_months": len(spark_values),
+        "liquidity_date": analysis_end,
     }
 
 
@@ -763,27 +762,28 @@ def show_dashboard() -> None:
     deltas = data["deltas"]
     bilancio = float(metrics["bilancio"])
 
-    period_label = period
-    if period == "Mese specifico" and selected_month:
-        period_label = month_labels([str(selected_month)])[0][0]
-    context = (
-        f"{period_label} · {accounts_chip_label(selected_accounts, accounts)}"
-        f" · {types_chip_label(selected_types)}"
-    )
+    # Card principale: la liquidità (quanto c'è sui conti), con l'andamento
+    # a fine mese. Il bilancio del periodo è tra le card qui sotto.
+    liquidity_date = data["liquidity_date"]
+    context_parts = []
+    if liquidity_date is not None and pd.notna(liquidity_date):
+        context_parts.append(f"Al {pd.Timestamp(liquidity_date).strftime('%d/%m/%Y')}")
+    context_parts.append(accounts_chip_label(selected_accounts, accounts))
     spark_count = int(data["spark_months"])
     render_hero_card(
-        title="Bilancio del periodo",
-        main_value=signed_euro(bilancio),
-        main_color=BALANCE_COLOR if bilancio >= 0 else EXPENSE_COLOR,
-        subtitle=deltas["bilancio"][0],
-        subtitle_color=deltas["bilancio"][1],
-        context=context,
+        title="Liquidità",
+        main_value=signed_euro(saldo),
+        main_color=LIQUIDITY_COLOR if saldo >= 0 else EXPENSE_COLOR,
+        subtitle=deltas["saldo"][0],
+        subtitle_color=deltas["saldo"][1],
+        context=" · ".join(context_parts),
         spark_values=data["spark_values"],
         spark_caption=(
-            f"Bilancio mensile · ultimi {spark_count} mesi"
+            f"Andamento negli ultimi {spark_count} mesi"
             if spark_count > 1
             else None
         ),
+        spark_include_zero=False,
     )
     if data["comparison_caption"]:
         st.caption(f"Confronto: {data['comparison_caption']}")
@@ -815,11 +815,11 @@ def show_dashboard() -> None:
         )
     with k4:
         render_kpi_card(
-            "Liquidità",
-            signed_euro(saldo),
-            value_color=LIQUIDITY_COLOR if saldo >= 0 else EXPENSE_COLOR,
-            subtitle=deltas["saldo"][0],
-            subtitle_color=deltas["saldo"][1],
+            "Bilancio",
+            signed_euro(bilancio),
+            value_color=BALANCE_COLOR if bilancio >= 0 else EXPENSE_COLOR,
+            subtitle=deltas["bilancio"][0],
+            subtitle_color=deltas["bilancio"][1],
             tone="accent",
         )
 

@@ -136,6 +136,29 @@ def calculate_account_balance(
     )
 
 
+def monthly_liquidity(
+    df: pd.DataFrame,
+    *,
+    through: pd.Timestamp | None = None,
+) -> pd.Series:
+    """
+    Liquidità a fine mese (come calculate_account_balance), un valore per
+    ogni mese dal primo movimento, anche quelli senza movimenti. L'ultimo
+    valore è la liquidità a «through».
+    """
+    if df.empty or "importo" not in df.columns or "data" not in df.columns:
+        return pd.Series(dtype=float)
+    dated = normalize_date_column(df)
+    dated = dated[dated["data"].notna()]
+    if through is not None:
+        dated = dated[dated["data"] <= pd.Timestamp(through).normalize()]
+    if dated.empty:
+        return pd.Series(dtype=float)
+    amounts = pd.to_numeric(dated["importo"], errors="coerce").fillna(0)
+    by_month = amounts.groupby(dated["data"].dt.to_period("M")).sum()
+    months = pd.period_range(by_month.index.min(), by_month.index.max(), freq="M")
+    return by_month.reindex(months, fill_value=0.0).cumsum()
+
 _MONTHS_IT = (
     "gen",
     "feb",

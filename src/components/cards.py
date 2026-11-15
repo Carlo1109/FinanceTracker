@@ -69,12 +69,21 @@ def sparkline_svg(
     width: int = 260,
     height: int = 72,
     color: str = "var(--ft-accent)",
+    include_zero: bool = True,
 ) -> str:
-    """Piccola linea di tendenza in SVG (nessun JavaScript, nessuna libreria)."""
+    """
+    Piccola linea di tendenza in SVG (nessun JavaScript, nessuna libreria).
+
+    include_zero=False: la scala va dal minimo al massimo dei valori (es. la
+    liquidità, sempre lontana da zero, altrimenti sarebbe una linea piatta).
+    """
     points = [float(v or 0) for v in values]
     if len(points) < 2:
         return ""
-    low, high = min(points + [0.0]), max(points + [0.0])
+    if include_zero:
+        low, high = min(points + [0.0]), max(points + [0.0])
+    else:
+        low, high = min(points), max(points)
     span = (high - low) or 1.0
     pad = 6
     step = (width - pad * 2) / (len(points) - 1)
@@ -87,10 +96,18 @@ def sparkline_svg(
     for (x0, y0), (x1, y1) in zip(coords, coords[1:]):
         mid = (x0 + x1) / 2
         path += f" C {mid:.1f} {y0:.1f} {mid:.1f} {y1:.1f} {x1:.1f} {y1:.1f}"
+    zero_visible = low <= 0.0 <= high
     zero = y_of(0.0)
+    base = zero if zero_visible else y_of(low if low > 0 else high)
     area = (
         path
-        + f" L {coords[-1][0]:.1f} {zero:.1f} L {coords[0][0]:.1f} {zero:.1f} Z"
+        + f" L {coords[-1][0]:.1f} {base:.1f} L {coords[0][0]:.1f} {base:.1f} Z"
+    )
+    zero_line = (
+        f'<line x1="{pad}" x2="{width - pad}" y1="{zero:.1f}" y2="{zero:.1f}" '
+        'class="ft-spark-zero"/>'
+        if zero_visible
+        else ""
     )
     last_x, last_y = coords[-1]
     return f"""
@@ -102,8 +119,7 @@ def sparkline_svg(
               <stop offset="100%" style="stop-color:{color};stop-opacity:0"/>
             </linearGradient>
           </defs>
-          <line x1="{pad}" x2="{width - pad}" y1="{zero:.1f}" y2="{zero:.1f}"
-                class="ft-spark-zero"/>
+          {zero_line}
           <path d="{area}" style="fill:url(#ftSparkFill)"/>
           <path d="{path}" style="fill:none;stroke:{color};stroke-width:2.4;
                 stroke-linecap:round;vector-effect:non-scaling-stroke"/>
@@ -123,6 +139,7 @@ def render_hero_card(
     context: str | None = None,
     spark_values: list[float] | None = None,
     spark_caption: str | None = None,
+    spark_include_zero: bool = True,
     stats: list[tuple[str, str, str]] | None = None,
 ) -> None:
     """
@@ -135,7 +152,9 @@ def render_hero_card(
         if context
         else ""
     )
-    spark = sparkline_svg(spark_values or [], color=main_color)
+    spark = sparkline_svg(
+        spark_values or [], color=main_color, include_zero=spark_include_zero
+    )
     spark_html = ""
     if spark:
         caption = (

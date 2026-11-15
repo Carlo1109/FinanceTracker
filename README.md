@@ -4,7 +4,7 @@ FinanceTracker è un'app sviluppata in Python per gestire le proprie finanze per
 
 ## ✨ Funzionalità
 
-- 📊 **Dashboard**: bilancio del periodo con l'andamento degli ultimi 12 mesi, entrate, uscite, investimenti e liquidità con il confronto col periodo prima
+- 📊 **Dashboard**: liquidità con l'andamento degli ultimi 12 mesi, entrate, uscite, investimenti e bilancio del periodo con il confronto col periodo prima
 - 🗓️ **Report** mensili e annuali: confronti col mese/anno prima e con l'anno scorso, cose in evidenza, calendario delle spese, uscite anno su anno
 - 🥧 Dove vanno e da dove arrivano i soldi, andamento mensile (grafici che si leggono al passaggio del mouse o al tocco)
 - 💳 **Movimenti** raggruppati per giorno, con ricerca e filtri per conto, tipo, categoria e periodo; modifica, dividi, unisci, annulla
