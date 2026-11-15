@@ -44,6 +44,7 @@ from src.services.analytics import (
     get_period_day_count,
     get_period_df,
     get_previous_period_bounds,
+    get_rate_comparison,
     get_value_comparison,
     monthly_flow_totals,
     normalize_date_column,
@@ -180,7 +181,7 @@ def _dashboard_data(
     specials_count = int(special_summary["amortized_count"]) + int(
         special_summary["excluded_count"]
     )
-    if specials_count > 0 and not IS_ANDROID:
+    if specials_count > 0:
         noun = "speciale" if specials_count == 1 else "speciali"
         daily_footer_parts.append(f"{specials_count} {noun}")
 
@@ -193,7 +194,7 @@ def _dashboard_data(
 
     deltas: dict[str, tuple[str | None, str]] = {
         key: (None, MUTED_COLOR)
-        for key in ("bilancio", "entrate", "uscite", "investimenti", "saldo", "daily")
+        for key in ("bilancio", "entrate", "uscite", "investimenti", "saldo", "daily", "rate")
     }
     comparison_caption = None
     if previous_bounds is not None:
@@ -211,6 +212,9 @@ def _dashboard_data(
             types_filter,
         )
         previous_metrics = calculate_financial_metrics(previous_period_df)
+        deltas["rate"] = get_rate_comparison(
+            savings_rate(metrics), savings_rate(previous_metrics)
+        )
         previous_daily = calculate_daily_expense(
             previous_period_df,
             calculate_period_days(previous_start, previous_end),
@@ -476,7 +480,7 @@ def _render_monthly_chart(monthly: pd.DataFrame) -> None:
     )
 
 
-def _savings_card(metrics: dict) -> None:
+def _savings_card(metrics: dict, delta: tuple[str | None, str]) -> None:
     """Card del tasso di risparmio (rimborsi compresi tra le entrate)."""
     rate = savings_rate(metrics)
     if rate is None:
@@ -500,6 +504,8 @@ def _savings_card(metrics: dict) -> None:
         title="Tasso di risparmio",
         value=savings_label,
         value_color=savings_color,
+        subtitle=delta[0],
+        subtitle_color=delta[1],
         footer=savings_footer,
         extra_class="ft-savings-rate-card",
     )
@@ -844,7 +850,7 @@ def show_dashboard() -> None:
             footer=data["daily_footer"],
         )
     with s4:
-        _savings_card(metrics)
+        _savings_card(metrics, deltas["rate"])
 
     _render_specials(data["special_overview"])
 

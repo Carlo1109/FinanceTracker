@@ -319,6 +319,9 @@ div[class*="st-key-ft_report_card"] {
     font-size: clamp(18px, 12cqi, 32px) !important;
 }
 
+/* Il valore non si schiaccia mai, anche con righe in più nella card. */
+.ft-kpi-value { flex-shrink: 0; }
+
 .ft-kpi-value.is-long { font-size: clamp(16px, 10cqi, 27px) !important; }
 .ft-kpi-value.is-huge { font-size: clamp(14px, 8.6cqi, 23px) !important; }
 
@@ -882,10 +885,62 @@ div[data-testid="stExpander"] summary p {
     font-weight: 600;
     color: var(--ft-muted);
 }
-.ft-spec-table tr.is-group td {
-    padding-top: 14px;
+.ft-spec-name {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+}
+
+/* Anno: un mese per riga, chiuso; toccandolo si aprono le spese. */
+.ft-spec-month {
+    border-bottom: 1px solid var(--ft-border);
+}
+
+.ft-spec-month > summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 2px;
     font-weight: 800;
-    letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums;
+}
+
+.ft-spec-month > summary::-webkit-details-marker { display: none; }
+
+.ft-spec-month > summary::before {
+    content: "›";
+    display: inline-block;
+    width: 14px;
+    margin-right: 4px;
+    color: var(--ft-muted);
+    transition: transform 140ms ease;
+}
+
+.ft-spec-month[open] > summary::before { transform: rotate(90deg); }
+
+.ft-spec-month-name { flex: 1; }
+
+.ft-spec-month-name em {
+    font-style: normal;
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--ft-muted);
+    margin-left: 6px;
+}
+
+.ft-spec-month .ft-cmp-scroll { padding-bottom: 8px; }
+
+.ft-spec-year-total {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 2px 4px 20px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
 }
 
 .ft-report-kpis {
@@ -1143,6 +1198,14 @@ h1 {
     height: 96px !important;
     min-height: 96px !important;
     max-height: 96px !important;
+}
+
+/* Report: Risparmio e Tasso hanno una riga in più (investito / liquidità):
+   altezza libera, ma uguale per le due card della riga. */
+.ft-kpi-card.ft-kpi.has-extra.has-extra {
+    height: auto !important;
+    min-height: 196px !important;
+    max-height: none !important;
 }
 
 .ft-hero-context {

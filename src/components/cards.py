@@ -202,6 +202,7 @@ def render_kpi_card(
     *,
     tone: str | None = None,
     extra_html: str = "",
+    extra_class: str = "",
 ) -> None:
     """KPI; extra_html (già sicuro) va sotto il valore, prima del confronto."""
     tone = tone or _KPI_TONES.get(value_color, "accent")
@@ -209,7 +210,7 @@ def render_kpi_card(
     size_class = _amount_size_class(value)
     render_html(
         f"""
-        <div class="ft-kpi-card ft-kpi is-{tone}">
+        <div class="ft-kpi-card ft-kpi is-{tone} {extra_class}">
           <div class="ft-kpi-head">
             <span class="ft-kpi-icon">{html.escape(glyph)}</span>
             <span class="ft-kicker">{html.escape(title)}</span>

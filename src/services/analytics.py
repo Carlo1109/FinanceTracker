@@ -720,6 +720,23 @@ def calculate_daily_expense(
     return (operational + amortized) / period_days
 
 
+def get_rate_comparison(
+    current_rate: float | None,
+    previous_rate: float | None,
+    *,
+    label: str | None = None,
+) -> tuple[str | None, str]:
+    """Confronto tra tassi di risparmio, in punti percentuali."""
+    if current_rate is None or previous_rate is None:
+        return None, "var(--ft-muted)"
+    points = current_rate - previous_rate
+    if abs(points) < 0.05:
+        return f"≈ In linea col {label or _PREV}", "var(--ft-muted)"
+    arrow = "↑" if points > 0 else "↓"
+    text = f"{arrow} " + f"{abs(points):.1f}".replace(".", ",") + f" pt vs {label or _PREV}"
+    return text, "var(--ft-income)" if points > 0 else "var(--ft-danger)"
+
+
 def get_value_comparison(
     current_value: float,
     previous_value: float,

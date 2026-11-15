@@ -13,7 +13,7 @@ Nuova grafica, app più leggera sul telefono, pagina Report e passaggio dei dati
 - I nomi dei backup dicono da quale dispositivo arrivano (`..._pc.zip`, `..._telefono.zip`)
 - Nuova pagina **Report**: mensile (entrate, uscite, risparmio e tasso di risparmio con il confronto col mese prima, tre cose «in evidenza», calendario delle uscite giorno per giorno, spese più grandi, categorie contro il mese prima e lo stesso mese dell’anno scorso) e annuale (mese per mese, uscite accumulate anno su anno, mese migliore e più caro, categorie con media mensile), con lo stesso ordine nelle due viste
 - Report: sotto il **risparmio** quanto ne hai **investito** e quanto è rimasto **liquidità** (le due parti del risparmio, non un numero in più); sul tasso di risparmio «di cui X% investito»; nell'anno l'investito totale e, in «Mese per mese», risparmio e investito di ogni mese
-- Report: scheda **Spese speciali** (mese e anno): le ripartite su N mesi compaiono in ogni mese con la quota («Rata 3/12 di 120 €»), quelle a 0 mesi solo nel mese in cui le hai pagate; nell'anno raggruppate per mese, fino al mese in corso. Il Riepilogo resta di cassa
+- Report: scheda **Spese speciali** (mese e anno): le ripartite su N mesi compaiono in ogni mese con la quota («Rata 3/12 di 120 €»), quelle a 0 mesi solo nel mese in cui le hai pagate; nell'anno raggruppate per mese (chiusi, si aprono toccando il mese), fino al mese in corso. Il Riepilogo resta di cassa
 - Rimborsi sempre tra le entrate, in Dashboard e Report: tolta la casella «Escludi rimborsi», che toglieva il rimborso anche dal risparmio mentre la spesa restava intera. I rimborsi legati a una spesa (assicurazione, metà conto) si gestiscono con Anticipi & Recuperi (vedi MANUAL); Dashboard e Report calcolano il tasso allo stesso modo
 - Movimenti: la lista è raggruppata per giorno («Oggi», «Ieri», «Venerdì 7 novembre») con il totale del giorno; si tocca la riga per modificarla. Per unire: **Seleziona**, tocca le righe, **Unisci**
 
@@ -27,6 +27,7 @@ Nuova grafica, app più leggera sul telefono, pagina Report e passaggio dei dati
 - Android: nei menu a tendina (es. Categoria nella modifica di un movimento) le ultime voci non restano più tagliate fuori
 - Android: tabella delle categorie del report più compatta, entra nello schermo
 - Dashboard: sotto «Spesa media giornaliera» una riga corta («su 30 giorni · 2 speciali»); il dettaglio è nella sezione Spese speciali
+- Dashboard: il tasso di risparmio ha il confronto col periodo prima, in punti («↑ 4,1 pt vs prec.»)
 - Android: tolta la frase sul selettore dei file nel ripristino del backup
 - Android: dopo aver aperto e chiuso un movimento la riga non resta più grigia
 - PC: «Crea backup» salva lo zip in Download senza aprire la cartella

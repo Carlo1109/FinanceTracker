@@ -107,6 +107,8 @@ def _render_kpis(report: Report) -> None:
             subtitle_color=color,
         )
     split = investment_split(cur)
+    # Con qualcosa investito, Risparmio e Tasso hanno una riga in più.
+    extra_class = "has-extra" if split["investito"] > 0.005 else ""
     with c3:
         text, color = comparison("bilancio", True)
         balance = float(cur["bilancio"])
@@ -119,6 +121,7 @@ def _render_kpis(report: Report) -> None:
             subtitle_color=color,
             tone="accent",
             extra_html=_savings_split_html(split, balance),
+            extra_class=extra_class,
         )
     with c4:
         share = split["quota_entrate"]
@@ -138,6 +141,7 @@ def _render_kpis(report: Report) -> None:
             subtitle_color=rate_color,
             tone="accent",
             extra_html=note,
+            extra_class=extra_class,
         )
 
 
@@ -228,27 +232,44 @@ def _specials_row_html(item) -> str:
     )
 
 
+def _specials_head() -> str:
+    return "<th>Spesa</th>" + ("" if IS_ANDROID else "<th>Ripartizione</th>") + "<th>Nel mese</th>"
+
+
 def _specials_table_html(table: pd.DataFrame, is_month: bool) -> str:
     columns = 2 if IS_ANDROID else 3
-    head = "<th>Spesa</th>" + ("" if IS_ANDROID else "<th>Ripartizione</th>") + "<th>Nel mese</th>"
-    body: list[str] = []
-    for month, group in table.groupby("mese", sort=True):
-        if not is_month:
-            period = pd.Period(str(month), freq="M")
-            body.append(
-                f'<tr class="is-group"><td colspan="{columns - 1}">'
-                f"{html.escape(MONTHS_IT[period.month - 1])}</td>"
-                f"<td>{html.escape(euro(float(group['quota'].sum())))}</td></tr>"
-            )
-        body.extend(_specials_row_html(item) for item in group.itertuples(index=False))
-    body.append(
+    total_row = (
         f'<tr class="is-total"><td colspan="{columns - 1}">Totale</td>'
         f"<td>{html.escape(euro(float(table['quota'].sum())))}</td></tr>"
     )
-    return (
-        '<div class="ft-cmp-scroll"><table class="ft-cmp-table ft-spec-table">'
-        f"<thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody></table></div>"
+    if is_month:
+        rows = "".join(_specials_row_html(item) for item in table.itertuples(index=False))
+        return (
+            '<div class="ft-cmp-scroll"><table class="ft-cmp-table ft-spec-table">'
+            f"<thead><tr>{_specials_head()}</tr></thead><tbody>{rows}{total_row}</tbody>"
+            "</table></div>"
+        )
+    # Anno: un riquadro per mese, chiuso; si apre toccando il mese.
+    blocks: list[str] = []
+    for month, group in table.groupby("mese", sort=True):
+        period = pd.Period(str(month), freq="M")
+        count = len(group)
+        rows = "".join(_specials_row_html(item) for item in group.itertuples(index=False))
+        blocks.append(
+            '<details class="ft-spec-month"><summary>'
+            f'<span class="ft-spec-month-name">{html.escape(MONTHS_IT[period.month - 1])}'
+            f' <em>{count} {"spesa" if count == 1 else "spese"}</em></span>'
+            f'<span class="ft-spec-month-total">{html.escape(euro(float(group["quota"].sum())))}</span>'
+            "</summary>"
+            '<div class="ft-cmp-scroll"><table class="ft-cmp-table ft-spec-table">'
+            f"<thead><tr>{_specials_head()}</tr></thead><tbody>{rows}</tbody></table></div>"
+            "</details>"
+        )
+    total = (
+        '<div class="ft-spec-year-total"><span>Totale</span>'
+        f"<span>{html.escape(euro(float(table['quota'].sum())))}</span></div>"
     )
+    return f'<div class="ft-spec-months">{"".join(blocks)}{total}</div>'
 
 
 def _render_highlights(report: Report) -> None:
