@@ -1449,7 +1449,7 @@ def show_movements() -> None:
         c1, c2, c3 = st.columns(3)
         with c1:
             render_kpi_card(
-                "Prestati",
+                "Anticipati",
                 euro(float(loan_summary["outgoing"])),
                 value_color=EXPENSE_COLOR,
             )

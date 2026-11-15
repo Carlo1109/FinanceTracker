@@ -110,7 +110,7 @@ _CSS = r"""
   font-variant-numeric: tabular-nums; letter-spacing: -0.01em; white-space: nowrap;
 }
 .ml-amt.income { color: var(--ft-income, #34d399); }
-.ml-amt.expense { color: var(--ft-text, #fff); }
+.ml-amt.expense { color: var(--ft-danger, #fb7185); }
 .ml-amt.investment { color: var(--ft-investment, #a78bfa); }
 .ml-amt.transfer { color: var(--ft-muted, #94a3b8); }
 .ml-chev { flex: 0 0 auto; color: var(--ft-subtle, #94a3b8); opacity: .0; transition: opacity 120ms ease; font-size: 18px; margin-left: -4px; }

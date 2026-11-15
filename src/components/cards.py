@@ -199,7 +199,7 @@ KPI_ICONS = {
     "Investimenti": "◆",
     "Liquidità": "◉",
     "Bilancio": "±",
-    "Prestati": "↗",
+    "Prestati/Anticipati": "↗",
     "Rientrati": "↘",
     "Netto": "±",
 }
